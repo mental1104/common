@@ -7,5 +7,5 @@ setup(
     author="mental1104",
     author_email="mental1104@gmail.com",
     packages=find_packages(),  # 自动查找所有子包
-    install_requires=[],       # 如果你的包依赖于其他包，可以在这里添加
+    install_requires=['aiohttp'],       # 如果你的包依赖于其他包，可以在这里添加
 )
