@@ -71,13 +71,13 @@ namespace mental1104 {
     };
 
     template<typename R, typename... Args>
-    auto make_timed(R (*func)(Args...), const std::string & name = std::string()) {
+    Timed<R(Args...)> make_timed(R (*func)(Args...), const std::string & name = std::string()) {
         return Timed<R(Args...)>(std::function<R(Args...)>(func), name);
     }
 
     // 针对返回类型为void的函数的辅助函数
     template<typename... Args>
-    auto make_timed(void (*func)(Args...), const std::string &name = std::string()) {
+    Timed<void(Args...)> make_timed(void (*func)(Args...), const std::string &name = std::string()) {
         return Timed<void(Args...)>(std::function<void(Args...)>(func), name);
     }
 
@@ -86,8 +86,25 @@ namespace mental1104 {
     template <typename T, typename = void>
     struct has_size_method : std::false_type {};
 
+#if __cplusplus >= 201703L
     template <typename T>
     struct has_size_method<T, std::void_t<decltype(std::declval<T>().size())>> : std::true_type {};
+#else
+    template <typename... Ts>
+    struct void_t { using type = void; };
+
+    // 特化 std::forward_list 类型，返回 std::false_type
+    template <typename T>
+    struct has_size_method<std::forward_list<T>> : std::false_type {};
+
+    template <typename T>
+    struct has_size_method<const std::forward_list<T>> : std::false_type {};
+
+    template <typename T>
+    struct has_size_method<T, decltype(std::declval<T>().size(), void())> : std::true_type {};  // 如果有 size() 方法，则继承 true_type 
+
+    
+#endif
 
     // Print container information (print size if .size() method exists)
     template <typename Container, typename SourceLocation = void>
@@ -100,10 +117,17 @@ namespace mental1104 {
                 std::cout << "(size: " << c.size() << ") ";
             }
         }
-#else
+#elif __cplusplus >= 201703L
         // If C++20 is not supported, do not print file and line
         if (show_info) {
             if constexpr (has_size_method<Container>::value) {
+                std::cout << "(size: " << c.size() << ") ";
+            }
+        } 
+#else 
+        if (show_info) {
+            // 使用 SFINAE 检查类型是否有 size() 方法
+            if (has_size_method<Container>::value) {
                 std::cout << "(size: " << c.size() << ") ";
             }
         }
