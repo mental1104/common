@@ -16,7 +16,9 @@
 #include <string>
 #include <iterator>
 #include <type_traits>
+#if __cplusplus >= 202002L
 #include <source_location>
+#endif
 
 namespace mental1104 {
 
@@ -84,19 +86,30 @@ namespace mental1104 {
 
     // 打印容器信息（打印容器大小，如果有 .size() 方法的话）
     template <typename Container>
-    void print_info(const Container& c, bool show_info, const std::source_location& loc = std::source_location::current()) {
+    void print_info(const Container& c, bool show_info) {
+#if __cplusplus >= 202002L
+        // 如果支持 C++20，则使用 source_location 打印文件名和行号
+        std::source_location loc = std::source_location::current();
         if (show_info) {
-            std::cout << "[File: " << loc.file_name() << ", Line: " << loc.line() << "] ";
+            std::cout << "[File: " << loc.file_name() << ", Line: " << loc.line() << "] ";  // 使用 file_name() 获取文件路径
             if constexpr (has_size_method<Container>::value) {
                 std::cout << "(size: " << c.size() << ") ";
             }
         }
+#else
+        // 如果不支持 C++20，则不打印文件名和行号
+        if (show_info) {
+            if constexpr (has_size_method<Container>::value) {
+                std::cout << "(size: " << c.size() << ") ";
+            }
+        }
+#endif
     }
 
     // 打印 forward_list, list, vector 格式
     template <typename Container>
-    void print_internal(const Container& c, bool show_info, const std::source_location& loc = std::source_location::current()) {
-        print_info(c, show_info, loc);
+    void print_internal(const Container& c, bool show_info) {
+        print_info(c, show_info);
         std::cout << "{";
         bool first = true;
         for (const auto& element : c) {
@@ -119,7 +132,7 @@ namespace mental1104 {
 
     // 打印 map/unordered_map 为 JSON 格式
     template <typename K, typename V>
-    void print_map_or_unordered_map(const K& key, const V& value, bool is_first_element = true, int indent_level = 0, const std::source_location& loc = std::source_location::current()) {
+    void print_map_or_unordered_map(const K& key, const V& value, bool is_first_element = true, int indent_level = 0) {
         if (!is_first_element) {
             std::cout << ",\n";
         }
@@ -129,7 +142,7 @@ namespace mental1104 {
             std::cout << "{\n";
             bool first = true;
             for (const auto& [nested_key, nested_value] : value) {
-                print_map_or_unordered_map(nested_key, nested_value, first, indent_level + 1, loc);
+                print_map_or_unordered_map(nested_key, nested_value, first, indent_level + 1);
                 first = false;
             }
             std::cout << "\n" << std::string(indent_level * 4, ' ') << "}";
@@ -140,12 +153,12 @@ namespace mental1104 {
 
     // 打印 map
     template <typename K, typename V>
-    void print_internal(const std::map<K, V>& m, bool show_info, const std::source_location& loc = std::source_location::current()) {
-        print_info(m, show_info, loc);
+    void print_internal(const std::map<K, V>& m, bool show_info) {
+        print_info(m, show_info);
         std::cout << "{\n";
         bool first = true;
         for (const auto& [key, value] : m) {
-            print_map_or_unordered_map(key, value, first, 1, loc);
+            print_map_or_unordered_map(key, value, first, 1);
             first = false;
         }
         std::cout << "\n}" << std::endl;
@@ -153,12 +166,12 @@ namespace mental1104 {
 
     // 打印 unordered_map
     template <typename K, typename V>
-    void print_internal(const std::unordered_map<K, V>& m, bool show_info, const std::source_location& loc = std::source_location::current()) {
-        print_info(m, show_info, loc);
+    void print_internal(const std::unordered_map<K, V>& m, bool show_info) {
+        print_info(m, show_info);
         std::cout << "{\n";
         bool first = true;
         for (const auto& [key, value] : m) {
-            print_map_or_unordered_map(key, value, first, 1, loc);
+            print_map_or_unordered_map(key, value, first, 1);
             first = false;
         }
         std::cout << "\n}" << std::endl;
@@ -166,8 +179,8 @@ namespace mental1104 {
 
     // 对外统一的 print 函数，自动捕获文件名和行号
     template <typename Container>
-    void print(const Container& c, bool show_info = true, const std::source_location& loc = std::source_location::current()) {
-        print_internal(c, show_info, loc);
+    void print(const Container& c, bool show_info = true) {
+        print_internal(c, show_info);
     }
 }
 
