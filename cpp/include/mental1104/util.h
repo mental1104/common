@@ -74,19 +74,27 @@ namespace mental1104 {
     }
 
 
-    // 工具函数：判断类型是否为 map 或 unordered_map
+    // 工具函数：判断类型是否有 .size() 方法
+    template <typename T, typename = void>
+    struct has_size_method : std::false_type {};
+
     template <typename T>
-    struct is_map : std::false_type {};
+    struct has_size_method<T, std::void_t<decltype(std::declval<T>().size())>> : std::true_type {};
 
-    template <typename K, typename V>
-    struct is_map<std::map<K, V>> : std::true_type {};
-
-    template <typename K, typename V>
-    struct is_map<std::unordered_map<K, V>> : std::true_type {};
+    // 打印容器信息（打印容器大小，如果有 .size() 方法的话）
+    template <typename Container>
+    void print_info(const Container& c, bool show_info) {
+        if (show_info) {
+            if constexpr (has_size_method<Container>::value) {
+                std::cout << "(size: " << c.size() << ") ";
+            }
+        }
+    }
 
     // 打印 forward_list, list, vector 格式
     template <typename Container>
-    void print(const Container& c) {
+    void print_internal(const Container& c, bool show_info) {
+        print_info(c, show_info);
         std::cout << "{";
         bool first = true;
         for (const auto& element : c) {
@@ -96,6 +104,16 @@ namespace mental1104 {
         }
         std::cout << "}" << std::endl;
     }
+
+    // 工具函数：判断类型是否为 map 或 unordered_map
+    template <typename T>
+    struct is_map : std::false_type {};
+
+    template <typename K, typename V>
+    struct is_map<std::map<K, V>> : std::true_type {};
+
+    template <typename K, typename V>
+    struct is_map<std::unordered_map<K, V>> : std::true_type {};
 
     // 打印 map/unordered_map 为 JSON 格式
     template <typename K, typename V>
@@ -120,7 +138,8 @@ namespace mental1104 {
 
     // 打印 map
     template <typename K, typename V>
-    void print(const std::map<K, V>& m) {
+    void print_internal(const std::map<K, V>& m, bool show_info) {
+        print_info(m, show_info);
         std::cout << "{\n";
         bool first = true;
         for (const auto& [key, value] : m) {
@@ -132,7 +151,8 @@ namespace mental1104 {
 
     // 打印 unordered_map
     template <typename K, typename V>
-    void print(const std::unordered_map<K, V>& m) {
+    void print_internal(const std::unordered_map<K, V>& m, bool show_info) {
+        print_info(m, show_info);
         std::cout << "{\n";
         bool first = true;
         for (const auto& [key, value] : m) {
@@ -140,6 +160,12 @@ namespace mental1104 {
             first = false;
         }
         std::cout << "\n}" << std::endl;
+    }
+
+    // 对外统一的 print 函数，自动捕获 __LINE__
+    template <typename Container>
+    void print(const Container& c, bool show_info = true) {
+        print_internal(c, show_info);
     }
 }
 
