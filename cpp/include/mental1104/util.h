@@ -16,9 +16,14 @@
 #include <string>
 #include <iterator>
 #include <type_traits>
+// 判断编译器是否支持 C++20
 #if __cplusplus >= 202002L
-#include <source_location>
+    #include <source_location>
+#else
+    struct no_source_location {};  // 在 C++17 中使用一个占位类型
 #endif
+
+
 
 namespace mental1104 {
 
@@ -77,27 +82,26 @@ namespace mental1104 {
     }
 
 
-    // 工具函数：判断类型是否有 .size() 方法
+    // Utility function: Check if type has a .size() method
     template <typename T, typename = void>
     struct has_size_method : std::false_type {};
 
     template <typename T>
     struct has_size_method<T, std::void_t<decltype(std::declval<T>().size())>> : std::true_type {};
 
-    // 打印容器信息（打印容器大小，如果有 .size() 方法的话）
-    template <typename Container>
-    void print_info(const Container& c, bool show_info) {
+    // Print container information (print size if .size() method exists)
+    template <typename Container, typename SourceLocation = void>
+    void print_info(const Container& c, bool show_info, SourceLocation loc = {}) {
 #if __cplusplus >= 202002L
-        // 如果支持 C++20，则使用 source_location 打印文件名和行号
-        std::source_location loc = std::source_location::current();
+        // If C++20 is supported, use source_location to print file and line
         if (show_info) {
-            std::cout << "[File: " << loc.file_name() << ", Line: " << loc.line() << "] ";  // 使用 file_name() 获取文件路径
+            std::cout << "[File: " << loc.file_name() << ", Line: " << loc.line() << "] ";  // Use file_name() to get file path
             if constexpr (has_size_method<Container>::value) {
                 std::cout << "(size: " << c.size() << ") ";
             }
         }
 #else
-        // 如果不支持 C++20，则不打印文件名和行号
+        // If C++20 is not supported, do not print file and line
         if (show_info) {
             if constexpr (has_size_method<Container>::value) {
                 std::cout << "(size: " << c.size() << ") ";
@@ -106,10 +110,10 @@ namespace mental1104 {
 #endif
     }
 
-    // 打印 forward_list, list, vector 格式
-    template <typename Container>
-    void print_internal(const Container& c, bool show_info) {
-        print_info(c, show_info);
+    // Print container (forward_list, list, vector)
+    template <typename Container, typename SourceLocation = void>
+    void print_internal(const Container& c, bool show_info, SourceLocation loc = {}) {
+        print_info(c, show_info, loc);
         std::cout << "{";
         bool first = true;
         for (const auto& element : c) {
@@ -120,7 +124,7 @@ namespace mental1104 {
         std::cout << "}" << std::endl;
     }
 
-    // 工具函数：判断类型是否为 map 或 unordered_map
+    // Check if type is a map or unordered_map
     template <typename T>
     struct is_map : std::false_type {};
 
@@ -130,57 +134,61 @@ namespace mental1104 {
     template <typename K, typename V>
     struct is_map<std::unordered_map<K, V>> : std::true_type {};
 
-    // 打印 map/unordered_map 为 JSON 格式
-    template <typename K, typename V>
-    void print_map_or_unordered_map(const K& key, const V& value, bool is_first_element = true, int indent_level = 0) {
+    // Print map/unordered_map in JSON format
+    template <typename K, typename V, typename SourceLocation = void>
+    void print_map_or_unordered_map(const K& key, const V& value, bool is_first_element = true, int indent_level = 0, SourceLocation loc = {}) {
         if (!is_first_element) {
             std::cout << ",\n";
         }
         std::cout << std::string(indent_level * 4, ' ') << "\"" << key << "\": ";
 
-        if constexpr (is_map<V>::value) {  // 如果 value 是 map 或 unordered_map，则递归处理
+        if constexpr (is_map<V>::value) {  // If value is map or unordered_map, recursively process
             std::cout << "{\n";
             bool first = true;
             for (const auto& [nested_key, nested_value] : value) {
-                print_map_or_unordered_map(nested_key, nested_value, first, indent_level + 1);
+                print_map_or_unordered_map(nested_key, nested_value, first, indent_level + 1, loc);
                 first = false;
             }
             std::cout << "\n" << std::string(indent_level * 4, ' ') << "}";
-        } else {  // 普通类型
+        } else {  // Regular type
             std::cout << "\"" << value << "\"";
         }
     }
 
-    // 打印 map
-    template <typename K, typename V>
-    void print_internal(const std::map<K, V>& m, bool show_info) {
-        print_info(m, show_info);
+    // Print map
+    template <typename K, typename V, typename SourceLocation = void>
+    void print_internal(const std::map<K, V>& m, bool show_info, SourceLocation loc = {}) {
+        print_info(m, show_info, loc);
         std::cout << "{\n";
         bool first = true;
         for (const auto& [key, value] : m) {
-            print_map_or_unordered_map(key, value, first, 1);
+            print_map_or_unordered_map(key, value, first, 1, loc);
             first = false;
         }
         std::cout << "\n}" << std::endl;
     }
 
-    // 打印 unordered_map
-    template <typename K, typename V>
-    void print_internal(const std::unordered_map<K, V>& m, bool show_info) {
-        print_info(m, show_info);
+    // Print unordered_map
+    template <typename K, typename V, typename SourceLocation = void>
+    void print_internal(const std::unordered_map<K, V>& m, bool show_info, SourceLocation loc = {}) {
+        print_info(m, show_info, loc);
         std::cout << "{\n";
         bool first = true;
         for (const auto& [key, value] : m) {
-            print_map_or_unordered_map(key, value, first, 1);
+            print_map_or_unordered_map(key, value, first, 1, loc);
             first = false;
         }
         std::cout << "\n}" << std::endl;
     }
 
-    // 对外统一的 print 函数，自动捕获文件名和行号
+    // Unified print function, automatically capture file and line numbers
     template <typename Container>
-    void print(const Container& c, bool show_info = true) {
-        print_internal(c, show_info);
+#if __cplusplus >= 202002L
+    void print(const Container& c, bool show_info = true, std::source_location loc = std::source_location::current()) {
+#else
+    void print(const Container& c, bool show_info = true, no_source_location loc = no_source_location()) {
+#endif
+        print_internal(c, show_info, loc);
     }
 }
 
