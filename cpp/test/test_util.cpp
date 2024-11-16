@@ -7,8 +7,9 @@
 #include <vector>
 #include <unordered_map>
 #include <string>
-#include <iterator>
-#include <type_traits>
+#include <thread>
+#include <functional>
+
 
 int add(int a, int b) {
     return a + b;
@@ -21,11 +22,12 @@ void complicated_operation(){
     }
 }
 
-
-int main() {
+void test_time() {
     mental1104::make_timed(complicated_operation, "complicated_operation")();
     auto temp = mental1104::make_timed(add, "add")(1, 2);
+}
 
+void test_print() {
     // 测试普通容器
     std::forward_list<int> flist = {1, 2, 3, 4, 5, 6, 7};
     mental1104::print(flist);
@@ -57,6 +59,31 @@ int main() {
         {"outer2", {{"c", 3}, {"d", 4}}}
     };
     mental1104::print(nested_umap);
+}
+
+
+// 定义函数签名
+using TestFunc = std::function<void()>;
+
+int main() {
+
+    std::vector<TestFunc> test_functions = {
+        test_time,
+        test_print
+    };
+
+    for (auto& func: test_functions)
+    {
+        std::vector<std::thread> threads;
+        for(unsigned i = 0; i < 15; ++i)
+        {
+            threads.emplace_back(std::ref(func));
+        }
+
+        for(auto& entry: threads)
+            entry.join();
+    }
+    
 
     return 0;
 }

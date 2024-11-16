@@ -16,6 +16,8 @@
 #include <string>
 #include <iterator>
 #include <type_traits>
+#include <mutex>
+
 // 判断编译器是否支持 C++20
 #if __cplusplus >= 202002L
     #include <source_location>
@@ -27,6 +29,7 @@
 
 namespace mental1104 {
 
+    static std::mutex time_mutex;
     // 主模板声明
     template<typename T>
     class Timed;
@@ -72,12 +75,14 @@ namespace mental1104 {
 
     template<typename R, typename... Args>
     Timed<R(Args...)> make_timed(R (*func)(Args...), const std::string & name = std::string()) {
+        std::lock_guard<std::mutex> guard(time_mutex);
         return Timed<R(Args...)>(std::function<R(Args...)>(func), name);
     }
 
     // 针对返回类型为void的函数的辅助函数
     template<typename... Args>
     Timed<void(Args...)> make_timed(void (*func)(Args...), const std::string &name = std::string()) {
+        std::lock_guard<std::mutex> guard(time_mutex);
         return Timed<void(Args...)>(std::function<void(Args...)>(func), name);
     }
 
@@ -95,14 +100,14 @@ namespace mental1104 {
     template <typename Container>
     typename std::enable_if<!std::is_same<Container, std::forward_list<typename Container::value_type>>::value, void>::type
     print_size(const Container& c) {
-        std::cout << "(size: " << c.size() << ") ";
+        std::cout << "(size: " << c.size() << ") " << std::endl;
     }
 
     // Helper function for std::forward_list (no size() member)
     template <typename Container>
     typename std::enable_if<std::is_same<Container, std::forward_list<typename Container::value_type>>::value, void>::type
     print_size(const Container& c) {
-        std::cout << "(size: " << std::distance(c.begin(), c.end()) << ") ";
+        std::cout << "(size: " << std::distance(c.begin(), c.end()) << ") " << std::endl;
     }
 #endif
 
@@ -114,14 +119,14 @@ namespace mental1104 {
         if (show_info) {
             std::cout << "[File: " << loc.file_name() << ", Line: " << loc.line() << "] ";  // Use file_name() to get file path
             if constexpr (has_size_method<Container>::value) {
-                std::cout << "(size: " << c.size() << ") ";
+                std::cout << "(size: " << c.size() << ") " << std::endl;
             }
         }
 #elif __cplusplus >= 201703L
         // If C++20 is not supported, do not print file and line
         if (show_info) {
             if constexpr (has_size_method<Container>::value) {
-                std::cout << "(size: " << c.size() << ") ";
+                std::cout << "(size: " << c.size() << ") " << std::endl;
             }
         } 
 #else 
@@ -203,6 +208,7 @@ namespace mental1104 {
         std::cout << "\n}" << std::endl;
     }
 
+    static std::mutex print_mutex;
     // Unified print function, automatically capture file and line numbers
     template <typename Container>
 #if __cplusplus >= 202002L
@@ -210,6 +216,7 @@ namespace mental1104 {
 #else
     void print(const Container& c, bool show_info = true, no_source_location loc = no_source_location()) {
 #endif
+        std::lock_guard<std::mutex> guard(print_mutex); 
         print_internal(c, show_info, loc);
     }
 }
