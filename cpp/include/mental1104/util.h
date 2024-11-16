@@ -90,20 +90,20 @@ namespace mental1104 {
     template <typename T>
     struct has_size_method<T, std::void_t<decltype(std::declval<T>().size())>> : std::true_type {};
 #else
-    template <typename... Ts>
-    struct void_t { using type = void; };
 
-    // 特化 std::forward_list 类型，返回 std::false_type
-    template <typename T>
-    struct has_size_method<std::forward_list<T>> : std::false_type {};
+    // Helper function for containers with size()
+    template <typename Container>
+    typename std::enable_if<!std::is_same<Container, std::forward_list<typename Container::value_type>>::value, void>::type
+    print_size(const Container& c) {
+        std::cout << "(size: " << c.size() << ") ";
+    }
 
-    template <typename T>
-    struct has_size_method<const std::forward_list<T>> : std::false_type {};
-
-    template <typename T>
-    struct has_size_method<T, decltype(std::declval<T>().size(), void())> : std::true_type {};  // 如果有 size() 方法，则继承 true_type 
-
-    
+    // Helper function for std::forward_list (no size() member)
+    template <typename Container>
+    typename std::enable_if<std::is_same<Container, std::forward_list<typename Container::value_type>>::value, void>::type
+    print_size(const Container& c) {
+        std::cout << "(size: " << std::distance(c.begin(), c.end()) << ") ";
+    }
 #endif
 
     // Print container information (print size if .size() method exists)
@@ -126,10 +126,7 @@ namespace mental1104 {
         } 
 #else 
         if (show_info) {
-            // 使用 SFINAE 检查类型是否有 size() 方法
-            if (has_size_method<Container>::value) {
-                std::cout << "(size: " << c.size() << ") ";
-            }
+            print_size(c);
         }
 #endif
     }
