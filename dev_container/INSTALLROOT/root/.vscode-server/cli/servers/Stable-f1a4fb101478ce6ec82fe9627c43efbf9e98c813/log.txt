@@ -1,0 +1,735 @@
+*
+* Visual Studio Code Server
+*
+* By using the software, you agree to
+* the Visual Studio Code Server License Terms (https://aka.ms/vscode-server-license) and
+* the Microsoft Privacy Statement (https://privacy.microsoft.com/en-US/privacystatement).
+*
+Server bound to /tmp/code-0ca00844-f7e0-4186-8781-09e15aa11c95
+Extension host agent listening on /tmp/code-0ca00844-f7e0-4186-8781-09e15aa11c95
+
+[15:14:43] 
+
+
+
+
+[15:14:43] Extension host agent started.
+[15:14:43] Started initializing default profile extensions in extensions installation folder. file:///root/.vscode-server/extensions
+[15:14:43] [<unknown>][ed30eef2][ExtensionHostConnection] New connection established.
+[15:14:43] [<unknown>][38068cd3][ManagementConnection] New connection established.
+[15:14:43] Completed initializing default profile extensions in extensions installation folder. file:///root/.vscode-server/extensions
+[15:14:44] [<unknown>][ed30eef2][ExtensionHostConnection] <203> Launched Extension Host Process.
+[15:14:44] Installing extensions...
+[15:14:44] [network] #1: https://az764295.vo.msecnd.net/extensions/marketplace.json - error GET read ECONNRESET
+[15:14:44] Installing extension 'ms-ceintl.vscode-language-pack-zh-hans'...
+[15:14:44] Getting Manifest... ms-ceintl.vscode-language-pack-zh-hans
+[15:14:44] Installing extension: ms-ceintl.vscode-language-pack-zh-hans {
+  isMachineScoped: true,
+  isBuiltin: false,
+  installPreReleaseVersion: undefined,
+  installGivenVersion: false,
+  isApplicationScoped: true,
+  installOnlyNewlyAddedFromExtensionPack: true,
+  profileLocation: vr {
+    scheme: 'file',
+    authority: '',
+    path: '/root/.vscode-server/extensions/extensions.json',
+    query: '',
+    fragment: '',
+    _formatted: 'file:///root/.vscode-server/extensions/extensions.json',
+    _fsPath: '/root/.vscode-server/extensions/extensions.json'
+  },
+  productVersion: { version: '1.95.3', date: '2024-11-13T14:50:04.152Z' }
+}
+[15:14:48] Extension signature verification result for ms-ceintl.vscode-language-pack-zh-hans: Success. Executed: true. Duration: 3042ms.
+[15:14:48] Extracted extension to file:///root/.vscode-server/extensions/ms-ceintl.vscode-language-pack-zh-hans-1.95.2024103009: ms-ceintl.vscode-language-pack-zh-hans
+[15:14:48] Renamed to /root/.vscode-server/extensions/ms-ceintl.vscode-language-pack-zh-hans-1.95.2024103009
+[15:14:48] Adding language packs from the extension ms-ceintl.vscode-language-pack-zh-hans
+[15:14:48] Extension installed successfully: ms-ceintl.vscode-language-pack-zh-hans file:///root/.vscode-server/extensions/extensions.json
+[15:14:48] Extension 'ms-ceintl.vscode-language-pack-zh-hans' v1.95.2024103009 was successfully installed.
+New EH opened, aborting shutdown
+[15:19:43] New EH opened, aborting shutdown
+[15:20:23] [network] #9: https://az764295.vo.msecnd.net/extensions/marketplace.json - error GET read ECONNRESET
+[15:20:23] Getting Manifest... twxs.cmake
+[15:20:25] Getting Manifest... amiralizadeh9480.cpp-helper
+[15:20:26] Installing extension: twxs.cmake {
+  installPreReleaseVersion: false,
+  donotVerifySignature: false,
+  context: { clientTargetPlatform: 'win32-x64' },
+  installOnlyNewlyAddedFromExtensionPack: true,
+  isApplicationScoped: false,
+  profileLocation: vr {
+    scheme: 'file',
+    authority: '',
+    path: '/root/.vscode-server/extensions/extensions.json',
+    query: '',
+    fragment: '',
+    _formatted: 'file:///root/.vscode-server/extensions/extensions.json',
+    _fsPath: '/root/.vscode-server/extensions/extensions.json'
+  },
+  productVersion: { version: '1.95.3', date: '2024-11-13T14:50:04.152Z' }
+}
+[15:20:28] Getting Manifest... ms-vscode.cmake-tools
+[15:20:30] Getting Manifest... formulahendry.code-runner
+[15:20:31] [network] #15: https://mobile.events.data.microsoft.com/OneCollector/1.0?cors=true&content-type=application/x-json-stream - error POST read ECONNRESET
+[15:20:32] Getting Manifest... phplasma.csv-to-table
+[15:20:38] Extension signature verification result for twxs.cmake: Success. Executed: true. Duration: 1247ms.
+[15:20:38] Extracted extension to file:///root/.vscode-server/extensions/twxs.cmake-0.0.17: twxs.cmake
+[15:20:38] Renamed to /root/.vscode-server/extensions/twxs.cmake-0.0.17
+[15:20:38] Extension installed successfully: twxs.cmake file:///root/.vscode-server/extensions/extensions.json
+[15:20:39] Installing extension: formulahendry.code-runner {
+  installPreReleaseVersion: false,
+  donotVerifySignature: false,
+  context: { clientTargetPlatform: 'win32-x64' },
+  installOnlyNewlyAddedFromExtensionPack: true,
+  isApplicationScoped: false,
+  profileLocation: vr {
+    scheme: 'file',
+    authority: '',
+    path: '/root/.vscode-server/extensions/extensions.json',
+    query: '',
+    fragment: '',
+    _formatted: 'file:///root/.vscode-server/extensions/extensions.json',
+    _fsPath: '/root/.vscode-server/extensions/extensions.json'
+  },
+  productVersion: { version: '1.95.3', date: '2024-11-13T14:50:04.152Z' }
+}
+[15:20:40] Getting Manifest... waderyan.gitblame
+[15:20:41] Getting Manifest... donjayamanne.git-extension-pack
+[15:20:42] Installing extension: waderyan.gitblame {
+  installPreReleaseVersion: false,
+  donotVerifySignature: false,
+  context: { clientTargetPlatform: 'win32-x64' },
+  installOnlyNewlyAddedFromExtensionPack: true,
+  isApplicationScoped: false,
+  profileLocation: vr {
+    scheme: 'file',
+    authority: '',
+    path: '/root/.vscode-server/extensions/extensions.json',
+    query: '',
+    fragment: '',
+    _formatted: 'file:///root/.vscode-server/extensions/extensions.json',
+    _fsPath: '/root/.vscode-server/extensions/extensions.json'
+  },
+  productVersion: { version: '1.95.3', date: '2024-11-13T14:50:04.152Z' }
+}
+[15:20:42] Getting Manifest... mhutchie.git-graph
+[15:20:43] Getting Manifest... donjayamanne.githistory
+[15:20:44] Getting Manifest... huizhou.githd
+[15:20:47] Getting Manifest... felipecaputo.git-project-manager
+[15:20:52] Getting Manifest... codezombiech.gitignore
+[15:20:56] Installing extension: amiralizadeh9480.cpp-helper {
+  installPreReleaseVersion: false,
+  donotVerifySignature: false,
+  context: { clientTargetPlatform: 'win32-x64' },
+  installOnlyNewlyAddedFromExtensionPack: true,
+  isApplicationScoped: false,
+  profileLocation: vr {
+    scheme: 'file',
+    authority: '',
+    path: '/root/.vscode-server/extensions/extensions.json',
+    query: '',
+    fragment: '',
+    _formatted: 'file:///root/.vscode-server/extensions/extensions.json',
+    _fsPath: '/root/.vscode-server/extensions/extensions.json'
+  },
+  productVersion: { version: '1.95.3', date: '2024-11-13T14:50:04.152Z' }
+}
+[15:20:58] Installing extension: donjayamanne.githistory {
+  installPreReleaseVersion: false,
+  donotVerifySignature: false,
+  context: { clientTargetPlatform: 'win32-x64' },
+  installOnlyNewlyAddedFromExtensionPack: true,
+  isApplicationScoped: false,
+  profileLocation: vr {
+    scheme: 'file',
+    authority: '',
+    path: '/root/.vscode-server/extensions/extensions.json',
+    query: '',
+    fragment: '',
+    _formatted: 'file:///root/.vscode-server/extensions/extensions.json',
+    _fsPath: '/root/.vscode-server/extensions/extensions.json'
+  },
+  productVersion: { version: '1.95.3', date: '2024-11-13T14:50:04.152Z' }
+}
+[15:20:59] Getting Manifest... golang.go
+[15:21:01] Extension signature verification result for donjayamanne.githistory: Success. Executed: true. Duration: 528ms.
+[15:21:01] Extracted extension to file:///root/.vscode-server/extensions/donjayamanne.githistory-0.6.20: donjayamanne.githistory
+[15:21:01] Renamed to /root/.vscode-server/extensions/donjayamanne.githistory-0.6.20
+[15:21:01] Extension installed successfully: donjayamanne.githistory file:///root/.vscode-server/extensions/extensions.json
+[15:21:02] Getting Manifest... oderwat.indent-rainbow
+[15:21:02] Installing extension: felipecaputo.git-project-manager {
+  installPreReleaseVersion: false,
+  donotVerifySignature: false,
+  context: { clientTargetPlatform: 'win32-x64' },
+  installOnlyNewlyAddedFromExtensionPack: true,
+  isApplicationScoped: false,
+  profileLocation: vr {
+    scheme: 'file',
+    authority: '',
+    path: '/root/.vscode-server/extensions/extensions.json',
+    query: '',
+    fragment: '',
+    _formatted: 'file:///root/.vscode-server/extensions/extensions.json',
+    _fsPath: '/root/.vscode-server/extensions/extensions.json'
+  },
+  productVersion: { version: '1.95.3', date: '2024-11-13T14:50:04.152Z' }
+}
+[15:21:03] Extension signature verification result for formulahendry.code-runner: Success. Executed: true. Duration: 570ms.
+[15:21:03] Extracted extension to file:///root/.vscode-server/extensions/formulahendry.code-runner-0.12.2: formulahendry.code-runner
+[15:21:03] Renamed to /root/.vscode-server/extensions/formulahendry.code-runner-0.12.2
+[15:21:03] Extension installed successfully: formulahendry.code-runner file:///root/.vscode-server/extensions/extensions.json
+[15:21:03] Extension signature verification result for amiralizadeh9480.cpp-helper: Success. Executed: true. Duration: 563ms.
+[15:21:03] Extracted extension to file:///root/.vscode-server/extensions/amiralizadeh9480.cpp-helper-0.3.4: amiralizadeh9480.cpp-helper
+[15:21:03] Renamed to /root/.vscode-server/extensions/amiralizadeh9480.cpp-helper-0.3.4
+[15:21:03] Extension installed successfully: amiralizadeh9480.cpp-helper file:///root/.vscode-server/extensions/extensions.json
+[15:21:03] Getting Manifest... visualstudioexptteam.vscodeintellicode
+[15:21:04] Extension signature verification result for waderyan.gitblame: Success. Executed: true. Duration: 594ms.
+[15:21:04] Extracted extension to file:///root/.vscode-server/extensions/waderyan.gitblame-11.1.1: waderyan.gitblame
+[15:21:04] Renamed to /root/.vscode-server/extensions/waderyan.gitblame-11.1.1
+[15:21:04] Extension installed successfully: waderyan.gitblame file:///root/.vscode-server/extensions/extensions.json
+[15:21:04] Extension signature verification result for felipecaputo.git-project-manager: Success. Executed: true. Duration: 634ms.
+[15:21:04] Extracted extension to file:///root/.vscode-server/extensions/felipecaputo.git-project-manager-1.8.2: felipecaputo.git-project-manager
+[15:21:04] Renamed to /root/.vscode-server/extensions/felipecaputo.git-project-manager-1.8.2
+[15:21:04] Extension installed successfully: felipecaputo.git-project-manager file:///root/.vscode-server/extensions/extensions.json
+[15:21:06] Getting Manifest... ms-python.isort
+[15:21:07] Installing extension: oderwat.indent-rainbow {
+  installPreReleaseVersion: false,
+  donotVerifySignature: false,
+  context: { clientTargetPlatform: 'win32-x64' },
+  installOnlyNewlyAddedFromExtensionPack: true,
+  isApplicationScoped: false,
+  profileLocation: vr {
+    scheme: 'file',
+    authority: '',
+    path: '/root/.vscode-server/extensions/extensions.json',
+    query: '',
+    fragment: '',
+    _formatted: 'file:///root/.vscode-server/extensions/extensions.json',
+    _fsPath: '/root/.vscode-server/extensions/extensions.json'
+  },
+  productVersion: { version: '1.95.3', date: '2024-11-13T14:50:04.152Z' }
+}
+[15:21:09] Getting Manifest... obkoro1.korofileheader
+[15:21:10] Installing extension: visualstudioexptteam.vscodeintellicode {
+  installPreReleaseVersion: false,
+  donotVerifySignature: false,
+  context: { clientTargetPlatform: 'win32-x64' },
+  installOnlyNewlyAddedFromExtensionPack: true,
+  isApplicationScoped: false,
+  profileLocation: vr {
+    scheme: 'file',
+    authority: '',
+    path: '/root/.vscode-server/extensions/extensions.json',
+    query: '',
+    fragment: '',
+    _formatted: 'file:///root/.vscode-server/extensions/extensions.json',
+    _fsPath: '/root/.vscode-server/extensions/extensions.json'
+  },
+  productVersion: { version: '1.95.3', date: '2024-11-13T14:50:04.152Z' }
+}
+[15:21:11] Getting Manifest... visualstudioexptteam.intellicode-api-usage-examples
+[15:21:11] Installing extension: visualstudioexptteam.intellicode-api-usage-examples {
+  installPreReleaseVersion: false,
+  donotVerifySignature: false,
+  context: {
+    clientTargetPlatform: 'win32-x64',
+    dependecyOrPackExtensionInstall: true
+  },
+  installOnlyNewlyAddedFromExtensionPack: true,
+  isApplicationScoped: false,
+  profileLocation: vr {
+    scheme: 'file',
+    authority: '',
+    path: '/root/.vscode-server/extensions/extensions.json',
+    query: '',
+    fragment: '',
+    _formatted: 'file:///root/.vscode-server/extensions/extensions.json',
+    _fsPath: '/root/.vscode-server/extensions/extensions.json'
+  },
+  productVersion: { version: '1.95.3', date: '2024-11-13T14:50:04.152Z' }
+}
+[15:21:13] Extension signature verification result for visualstudioexptteam.intellicode-api-usage-examples: Success. Executed: true. Duration: 543ms.
+[15:21:14] Extracted extension to file:///root/.vscode-server/extensions/visualstudioexptteam.intellicode-api-usage-examples-0.2.9: visualstudioexptteam.intellicode-api-usage-examples
+[15:21:14] Installing extension: ms-python.isort {
+  installPreReleaseVersion: false,
+  donotVerifySignature: false,
+  context: { clientTargetPlatform: 'win32-x64' },
+  installOnlyNewlyAddedFromExtensionPack: true,
+  isApplicationScoped: false,
+  profileLocation: vr {
+    scheme: 'file',
+    authority: '',
+    path: '/root/.vscode-server/extensions/extensions.json',
+    query: '',
+    fragment: '',
+    _formatted: 'file:///root/.vscode-server/extensions/extensions.json',
+    _fsPath: '/root/.vscode-server/extensions/extensions.json'
+  },
+  productVersion: { version: '1.95.3', date: '2024-11-13T14:50:04.152Z' }
+}
+[15:21:14] Renamed to /root/.vscode-server/extensions/visualstudioexptteam.intellicode-api-usage-examples-0.2.9
+[15:21:14] Getting Manifest... vgbire.letter-transform
+[15:21:15] Getting Manifest... ms-python.python
+[15:21:16] Getting Manifest... ms-python.vscode-pylance
+[15:21:16] Getting Manifest... ms-python.debugpy
+[15:21:16] Installing extension: ms-python.python {
+  installPreReleaseVersion: false,
+  donotVerifySignature: false,
+  context: {
+    clientTargetPlatform: 'win32-x64',
+    dependecyOrPackExtensionInstall: true
+  },
+  installOnlyNewlyAddedFromExtensionPack: true,
+  isApplicationScoped: false,
+  profileLocation: vr {
+    scheme: 'file',
+    authority: '',
+    path: '/root/.vscode-server/extensions/extensions.json',
+    query: '',
+    fragment: '',
+    _formatted: 'file:///root/.vscode-server/extensions/extensions.json',
+    _fsPath: '/root/.vscode-server/extensions/extensions.json'
+  },
+  productVersion: { version: '1.95.3', date: '2024-11-13T14:50:04.152Z' }
+}
+[15:21:16] Installing extension: ms-python.vscode-pylance {
+  installPreReleaseVersion: false,
+  donotVerifySignature: false,
+  context: {
+    clientTargetPlatform: 'win32-x64',
+    dependecyOrPackExtensionInstall: true
+  },
+  installOnlyNewlyAddedFromExtensionPack: true,
+  isApplicationScoped: false,
+  profileLocation: vr {
+    scheme: 'file',
+    authority: '',
+    path: '/root/.vscode-server/extensions/extensions.json',
+    query: '',
+    fragment: '',
+    _formatted: 'file:///root/.vscode-server/extensions/extensions.json',
+    _fsPath: '/root/.vscode-server/extensions/extensions.json'
+  },
+  productVersion: { version: '1.95.3', date: '2024-11-13T14:50:04.152Z' }
+}
+[15:21:16] Installing extension: ms-python.debugpy {
+  installPreReleaseVersion: false,
+  donotVerifySignature: false,
+  context: {
+    clientTargetPlatform: 'win32-x64',
+    dependecyOrPackExtensionInstall: true
+  },
+  installOnlyNewlyAddedFromExtensionPack: true,
+  isApplicationScoped: false,
+  profileLocation: vr {
+    scheme: 'file',
+    authority: '',
+    path: '/root/.vscode-server/extensions/extensions.json',
+    query: '',
+    fragment: '',
+    _formatted: 'file:///root/.vscode-server/extensions/extensions.json',
+    _fsPath: '/root/.vscode-server/extensions/extensions.json'
+  },
+  productVersion: { version: '1.95.3', date: '2024-11-13T14:50:04.152Z' }
+}
+[15:21:16] Installing extension: obkoro1.korofileheader {
+  installPreReleaseVersion: false,
+  donotVerifySignature: false,
+  context: { clientTargetPlatform: 'win32-x64' },
+  installOnlyNewlyAddedFromExtensionPack: true,
+  isApplicationScoped: false,
+  profileLocation: vr {
+    scheme: 'file',
+    authority: '',
+    path: '/root/.vscode-server/extensions/extensions.json',
+    query: '',
+    fragment: '',
+    _formatted: 'file:///root/.vscode-server/extensions/extensions.json',
+    _fsPath: '/root/.vscode-server/extensions/extensions.json'
+  },
+  productVersion: { version: '1.95.3', date: '2024-11-13T14:50:04.152Z' }
+}
+[15:21:17] Getting Manifest... yzhang.markdown-all-in-one
+[15:21:19] Extension signature verification result for ms-python.python: Success. Executed: true. Duration: 570ms.
+[15:21:21] Extracted extension to file:///root/.vscode-server/extensions/ms-python.python-2024.20.0-linux-x64: ms-python.python
+[15:21:21] Renamed to /root/.vscode-server/extensions/ms-python.python-2024.20.0-linux-x64
+[15:21:22] Extension signature verification result for ms-python.vscode-pylance: Success. Executed: true. Duration: 610ms.
+[15:21:22] Extension signature verification result for ms-python.debugpy: Success. Executed: true. Duration: 594ms.
+[15:21:23] Extracted extension to file:///root/.vscode-server/extensions/ms-python.debugpy-2024.12.0-linux-x64: ms-python.debugpy
+[15:21:23] Renamed to /root/.vscode-server/extensions/ms-python.debugpy-2024.12.0-linux-x64
+[15:21:25] Extension signature verification result for ms-python.isort: Success. Executed: true. Duration: 568ms.
+[15:21:25] Extracted extension to file:///root/.vscode-server/extensions/ms-python.isort-2023.10.1: ms-python.isort
+[15:21:25] Renamed to /root/.vscode-server/extensions/ms-python.isort-2023.10.1
+[15:21:26] Extracted extension to file:///root/.vscode-server/extensions/ms-python.vscode-pylance-2024.11.2: ms-python.vscode-pylance
+[15:21:26] Renamed to /root/.vscode-server/extensions/ms-python.vscode-pylance-2024.11.2
+[15:21:26] Extension installed successfully: ms-python.python file:///root/.vscode-server/extensions/extensions.json
+[15:21:26] Extension installed successfully: ms-python.debugpy file:///root/.vscode-server/extensions/extensions.json
+[15:21:26] Extension installed successfully: ms-python.isort file:///root/.vscode-server/extensions/extensions.json
+[15:21:26] Extension installed successfully: ms-python.vscode-pylance file:///root/.vscode-server/extensions/extensions.json
+[15:21:30] Getting Manifest... mechatroner.rainbow-csv
+[15:21:32] Getting Manifest... natizyskunk.sftp
+[15:21:35] Getting Manifest... gruntfuggly.todo-tree
+[15:21:38] Installing extension: yzhang.markdown-all-in-one {
+  installPreReleaseVersion: false,
+  donotVerifySignature: false,
+  context: { clientTargetPlatform: 'win32-x64' },
+  installOnlyNewlyAddedFromExtensionPack: true,
+  isApplicationScoped: false,
+  profileLocation: vr {
+    scheme: 'file',
+    authority: '',
+    path: '/root/.vscode-server/extensions/extensions.json',
+    query: '',
+    fragment: '',
+    _formatted: 'file:///root/.vscode-server/extensions/extensions.json',
+    _fsPath: '/root/.vscode-server/extensions/extensions.json'
+  },
+  productVersion: { version: '1.95.3', date: '2024-11-13T14:50:04.152Z' }
+}
+[15:21:38] Installing extension: codezombiech.gitignore {
+  installPreReleaseVersion: false,
+  donotVerifySignature: false,
+  context: { clientTargetPlatform: 'win32-x64' },
+  installOnlyNewlyAddedFromExtensionPack: true,
+  isApplicationScoped: false,
+  profileLocation: vr {
+    scheme: 'file',
+    authority: '',
+    path: '/root/.vscode-server/extensions/extensions.json',
+    query: '',
+    fragment: '',
+    _formatted: 'file:///root/.vscode-server/extensions/extensions.json',
+    _fsPath: '/root/.vscode-server/extensions/extensions.json'
+  },
+  productVersion: { version: '1.95.3', date: '2024-11-13T14:50:04.152Z' }
+}
+[15:21:42] Installing extension: huizhou.githd {
+  installPreReleaseVersion: false,
+  donotVerifySignature: false,
+  context: { clientTargetPlatform: 'win32-x64' },
+  installOnlyNewlyAddedFromExtensionPack: true,
+  isApplicationScoped: false,
+  profileLocation: vr {
+    scheme: 'file',
+    authority: '',
+    path: '/root/.vscode-server/extensions/extensions.json',
+    query: '',
+    fragment: '',
+    _formatted: 'file:///root/.vscode-server/extensions/extensions.json',
+    _fsPath: '/root/.vscode-server/extensions/extensions.json'
+  },
+  productVersion: { version: '1.95.3', date: '2024-11-13T14:50:04.152Z' }
+}
+[15:21:43] Extension signature verification result for codezombiech.gitignore: Success. Executed: true. Duration: 535ms.
+[15:21:43] Extracted extension to file:///root/.vscode-server/extensions/codezombiech.gitignore-0.9.0: codezombiech.gitignore
+[15:21:43] Renamed to /root/.vscode-server/extensions/codezombiech.gitignore-0.9.0
+[15:21:43] Extension installed successfully: codezombiech.gitignore file:///root/.vscode-server/extensions/extensions.json
+[15:21:44] [network] #23: https://donjayamanne.gallerycdn.vsassets.io/extensions/donjayamanne/git-extension-pack/0.1.3/1502005480329/Microsoft.VisualStudio.Code.Manifest - error GET Client network socket disconnected before secure TLS connection was established
+[15:21:44] Installing extension: donjayamanne.git-extension-pack {
+  installPreReleaseVersion: false,
+  donotVerifySignature: false,
+  context: { clientTargetPlatform: 'win32-x64' },
+  installOnlyNewlyAddedFromExtensionPack: true,
+  isApplicationScoped: false,
+  profileLocation: vr {
+    scheme: 'file',
+    authority: '',
+    path: '/root/.vscode-server/extensions/extensions.json',
+    query: '',
+    fragment: '',
+    _formatted: 'file:///root/.vscode-server/extensions/extensions.json',
+    _fsPath: '/root/.vscode-server/extensions/extensions.json'
+  },
+  productVersion: { version: '1.95.3', date: '2024-11-13T14:50:04.152Z' }
+}
+[15:21:45] Extension signature verification result for yzhang.markdown-all-in-one: Success. Executed: true. Duration: 531ms.
+[15:21:45] Extracted extension to file:///root/.vscode-server/extensions/yzhang.markdown-all-in-one-3.6.2: yzhang.markdown-all-in-one
+[15:21:45] Renamed to /root/.vscode-server/extensions/yzhang.markdown-all-in-one-3.6.2
+[15:21:45] Extension installed successfully: yzhang.markdown-all-in-one file:///root/.vscode-server/extensions/extensions.json
+[15:21:46] Getting Manifest... eamodio.gitlens
+[15:21:46] Getting Manifest... donjayamanne.githistory
+[15:21:46] Getting Manifest... alefragnani.project-manager
+[15:21:46] Getting Manifest... codezombiech.gitignore
+[15:21:47] Getting Manifest... ziyasal.vscode-open-in-github
+[15:21:47] Installing extension: eamodio.gitlens {
+  installPreReleaseVersion: false,
+  donotVerifySignature: false,
+  context: {
+    clientTargetPlatform: 'win32-x64',
+    dependecyOrPackExtensionInstall: true
+  },
+  installOnlyNewlyAddedFromExtensionPack: true,
+  isApplicationScoped: false,
+  profileLocation: vr {
+    scheme: 'file',
+    authority: '',
+    path: '/root/.vscode-server/extensions/extensions.json',
+    query: '',
+    fragment: '',
+    _formatted: 'file:///root/.vscode-server/extensions/extensions.json',
+    _fsPath: '/root/.vscode-server/extensions/extensions.json'
+  },
+  productVersion: { version: '1.95.3', date: '2024-11-13T14:50:04.152Z' }
+}
+[15:21:47] Installing extension: alefragnani.project-manager {
+  installPreReleaseVersion: false,
+  donotVerifySignature: false,
+  context: {
+    clientTargetPlatform: 'win32-x64',
+    dependecyOrPackExtensionInstall: true
+  },
+  installOnlyNewlyAddedFromExtensionPack: true,
+  isApplicationScoped: false,
+  profileLocation: vr {
+    scheme: 'file',
+    authority: '',
+    path: '/root/.vscode-server/extensions/extensions.json',
+    query: '',
+    fragment: '',
+    _formatted: 'file:///root/.vscode-server/extensions/extensions.json',
+    _fsPath: '/root/.vscode-server/extensions/extensions.json'
+  },
+  productVersion: { version: '1.95.3', date: '2024-11-13T14:50:04.152Z' }
+}
+[15:21:47] Installing extension: ziyasal.vscode-open-in-github {
+  installPreReleaseVersion: false,
+  donotVerifySignature: false,
+  context: {
+    clientTargetPlatform: 'win32-x64',
+    dependecyOrPackExtensionInstall: true
+  },
+  installOnlyNewlyAddedFromExtensionPack: true,
+  isApplicationScoped: false,
+  profileLocation: vr {
+    scheme: 'file',
+    authority: '',
+    path: '/root/.vscode-server/extensions/extensions.json',
+    query: '',
+    fragment: '',
+    _formatted: 'file:///root/.vscode-server/extensions/extensions.json',
+    _fsPath: '/root/.vscode-server/extensions/extensions.json'
+  },
+  productVersion: { version: '1.95.3', date: '2024-11-13T14:50:04.152Z' }
+}
+[15:21:49] Extension signature verification result for alefragnani.project-manager: Success. Executed: true. Duration: 635ms.
+[15:21:49] Extracted extension to file:///root/.vscode-server/extensions/alefragnani.project-manager-12.8.0: alefragnani.project-manager
+[15:21:49] Renamed to /root/.vscode-server/extensions/alefragnani.project-manager-12.8.0
+[15:21:49] Extension signature verification result for eamodio.gitlens: Success. Executed: true. Duration: 657ms.
+[15:21:49] Extension signature verification result for ziyasal.vscode-open-in-github: Success. Executed: true. Duration: 640ms.
+[15:21:50] Extracted extension to file:///root/.vscode-server/extensions/ziyasal.vscode-open-in-github-1.3.6: ziyasal.vscode-open-in-github
+[15:21:50] Renamed to /root/.vscode-server/extensions/ziyasal.vscode-open-in-github-1.3.6
+[15:21:50] Extracted extension to file:///root/.vscode-server/extensions/eamodio.gitlens-16.0.1: eamodio.gitlens
+[15:21:50] Renamed to /root/.vscode-server/extensions/eamodio.gitlens-16.0.1
+[15:21:53] Extension signature verification result for huizhou.githd: Success. Executed: true. Duration: 556ms.
+[15:21:53] Extracted extension to file:///root/.vscode-server/extensions/huizhou.githd-2.5.4: huizhou.githd
+[15:21:53] Renamed to /root/.vscode-server/extensions/huizhou.githd-2.5.4
+[15:21:53] Extension installed successfully: huizhou.githd file:///root/.vscode-server/extensions/extensions.json
+[15:21:53] Installing extension: vgbire.letter-transform {
+  installPreReleaseVersion: false,
+  donotVerifySignature: false,
+  context: { clientTargetPlatform: 'win32-x64' },
+  installOnlyNewlyAddedFromExtensionPack: true,
+  isApplicationScoped: false,
+  profileLocation: vr {
+    scheme: 'file',
+    authority: '',
+    path: '/root/.vscode-server/extensions/extensions.json',
+    query: '',
+    fragment: '',
+    _formatted: 'file:///root/.vscode-server/extensions/extensions.json',
+    _fsPath: '/root/.vscode-server/extensions/extensions.json'
+  },
+  productVersion: { version: '1.95.3', date: '2024-11-13T14:50:04.152Z' }
+}
+[15:22:21] Extension signature verification result for oderwat.indent-rainbow: Success. Executed: true. Duration: 508ms.
+[15:22:21] Extracted extension to file:///root/.vscode-server/extensions/oderwat.indent-rainbow-8.3.1: oderwat.indent-rainbow
+[15:22:21] Renamed to /root/.vscode-server/extensions/oderwat.indent-rainbow-8.3.1
+[15:22:21] Extension installed successfully: oderwat.indent-rainbow file:///root/.vscode-server/extensions/extensions.json
+[15:22:31] Extension signature verification result for visualstudioexptteam.vscodeintellicode: Success. Executed: true. Duration: 610ms.
+[15:22:32] Extracted extension to file:///root/.vscode-server/extensions/visualstudioexptteam.vscodeintellicode-1.3.2: visualstudioexptteam.vscodeintellicode
+[15:22:32] Renamed to /root/.vscode-server/extensions/visualstudioexptteam.vscodeintellicode-1.3.2
+[15:22:32] Extension installed successfully: visualstudioexptteam.intellicode-api-usage-examples file:///root/.vscode-server/extensions/extensions.json
+[15:22:32] Extension installed successfully: visualstudioexptteam.vscodeintellicode file:///root/.vscode-server/extensions/extensions.json
+[15:22:32] Installing extension: mechatroner.rainbow-csv {
+  installPreReleaseVersion: false,
+  donotVerifySignature: false,
+  context: { clientTargetPlatform: 'win32-x64' },
+  installOnlyNewlyAddedFromExtensionPack: true,
+  isApplicationScoped: false,
+  profileLocation: vr {
+    scheme: 'file',
+    authority: '',
+    path: '/root/.vscode-server/extensions/extensions.json',
+    query: '',
+    fragment: '',
+    _formatted: 'file:///root/.vscode-server/extensions/extensions.json',
+    _fsPath: '/root/.vscode-server/extensions/extensions.json'
+  },
+  productVersion: { version: '1.95.3', date: '2024-11-13T14:50:04.152Z' }
+}
+[15:22:38] Extension signature verification result for mechatroner.rainbow-csv: Success. Executed: true. Duration: 514ms.
+[15:22:38] Extracted extension to file:///root/.vscode-server/extensions/mechatroner.rainbow-csv-3.12.0: mechatroner.rainbow-csv
+[15:22:38] Renamed to /root/.vscode-server/extensions/mechatroner.rainbow-csv-3.12.0
+[15:22:38] Extension installed successfully: mechatroner.rainbow-csv file:///root/.vscode-server/extensions/extensions.json
+[15:22:54] [network] #102: https://donjayamanne.gallerycdn.vsassets.io/extensions/donjayamanne/git-extension-pack/0.1.3/1502005480329/Microsoft.VisualStudio.Services.VsixSignature - error GET Client network socket disconnected before secure TLS connection was established
+[15:22:55] Extension signature verification result for donjayamanne.git-extension-pack: Success. Executed: true. Duration: 537ms.
+[15:22:55] Extracted extension to file:///root/.vscode-server/extensions/donjayamanne.git-extension-pack-0.1.3: donjayamanne.git-extension-pack
+[15:22:55] Renamed to /root/.vscode-server/extensions/donjayamanne.git-extension-pack-0.1.3
+[15:22:55] Extension installed successfully: alefragnani.project-manager file:///root/.vscode-server/extensions/extensions.json
+[15:22:55] Extension installed successfully: ziyasal.vscode-open-in-github file:///root/.vscode-server/extensions/extensions.json
+[15:22:55] Extension installed successfully: eamodio.gitlens file:///root/.vscode-server/extensions/extensions.json
+[15:22:55] Extension installed successfully: donjayamanne.git-extension-pack file:///root/.vscode-server/extensions/extensions.json
+[15:23:06] Installing extension: mhutchie.git-graph {
+  installPreReleaseVersion: false,
+  donotVerifySignature: false,
+  context: { clientTargetPlatform: 'win32-x64' },
+  installOnlyNewlyAddedFromExtensionPack: true,
+  isApplicationScoped: false,
+  profileLocation: vr {
+    scheme: 'file',
+    authority: '',
+    path: '/root/.vscode-server/extensions/extensions.json',
+    query: '',
+    fragment: '',
+    _formatted: 'file:///root/.vscode-server/extensions/extensions.json',
+    _fsPath: '/root/.vscode-server/extensions/extensions.json'
+  },
+  productVersion: { version: '1.95.3', date: '2024-11-13T14:50:04.152Z' }
+}
+[15:23:08] Getting Manifest... njpwerner.autodocstring
+[15:23:16] Installing extension: natizyskunk.sftp {
+  installPreReleaseVersion: false,
+  donotVerifySignature: false,
+  context: { clientTargetPlatform: 'win32-x64' },
+  installOnlyNewlyAddedFromExtensionPack: true,
+  isApplicationScoped: false,
+  profileLocation: vr {
+    scheme: 'file',
+    authority: '',
+    path: '/root/.vscode-server/extensions/extensions.json',
+    query: '',
+    fragment: '',
+    _formatted: 'file:///root/.vscode-server/extensions/extensions.json',
+    _fsPath: '/root/.vscode-server/extensions/extensions.json'
+  },
+  productVersion: { version: '1.95.3', date: '2024-11-13T14:50:04.152Z' }
+}
+[15:23:17] Extension signature verification result for mhutchie.git-graph: Success. Executed: true. Duration: 569ms.
+[15:23:17] Extracted extension to file:///root/.vscode-server/extensions/mhutchie.git-graph-1.30.0: mhutchie.git-graph
+[15:23:17] Renamed to /root/.vscode-server/extensions/mhutchie.git-graph-1.30.0
+[15:23:17] Extension installed successfully: mhutchie.git-graph file:///root/.vscode-server/extensions/extensions.json
+[15:23:19] Extension signature verification result for vgbire.letter-transform: Success. Executed: true. Duration: 540ms.
+[15:23:19] Extracted extension to file:///root/.vscode-server/extensions/vgbire.letter-transform-1.4.1: vgbire.letter-transform
+[15:23:19] Renamed to /root/.vscode-server/extensions/vgbire.letter-transform-1.4.1
+[15:23:20] Extension installed successfully: vgbire.letter-transform file:///root/.vscode-server/extensions/extensions.json
+[15:23:20] Getting Manifest... damiankoper.gdb-debug
+[15:23:20] Installing extension: gruntfuggly.todo-tree {
+  installPreReleaseVersion: false,
+  donotVerifySignature: false,
+  context: { clientTargetPlatform: 'win32-x64' },
+  installOnlyNewlyAddedFromExtensionPack: true,
+  isApplicationScoped: false,
+  profileLocation: vr {
+    scheme: 'file',
+    authority: '',
+    path: '/root/.vscode-server/extensions/extensions.json',
+    query: '',
+    fragment: '',
+    _formatted: 'file:///root/.vscode-server/extensions/extensions.json',
+    _fsPath: '/root/.vscode-server/extensions/extensions.json'
+  },
+  productVersion: { version: '1.95.3', date: '2024-11-13T14:50:04.152Z' }
+}
+[15:23:25] Extension signature verification result for gruntfuggly.todo-tree: Success. Executed: true. Duration: 521ms.
+[15:23:25] Extracted extension to file:///root/.vscode-server/extensions/gruntfuggly.todo-tree-0.0.226: gruntfuggly.todo-tree
+[15:23:25] Renamed to /root/.vscode-server/extensions/gruntfuggly.todo-tree-0.0.226
+[15:23:25] Extension installed successfully: gruntfuggly.todo-tree file:///root/.vscode-server/extensions/extensions.json
+[15:23:30] Installing extension: njpwerner.autodocstring {
+  installPreReleaseVersion: false,
+  donotVerifySignature: false,
+  context: { clientTargetPlatform: 'win32-x64' },
+  installOnlyNewlyAddedFromExtensionPack: true,
+  isApplicationScoped: false,
+  profileLocation: vr {
+    scheme: 'file',
+    authority: '',
+    path: '/root/.vscode-server/extensions/extensions.json',
+    query: '',
+    fragment: '',
+    _formatted: 'file:///root/.vscode-server/extensions/extensions.json',
+    _fsPath: '/root/.vscode-server/extensions/extensions.json'
+  },
+  productVersion: { version: '1.95.3', date: '2024-11-13T14:50:04.152Z' }
+}
+[15:23:32] Getting Manifest... mateuszchudyk.hexinspector
+[15:23:33] [network] #80: https://mobile.events.data.microsoft.com/OneCollector/1.0?cors=true&content-type=application/x-json-stream - error POST connect ETIMEDOUT 13.89.179.9:443
+[15:23:33] [network] #76: https://mobile.events.data.microsoft.com/OneCollector/1.0?cors=true&content-type=application/x-json-stream - error POST connect ETIMEDOUT 13.89.179.9:443
+[15:23:37] Installing extension: damiankoper.gdb-debug {
+  installPreReleaseVersion: false,
+  donotVerifySignature: false,
+  context: { clientTargetPlatform: 'win32-x64' },
+  installOnlyNewlyAddedFromExtensionPack: true,
+  isApplicationScoped: false,
+  profileLocation: vr {
+    scheme: 'file',
+    authority: '',
+    path: '/root/.vscode-server/extensions/extensions.json',
+    query: '',
+    fragment: '',
+    _formatted: 'file:///root/.vscode-server/extensions/extensions.json',
+    _fsPath: '/root/.vscode-server/extensions/extensions.json'
+  },
+  productVersion: { version: '1.95.3', date: '2024-11-13T14:50:04.152Z' }
+}
+[15:23:37] Installing extension: mateuszchudyk.hexinspector {
+  installPreReleaseVersion: false,
+  donotVerifySignature: false,
+  context: { clientTargetPlatform: 'win32-x64' },
+  installOnlyNewlyAddedFromExtensionPack: true,
+  isApplicationScoped: false,
+  profileLocation: vr {
+    scheme: 'file',
+    authority: '',
+    path: '/root/.vscode-server/extensions/extensions.json',
+    query: '',
+    fragment: '',
+    _formatted: 'file:///root/.vscode-server/extensions/extensions.json',
+    _fsPath: '/root/.vscode-server/extensions/extensions.json'
+  },
+  productVersion: { version: '1.95.3', date: '2024-11-13T14:50:04.152Z' }
+}
+[15:23:42] Extension signature verification result for mateuszchudyk.hexinspector: Success. Executed: true. Duration: 526ms.
+[15:23:42] Extracted extension to file:///root/.vscode-server/extensions/mateuszchudyk.hexinspector-1.5.1: mateuszchudyk.hexinspector
+[15:23:42] Renamed to /root/.vscode-server/extensions/mateuszchudyk.hexinspector-1.5.1
+[15:23:42] Extension installed successfully: mateuszchudyk.hexinspector file:///root/.vscode-server/extensions/extensions.json
+[15:23:45] Extension signature verification result for natizyskunk.sftp: Success. Executed: true. Duration: 562ms.
+[15:23:45] Extracted extension to file:///root/.vscode-server/extensions/natizyskunk.sftp-1.16.3: natizyskunk.sftp
+[15:23:45] Renamed to /root/.vscode-server/extensions/natizyskunk.sftp-1.16.3
+[15:23:45] Extension installed successfully: natizyskunk.sftp file:///root/.vscode-server/extensions/extensions.json
+[15:23:52] Installing extension: golang.go {
+  installPreReleaseVersion: false,
+  donotVerifySignature: false,
+  context: { clientTargetPlatform: 'win32-x64' },
+  installOnlyNewlyAddedFromExtensionPack: true,
+  isApplicationScoped: false,
+  profileLocation: vr {
+    scheme: 'file',
+    authority: '',
+    path: '/root/.vscode-server/extensions/extensions.json',
+    query: '',
+    fragment: '',
+    _formatted: 'file:///root/.vscode-server/extensions/extensions.json',
+    _fsPath: '/root/.vscode-server/extensions/extensions.json'
+  },
+  productVersion: { version: '1.95.3', date: '2024-11-13T14:50:04.152Z' }
+}
+[15:23:54] Extension signature verification result for golang.go: Success. Executed: true. Duration: 514ms.
+[15:23:54] Extracted extension to file:///root/.vscode-server/extensions/golang.go-0.42.1: golang.go
+[15:23:54] Renamed to /root/.vscode-server/extensions/golang.go-0.42.1
+[15:23:54] Extension installed successfully: golang.go file:///root/.vscode-server/extensions/extensions.json
+[15:24:04] Getting Manifest... hbenl.vscode-test-explorer
+[15:24:28] Extension signature verification result for njpwerner.autodocstring: Success. Executed: true. Duration: 558ms.
+[15:24:28] Extracted extension to file:///root/.vscode-server/extensions/njpwerner.autodocstring-0.6.1: njpwerner.autodocstring
+[15:24:28] Renamed to /root/.vscode-server/extensions/njpwerner.autodocstring-0.6.1
+[15:24:28] Extension installed successfully: njpwerner.autodocstring file:///root/.vscode-server/extensions/extensions.json
