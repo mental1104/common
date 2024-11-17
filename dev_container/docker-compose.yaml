@@ -1,0 +1,23 @@
+version: '3.3'
+
+services:
+  mental1104_dev:
+    image: mental1104_dev:latest
+    container_name: mental1104_dev
+    networks:
+      - shared_network
+    ports:
+      - "31104:22"
+    volumes:
+      - /mnt/d/mental1104_dev:/data
+      - ~/.ssh:/root/.ssh:ro  # 将宿主机的 .ssh 目录挂载到容器中
+    environment:
+      - GIT_AUTHOR_NAME=mental1104  # 设置 Git 提交的用户名
+      - GIT_AUTHOR_EMAIL=mental1104@gmail.com  # 设置 Git 提交的邮箱
+      - GIT_COMMITTER_NAME=mental1104  # 设置 Git 提交的用户名
+      - GIT_COMMITTER_EMAIL=mental1104@gmail.com  # 设置 Git 提交的邮箱
+    restart: always
+
+networks:
+  shared_network:
+    external: true
