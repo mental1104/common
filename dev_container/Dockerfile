@@ -1,19 +1,27 @@
 # 使用龙蜥镜像
-FROM openanolis/anolisos:8.4-x86_64
+FROM ubuntu:24.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# 更新软件源并使用阿里云镜像
+RUN echo "deb http://mirrors.aliyun.com/ubuntu/ focal main restricted universe multiverse" > /etc/apt/sources.list && \
+    echo "deb http://mirrors.aliyun.com/ubuntu/ focal-updates main restricted universe multiverse" >> /etc/apt/sources.list && \
+    echo "deb http://mirrors.aliyun.com/ubuntu/ focal-backports main restricted universe multiverse" >> /etc/apt/sources.list && \
+    echo "deb http://mirrors.aliyun.com/ubuntu/ focal-security main restricted universe multiverse" >> /etc/apt/sources.list && \
+    apt-get update && apt-get upgrade -y
 
 COPY INSTALLROOT/amd64 /
 
 ## 1. 安装基础库
-RUN yum install -y \
+RUN apt-get install -y \
     gcc \
-    glibc \
-    gcc-c++ \
+    g++ \
     make \
     wget \
-    postgresql-devel \
-    zlib-devel \
-    libffi-devel \
-    openssl-devel
+    libpq-dev \
+    zlib1g-dev \
+    libffi-dev \
+    libssl-dev
 
 ## 2. 编程语言相关操作
 
@@ -46,33 +54,22 @@ ENV PATH $PATH:/usr/local/go/bin
 ### 3.1 系统相关
 
 ### 3.1.1 git
-RUN yum install -y git 
+RUN apt-get install -y git
 
 ### 3.1.2 htop
-RUN yum install -y libncurses* ncurses-devel
-RUN wget -P /tmp https://hisham.hm/htop/releases/2.2.0/htop-2.2.0.tar.gz && cd /tmp && tar -zxvf htop-2.2.0.tar.gz && cd htop-2.2.0/ && ./configure && make && make install
+# RUN apt-get install -y libtinfo6=6.2-0ubuntu2.1 libncurses-dev=6.2-0ubuntu2.1
 
-RUN yum install -y bison
-RUN wget -4c -P /tmp https://ftp.gnu.org/gnu/glibc/glibc-2.29.tar.gz && cd /tmp && \
-    tar -zxvf glibc-2.29.tar.gz && \
-    cd glibc-2.29 && \
-    mkdir build_dir && \
-    cd build_dir && \
-    ../configure --prefix=/opt/glibc && \
-    make && \
-    make install
+RUN chmod 1777 /tmp
+RUN apt-get install -y libtinfo6 libncurses-dev libncursesw5 && ln -s /lib/x86_64-linux-gnu/libtinfo.so.6 /lib/x86_64-linux-gnu/libtinfow.so.6 && ldconfig
+
 
 ### 3.1.3 neovim # 这一步要放早一点
-COPY INSTALLROOT/newer/* /tmp
 RUN cd /tmp && tar -zxvf nvim-linux64.tar.gz \ 
     && cd nvim-linux64 && cp -rf ./* /usr/local && \
     ln -s  /usr/local/bin/nvim /usr/local/bin/vim
     
-RUN yum install -y bison
+RUN apt-get install -y bison cmake unzip
 
-
-# RUN yum install -y cmake
-RUN yum install -y unzip
 # RUN wget -O /tmp/neovim-master.zip https://github.com/neovim/neovim/archive/refs/heads/master.zip && cd /tmp && unzip neovim-master.zip
 
 # ENV HTTPS_PROXY 192.168.31.239:7890
@@ -80,7 +77,7 @@ RUN yum install -y unzip
 # RUN cd /tmp/neovim-master && make install
 
 ### 3.2 安装基础网络工具
-RUN yum install -y openssl nc telnet tcpdump iptables openssh-server
+RUN apt-get install -y openssl netcat telnet tcpdump iptables openssh-server
 
 #### 3.2.2 开放ssh端口
 RUN mkdir /var/run/sshd
