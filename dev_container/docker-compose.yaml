@@ -4,6 +4,8 @@ services:
   mental1104_dev:
     image: mental1104_dev:latest
     container_name: mental1104_dev
+    security_opt:
+      - seccomp=unconfined
     networks:
       - shared_network
     ports:
