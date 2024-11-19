@@ -95,7 +95,7 @@ ARG SSH_PRIVATE_KEY
 ENV SSH_PRIVATE_KEY=${SSH_PRIVATE_KEY}
 RUN mkdir /var/run/sshd && ssh-keygen -A && echo 'root:${SSH_PRIVATE_KEY}' | chpasswd && sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config && \
     sed -i 's/#PubkeyAuthentication yes/PubkeyAuthentication yes/' /etc/ssh/sshd_config && \
-    echo "PasswordAuthentication no" >> /etc/ssh/sshd_config
+    echo "PasswordAuthentication yes" >> /etc/ssh/sshd_config
 ENV LANG=C.UTF-8
 
 # 暴露 SSH 默认端口
