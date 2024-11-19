@@ -6,7 +6,7 @@ clickhouse-sqlalchemy==0.1.6
 fastapi==0.75.2
 pycryptodome==3.18.0
 psycopg2-binary==2.9.3 
-python-dateutil==2.8.1
+python-dateutil>=2.8.2
 redis==3.5.3
 validators==0.20.0 
 pyahocorasick==1.4.0
@@ -21,11 +21,11 @@ cos-python-sdk-v5>=1.9.28
 boto3[crt]>=1.34.106
 OsS2>=2.18.5
 aiohttp
-pandas
+pandas>=2.2.3
 matplotlib
 numpy
 seaborn
-BeautifulSoup
+BeautifulSoup4
 pytest
 requests
 httpx

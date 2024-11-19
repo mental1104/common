@@ -125,7 +125,7 @@ RUN echo "PS1='\\[\033[32;1m\]\\u@\\[\033[38;5;214;1m\]\\h:\\[\033[01;34m\]\\w\\
 ENV VSCODE_COMMIT_VERSION=f1a4fb101478ce6ec82fe9627c43efbf9e98c813
 RUN mkdir -p /root/.vscode-server/bin/${VSCODE_COMMIT_VERSION}
 COPY INSTALLROOT/root/ /root/
-RUN tar -zxvf /root/.vscode-server/vscode-server-linux-x64.tar.gz -C /root/.vscode-server/bin/${VSCODE_COMMIT_VERSION} --strip1 && touch /root/.vscode-server/bin/${VSCODE_COMMIT_VERSION}/0
+RUN tar -zxvf /root/.vscode-server/vscode-server-linux-x64.tar.gz -C /root/.vscode-server/bin/${VSCODE_COMMIT_VERSION} --strip 1 && touch /root/.vscode-server/bin/${VSCODE_COMMIT_VERSION}/0
 
 
 RUN pip3 install -i https://pypi.tuna.tsinghua.edu.cn/simple -r /root/requirements.txt && rm -f /root/requirements.txt
