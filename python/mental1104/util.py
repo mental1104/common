@@ -1,5 +1,6 @@
 import functools
 import time
+import os
 from typing import Callable, Any
 
 def timed():
@@ -23,3 +24,21 @@ def delay(delay_seconds: int) -> int:
     time.sleep(delay_seconds)
     print(f'finished sleeping for {delay_seconds} second(s)')
     return delay_seconds
+
+
+def file_iterator(process_function):
+    """
+    装饰器，用于遍历指定目录下的所有文件，并对每个文件执行给定的处理函数。
+    """
+    def wrapper(input_path):
+        for entry in os.listdir(input_path):
+            dir_path = os.path.join(input_path, entry)
+            # 判断是否为目录
+            if os.path.isdir(dir_path):
+                print(entry)
+                for file in os.listdir(dir_path):
+                    full_path = os.path.join(dir_path, file)
+                    if os.path.isfile(full_path):
+                        process_function(file)
+
+    return wrapper

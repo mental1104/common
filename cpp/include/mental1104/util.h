@@ -212,10 +212,11 @@ namespace mental1104 {
     // Unified print function, automatically capture file and line numbers
     template <typename Container>
 #if __cplusplus >= 202002L
-    void print(const Container& c, bool show_info = true, std::source_location loc = std::source_location::current()) {
+    void print(const Container& c, bool show_info = true, std::source_location loc = std::source_location::current())
 #else
-    void print(const Container& c, bool show_info = true, no_source_location loc = no_source_location()) {
+    void print(const Container& c, bool show_info = true, no_source_location loc = no_source_location())
 #endif
+    {
         std::lock_guard<std::mutex> guard(print_mutex); 
         print_internal(c, show_info, loc);
     }

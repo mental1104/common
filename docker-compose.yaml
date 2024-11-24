@@ -1,0 +1,27 @@
+version: '3.3'
+
+services:
+  mental1104_dev:
+    image: mental1104_dev:latest
+    container_name: mental1104_dev
+    security_opt:
+      - seccomp=unconfined
+    networks:
+      - shared_network
+    ports:
+      - "31104:22"
+    volumes:
+      - /mnt/d/mental1104_dev:/data
+      - ~/.ssh:/root/.ssh:ro  # 将宿主机的 .ssh 目录挂载到容器中
+    env_file:
+      - .env
+    # Some environment variable can be set in the .env file in the current directory, such as: 
+    #  - GIT_AUTHOR_NAME=  # 设置 Git 提交的用户名
+    #  - GIT_AUTHOR_EMAIL=  # 设置 Git 提交的邮箱
+    #  - GIT_COMMITTER_NAME=  # 设置 Git 提交的用户名
+    #  - GIT_COMMITTER_EMAIL=  # 设置 Git 提交的邮箱
+    restart: always
+
+networks:
+  shared_network:
+    external: true
