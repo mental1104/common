@@ -75,6 +75,11 @@ RUN ln -s /usr/local/python3.12/bin/python3.12        /usr/local/python3.12/bin/
     ln -s /usr/local/python3.12/bin/idle3.12          /usr/local/python3.12/bin/idle && \
     ln -s /usr/local/python3.12/bin/python3.12-config      /usr/local/python3.12/bin/python-config
 
+RUN apt-get install -y \
+    redis-tools \
+    postgresql-client \
+    mongodb-clients
+
 ### 2.2 安装golang
 RUN tar -C /usr/local -xzf /tmp/go1.20.5.linux-amd64.tar.gz
 ENV PATH $PATH:/usr/local/go/bin
@@ -93,27 +98,18 @@ RUN cd /tmp && tar -zxvf nvim-linux64.tar.gz \
 # 生成 SSH 主机密钥
 ARG SSH_PRIVATE_KEY
 ENV SSH_PRIVATE_KEY=${SSH_PRIVATE_KEY}
-RUN mkdir /var/run/sshd && ssh-keygen -A && echo 'root:${SSH_PRIVATE_KEY}' | chpasswd && sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config && \
-    sed -i 's/#PubkeyAuthentication yes/PubkeyAuthentication yes/' /etc/ssh/sshd_config && \
-    echo "PasswordAuthentication yes" >> /etc/ssh/sshd_config
+# 设置root用户密码（此处将密码设为"password"，实际使用中请使用安全的密码）
+RUN echo "root:${SSH_PRIVATE_KEY}" | chpasswd
+
+# 修改SSH配置文件以允许密码认证
+RUN mkdir -p /run/sshd && sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config \
+    && sed -i 's/#PasswordAuthentication yes/PasswordAuthentication yes/' /etc/ssh/sshd_config
+
 ENV LANG=C.UTF-8
 
 # 暴露 SSH 默认端口
 EXPOSE 22
 
-## 4 安装中间件连接工具
-
-# 安装数据库连接工具
-
-
-# 安装 Redis CLI
-RUN apt-get install -y redis-tools
-
-# 安装 MongoDB 客户端
-RUN apt-get install -y mongodb-clients
-
-# 安装 PostgreSQL 客户端 (psql)
-RUN apt-get install -y postgresql-client
 
 ### 2.1.2 pip库安装
 
@@ -135,8 +131,19 @@ RUN ln -s /usr/local/python3.12/bin/python /usr/bin/python && \
     ln -s /usr/local/python3.12/bin/pip /usr/bin/pip && \
     ln -s /usr/local/go/bin/go /usr/bin/go
 
+# 下载并安装插件
+RUN while read extension; do \
+        /root/.vscode-server/bin/*/bin/code-server --install-extension $extension || true; \
+    done < /root/extensions.txt
+
 ENV HTTP_PROXY=
 ENV HTTPS_PROXY=
+
+COPY cpp /tmp/cpp/
+COPY python /tmp/python/
+
+RUN cd /tmp/cpp && mkdir -p build && cd build && cmake .. && make -j "$(nproc)" && make install && \
+    cd /tmp/python && pip install .
 
 CMD ["/usr/sbin/sshd", "-D"]
 WORKDIR /root
