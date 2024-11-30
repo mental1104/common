@@ -2,7 +2,7 @@ version: '3.3'
 
 services:
   mental1104_dev:
-    image: mental1104_dev:latest
+    image: mental1104/dev:latest
     container_name: mental1104_dev
     security_opt:
       - seccomp=unconfined

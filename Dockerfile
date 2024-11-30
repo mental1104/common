@@ -139,11 +139,14 @@ RUN while read extension; do \
 ENV HTTP_PROXY=
 ENV HTTPS_PROXY=
 
+RUN apt-get install -y build-essential gdb-multiarch qemu-system-misc gcc-riscv64-linux-gnu binutils-riscv64-linux-gnu libpcap-dev
+
 COPY cpp /tmp/cpp/
 COPY python /tmp/python/
 
 RUN cd /tmp/cpp && mkdir -p build && cd build && cmake .. && make -j "$(nproc)" && make install && \
     cd /tmp/python && pip install .
+
 
 CMD ["/usr/sbin/sshd", "-D"]
 WORKDIR /root
