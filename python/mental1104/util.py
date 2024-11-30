@@ -1,6 +1,7 @@
 import functools
 import time
 import os
+import re
 from typing import Callable, Any
 
 def timed():
@@ -42,3 +43,15 @@ def file_iterator(process_function):
                         process_function(file)
 
     return wrapper
+
+class StringHelper:
+
+    """将字符串中间的换行符和空白全部替换成指定分隔符
+
+    Returns:
+        _type_: _description_
+    """    
+    @staticmethod
+    def replace_space_with(input_string, seperator='|'):
+        words = re.findall(r'\S+', input_string)
+        return seperator.join(words)
