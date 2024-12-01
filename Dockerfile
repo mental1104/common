@@ -139,7 +139,13 @@ RUN while read extension; do \
 ENV HTTP_PROXY=
 ENV HTTPS_PROXY=
 
-RUN apt-get install -y build-essential gdb-multiarch qemu-system-misc gcc-riscv64-linux-gnu binutils-riscv64-linux-gnu libpcap-dev
+RUN apt-get install -y build-essential gdb-multiarch qemu-system-misc gcc-riscv64-linux-gnu binutils-riscv64-linux-gnu libpcap-dev libglib2.0-dev pkg-config libpixman-1-dev
+
+RUN cd /tmp && wget https://download.qemu.org/qemu-4.1.0.tar.xz && tar xvJf qemu-4.1.0.tar.xz && cd qemu-4.1.0/ && \
+    ./configure --disable-kvm --disable-werror --prefix=/usr/local --target-list="riscv64-softmmu " && \
+    make -j$(nproc) && \
+    make install && PATH=$PATH:/opt/qemu/bin && \
+    rm -rf /tmp/qemu*
 
 COPY cpp /tmp/cpp/
 COPY python /tmp/python/
@@ -147,6 +153,7 @@ COPY python /tmp/python/
 RUN cd /tmp/cpp && mkdir -p build && cd build && cmake .. && make -j "$(nproc)" && make install && \
     cd /tmp/python && pip install .
 
+RUN git config --global core.editor "vim"
 
 CMD ["/usr/sbin/sshd", "-D"]
 WORKDIR /root
