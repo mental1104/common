@@ -3,6 +3,8 @@ import time
 import os
 import re
 from typing import Callable, Any
+import csv
+from functools import wraps
 
 def timed():
     def wrapper(func: Callable) -> Callable:
@@ -43,6 +45,30 @@ def file_iterator(process_function):
                         process_function(file)
 
     return wrapper
+
+
+def csv_processor(file_path):
+    """
+    装饰器，用于处理 CSV 文件，将其内容解析为字典数组，并传递给被装饰函数。
+    
+    Args:
+        file_path (str): CSV 文件的路径。
+
+    Returns:
+        function: 包装后的函数。
+    """
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            # 读取 CSV 文件并解析为字典数组
+            with open(file_path, mode='r', encoding='utf-8') as f:
+                reader = csv.DictReader(f)
+                data = [row for row in reader]
+
+            # 将解析的内容传递给被装饰函数，并返回结果
+            return func(data, *args, **kwargs)
+        return wrapper
+    return decorator
 
 class StringHelper:
 
