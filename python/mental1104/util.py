@@ -47,12 +47,13 @@ def file_iterator(process_function):
     return wrapper
 
 
-def csv_processor(file_path):
+def csv_processor(file_path, has_header=True):
     """
-    装饰器，用于处理 CSV 文件，将其内容解析为字典数组，并传递给被装饰函数。
+    装饰器，用于处理 CSV 文件，将其内容解析为字典数组或元组数组，并传递给被装饰函数。
     
     Args:
         file_path (str): CSV 文件的路径。
+        has_header (bool): 是否包含表头。如果为 True，返回字典数组；否则返回元组数组。
 
     Returns:
         function: 包装后的函数。
@@ -60,11 +61,14 @@ def csv_processor(file_path):
     def decorator(func):
         @wraps(func)
         def wrapper(*args, **kwargs):
-            # 读取 CSV 文件并解析为字典数组
             with open(file_path, mode='r', encoding='utf-8') as f:
-                reader = csv.DictReader(f)
-                data = [row for row in reader]
-
+                if has_header:
+                    reader = csv.DictReader(f)  # 包含表头，解析为字典
+                    data = [row for row in reader]
+                else:
+                    reader = csv.reader(f)  # 不包含表头，解析为元组
+                    data = [tuple(row) for row in reader]
+            
             # 将解析的内容传递给被装饰函数，并返回结果
             return func(data, *args, **kwargs)
         return wrapper
