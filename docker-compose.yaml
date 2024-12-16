@@ -2,12 +2,11 @@ version: '3.3'
 
 services:
   mental1104_dev:
-    image: mental1104/dev:latest
+    image: mental1104_dev:latest
     container_name: mental1104_dev
     security_opt:
       - seccomp=unconfined
-    networks:
-      - shared_network
+    network_mode: "host"
     ports:
       - "31104:22"
     volumes:
@@ -21,7 +20,3 @@ services:
     #  - GIT_COMMITTER_NAME=  # 设置 Git 提交的用户名
     #  - GIT_COMMITTER_EMAIL=  # 设置 Git 提交的邮箱
     restart: always
-
-networks:
-  shared_network:
-    external: true

@@ -31,3 +31,4 @@ requests
 httpx
 confluent-kafka
 kafka-python
+markitdown

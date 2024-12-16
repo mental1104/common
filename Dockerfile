@@ -24,35 +24,11 @@ RUN apt-get install -y \
     gcc \
     g++ \
     make \
-    wget \
     libpq-dev \
     zlib1g-dev \
     libffi-dev \
     libssl-dev \
-    clang \
-    cmake \
-    gdb \
-    strace \
-    ltrace \
-    curl \
-    nodejs \
-    lua5.3 \
-    tree \
-    npm \
-    git \
-    libtinfo6 \
-    libncurses-dev \
-    libncursesw5 \
-    openssl \
-    netcat \
-    telnet \
-    tcpdump \
-    iptables \
-    openssh-server \
-    bison \
-    cmake \
-    unzip \
-    gzip && \
+    wget && \
     ln -s /lib/x86_64-linux-gnu/libtinfo.so.6 /lib/x86_64-linux-gnu/libtinfow.so.6 && ldconfig
 
 
@@ -76,9 +52,35 @@ RUN ln -s /usr/local/python3.12/bin/python3.12        /usr/local/python3.12/bin/
     ln -s /usr/local/python3.12/bin/python3.12-config      /usr/local/python3.12/bin/python-config
 
 RUN apt-get install -y \
+    clang \
+    cmake \
+    gdb \
+    libbz2-dev \
+    strace \
+    ltrace \
+    curl \
+    nodejs \
+    lua5.3 \
+    tree \
+    npm \
+    git \
+    libtinfo6 \
+    libncurses-dev \
+    libncursesw5 \
+    openssl \
+    netcat \
+    telnet \
+    tcpdump \
+    iptables \
+    openssh-server \
+    bison \
+    cmake \
+    unzip \
+    gzip \
+    iputils-ping \
     redis-tools \
-    postgresql-client \
-    mongodb-clients
+    mongodb-clients \
+    postgresql-client
 
 ### 2.2 安装golang
 RUN tar -C /usr/local -xzf /tmp/go1.20.5.linux-amd64.tar.gz
@@ -153,6 +155,7 @@ COPY python /tmp/python/
 RUN cd /tmp/cpp && mkdir -p build && cd build && cmake .. && make -j "$(nproc)" && make install && \
     cd /tmp/python && pip install .
 
+COPY utils /root/
 RUN git config --global core.editor "vim"
 
 CMD ["/usr/sbin/sshd", "-D"]

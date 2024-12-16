@@ -2,6 +2,7 @@ import functools
 import time
 import os
 import re
+import sys
 from typing import Callable, Any
 import csv
 from functools import wraps
@@ -85,3 +86,18 @@ class StringHelper:
     def replace_space_with(input_string, seperator='|'):
         words = re.findall(r'\S+', input_string)
         return seperator.join(words)
+
+
+class Environment:
+
+    @staticmethod
+    def check_required_env_vars(required_env_vars):
+        """
+        检查是否具有给定的环境变量，若没有，则中止执行并打印缺少的环境变量。
+
+        :param required_env_vars: 需要检查的环境变量列表
+        """
+        for var in required_env_vars:
+            if var not in os.environ:
+                print(f"Error: Missing required environment variable: {var}")
+                sys.exit(1)  # 中止执行并返回非零状态
