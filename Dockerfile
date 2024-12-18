@@ -28,6 +28,9 @@ RUN apt-get install -y \
     zlib1g-dev \
     libffi-dev \
     libssl-dev \
+    libbz2-dev \
+    liblzma-dev \
+    pkg-config \
     wget && \
     ln -s /lib/x86_64-linux-gnu/libtinfo.so.6 /lib/x86_64-linux-gnu/libtinfow.so.6 && ldconfig
 
@@ -55,7 +58,6 @@ RUN apt-get install -y \
     clang \
     cmake \
     gdb \
-    libbz2-dev \
     strace \
     ltrace \
     curl \
@@ -148,6 +150,8 @@ RUN cd /tmp && wget https://download.qemu.org/qemu-4.1.0.tar.xz && tar xvJf qemu
     make -j$(nproc) && \
     make install && PATH=$PATH:/opt/qemu/bin && \
     rm -rf /tmp/qemu*
+
+RUN apt-get install -y ffmpeg
 
 COPY cpp /tmp/cpp/
 COPY python /tmp/python/
