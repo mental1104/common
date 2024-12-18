@@ -3,9 +3,12 @@ import time
 import os
 import re
 import sys
+import base64
 from typing import Callable, Any
 import csv
 from functools import wraps
+from Crypto.Cipher import AES 
+from Crypto.Util.Padding import pad, unpad
 
 def timed():
     def wrapper(func: Callable) -> Callable:
@@ -101,3 +104,32 @@ class Environment:
             if var not in os.environ:
                 print(f"Error: Missing required environment variable: {var}")
                 sys.exit(1)  # 中止执行并返回非零状态
+
+
+class Encryption:
+    
+    g_salt = "default_salt"
+
+    @staticmethod
+    def encrypt(plaintext, key=g_salt, salt=g_salt):
+        key = bytes(key, encoding="utf-8")
+        salt = bytes(salt, encoding="utf-8")
+        aes = AES.new(key, mode=AES.MODE_CBC, IV=salt)
+
+        padded_plaintext = pad(plaintext.encode('utf-8'), AES.block_size)
+        encrypted = aes.encrypt(padded_plaintext)
+
+        return base64.b64encode(encrypted)
+
+    @staticmethod
+    def decrypt(ciphertext, key=g_salt, salt=g_salt):
+        key = bytes(key, encoding="utf-8")
+        salt = bytes(salt, encoding="utf-8")
+        aes = AES.new(key, mode=AES.MODE_CBC, IV=salt)
+
+        ciphertext = base64.b64decode(ciphertext)
+
+        decrypted = aes.decrypt(ciphertext)
+        unpadded_plaintext = unpad(decrypted, AES.block_size)
+
+        return unpadded_plaintext.decode('utf-8')
