@@ -32,3 +32,4 @@ httpx
 confluent-kafka
 kafka-python
 markitdown
+autopep8

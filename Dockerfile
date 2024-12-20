@@ -105,9 +105,6 @@ ENV SSH_PRIVATE_KEY=${SSH_PRIVATE_KEY}
 # 设置root用户密码（此处将密码设为"password"，实际使用中请使用安全的密码）
 RUN echo "root:${SSH_PRIVATE_KEY}" | chpasswd
 
-# 修改SSH配置文件以允许密码认证
-RUN mkdir -p /run/sshd && sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config \
-    && sed -i 's/#PasswordAuthentication yes/PasswordAuthentication yes/' /etc/ssh/sshd_config
 
 ENV LANG=C.UTF-8
 
@@ -128,7 +125,7 @@ COPY INSTALLROOT/root/ /root/
 RUN tar -zxvf /root/.vscode-server/vscode-server-linux-x64.tar.gz -C /root/.vscode-server/bin/${VSCODE_COMMIT_VERSION} --strip 1 && touch /root/.vscode-server/bin/${VSCODE_COMMIT_VERSION}/0
 
 
-RUN pip3 install -i https://pypi.tuna.tsinghua.edu.cn/simple -r /root/requirements.txt && rm -f /root/requirements.txt
+RUN pip3 install -i https://mirrors.aliyun.com/pypi/simple -r /root/requirements.txt && rm -f /root/requirements.txt
 
 ## 其他环境变量
 RUN ln -s /usr/local/python3.12/bin/python /usr/bin/python && \
@@ -143,7 +140,7 @@ RUN while read extension; do \
 ENV HTTP_PROXY=
 ENV HTTPS_PROXY=
 
-RUN apt-get install -y build-essential gdb-multiarch qemu-system-misc gcc-riscv64-linux-gnu binutils-riscv64-linux-gnu libpcap-dev libglib2.0-dev pkg-config libpixman-1-dev
+RUN apt update && apt install -y build-essential gdb-multiarch qemu-system-misc gcc-riscv64-linux-gnu binutils-riscv64-linux-gnu libpcap-dev libglib2.0-dev pkg-config libpixman-1-dev
 
 RUN cd /tmp && wget https://download.qemu.org/qemu-4.1.0.tar.xz && tar xvJf qemu-4.1.0.tar.xz && cd qemu-4.1.0/ && \
     ./configure --disable-kvm --disable-werror --prefix=/usr/local --target-list="riscv64-softmmu " && \
@@ -153,14 +150,24 @@ RUN cd /tmp && wget https://download.qemu.org/qemu-4.1.0.tar.xz && tar xvJf qemu
 
 RUN apt-get install -y ffmpeg
 
+# 修改SSH配置文件以允许密码认证
+RUN mkdir -p /run/sshd && echo 'PasswordAuthentication yes' | tee -a /etc/ssh/sshd_config \
+    && echo 'PermitRootLogin yes' | tee -a /etc/ssh/sshd_config
+
+
 COPY cpp /tmp/cpp/
 COPY python /tmp/python/
 
 RUN cd /tmp/cpp && mkdir -p build && cd build && cmake .. && make -j "$(nproc)" && make install && \
     cd /tmp/python && pip install .
 
-COPY utils /root/
+
+COPY utils /usr/local/bin
+RUN chmod -R +x /usr/local/bin
+
 RUN git config --global core.editor "vim"
+# 这里赋一个默认的.env文件，期望宿主机通过挂载环境变量文件的方式将环境变量导入容器，以便ssh使用
+RUN touch /root/.env && echo "MENTAL1104_NOENVRION=TRUE" >> /root/.env && echo "export \$(xargs < ~/.env)" >> /root/.bashrc
 
 CMD ["/usr/sbin/sshd", "-D"]
 WORKDIR /root
