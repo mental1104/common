@@ -10,3 +10,9 @@
 ### Python
 
 ## 开发镜像
+
+
+## TODO 
+
+- [ ] python requirements.txt逻辑执行应在vscode插件之后
+
