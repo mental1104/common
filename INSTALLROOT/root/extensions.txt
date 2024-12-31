@@ -48,3 +48,4 @@ ms-vscode.cpptools-extension-pack
 twxs.cmake
 ms-dotnettools.vscode-dotnet-runtime
 thebarkman.vscode-djaneiro
+ms-dotnettools.vscodeintellicode-csharp
