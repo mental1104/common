@@ -18,6 +18,9 @@
 #include <type_traits>
 #include <mutex>
 
+
+
+
 // 判断编译器是否支持 C++20
 #if __cplusplus >= 202002L
     #include <source_location>
@@ -25,7 +28,9 @@
     struct no_source_location {};  // 在 C++17 中使用一个占位类型
 #endif
 
-
+#if __cplusplus >= 202302L // 检查是否支持 C++23 的 ranges::contains
+    #include <ranges>
+#endif
 
 namespace mental1104 {
 
@@ -219,6 +224,17 @@ namespace mental1104 {
     {
         std::lock_guard<std::mutex> guard(print_mutex); 
         print_internal(c, show_info, loc);
+    }
+
+
+    // 定义一个模板函数
+    template <typename Container, typename T>
+    bool contains(const Container& container, const T& value) {
+#if __cplusplus >= 202302L && defined(__cpp_lib_ranges) && __cpp_lib_ranges > 202110L
+        return std::ranges::contains(container, value);
+#else
+        return std::find(container.begin(), container.end(), value) != container.end();
+#endif
     }
 }
 

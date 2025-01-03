@@ -27,6 +27,16 @@ void test_time() {
     auto temp = mental1104::make_timed(add, "add")(1, 2);
 }
 
+void test_find() {
+    std::vector<int> vec = {1, 2, 3, 4, 5};
+    // 调用封装的 contains 函数
+    if (mental1104::contains(vec, 3)) {
+        std::cout << "元素 3 存在于容器中！" << std::endl;
+    } else {
+        std::cout << "元素 3 不存在于容器中！" << std::endl;
+    }
+}
+
 void test_print() {
     // 测试普通容器
     std::forward_list<int> flist = {1, 2, 3, 4, 5, 6, 7};
@@ -69,7 +79,8 @@ int main() {
 
     std::vector<TestFunc> test_functions = {
         test_time,
-        test_print
+        test_print,
+        test_find
     };
 
     for (auto& func: test_functions)
