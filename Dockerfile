@@ -59,6 +59,7 @@ RUN apt-get install -y \
     cmake \
     unzip \
     gzip \
+    zip \
     iputils-ping \
     redis-tools \
     mongodb-clients \

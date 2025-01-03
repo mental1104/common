@@ -7,6 +7,7 @@ import base64
 from typing import Callable, Any
 import csv
 from functools import wraps
+from datetime import datetime
 from Crypto.Cipher import AES 
 from Crypto.Util.Padding import pad, unpad
 
@@ -133,3 +134,16 @@ class Encryption:
         unpadded_plaintext = unpad(decrypted, AES.block_size)
 
         return unpadded_plaintext.decode('utf-8')
+
+
+class TimeHelper:
+    
+    @staticmethod
+    def get_current_time(format="%Y-%m-%d %H:%M:%S", zone="Asia/Shanghai"):
+        from zoneinfo import ZoneInfo
+        return datetime.now(ZoneInfo(zone)).strftime(format)
+    
+
+if __name__ == '__main__':
+    print(TimeHelper.get_current_time())
+    print(TimeHelper.get_current_time("%Y-%m-%d"))
