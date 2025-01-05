@@ -1,7 +1,9 @@
-#ifndef MENTAL1104_UTIL
-#define MENTAL1104_UTIL
+#ifndef __MENTAL1104_UTIL
+#define __MENTAL1104_UTIL
 
 #include <algorithm>
+#include <map>
+#include <unordered_map>
 
 #if __cplusplus >= 202302L // 检查是否支持 C++23 的 ranges::contains
     #include <ranges>
@@ -9,16 +11,21 @@
 
 namespace mental1104 {
 
-    // 定义一个模板函数
+    template <typename K, typename V, typename T>
+    bool contains(const std::unordered_map<K, V>& m, const T& value) {
+        return m.find(value) != m.end();
+    }
+
+    template <typename K, typename V, typename T>
+    bool contains(const std::map<K, V>& m, const T& value) {
+        return m.find(value) != m.end();
+    }
+
     template <typename Container, typename T>
-    inline bool contains(const Container& container, const T& value) {
-    #if __cplusplus >= 202302L && defined(__cpp_lib_ranges) && __cpp_lib_ranges > 202110L
-            return std::ranges::contains(container, value);
-    #else
-            return std::find(container.begin(), container.end(), value) != container.end();
-    #endif
-        }
-    
+    bool contains(const Container& c, const T& value) {
+        return std::find(c.begin(), c.end(), value) != c.end();
+    }
+
 }
 
 #endif
