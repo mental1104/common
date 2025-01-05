@@ -10,6 +10,7 @@
 #include <thread>
 #include <functional>
 
+using namespace::mental1104;
 
 int add(int a, int b) {
     return a + b;
@@ -23,14 +24,14 @@ void complicated_operation(){
 }
 
 void test_time() {
-    mental1104::make_timed(complicated_operation, "complicated_operation")();
-    auto temp = mental1104::make_timed(add, "add")(1, 2);
+    make_timed(complicated_operation, "complicated_operation")();
+    auto temp = make_timed(add, "add")(1, 2);
 }
 
 void test_find() {
     std::vector<int> vec = {1, 2, 3, 4, 5};
     // 调用封装的 contains 函数
-    if (mental1104::contains(vec, 3)) {
+    if (contains(vec, 3)) {
         std::cout << "元素 3 存在于容器中！" << std::endl;
     } else {
         std::cout << "元素 3 不存在于容器中！" << std::endl;
@@ -40,35 +41,35 @@ void test_find() {
 void test_print() {
     // 测试普通容器
     std::forward_list<int> flist = {1, 2, 3, 4, 5, 6, 7};
-    mental1104::print(flist);
+    ContainerPrinter::print(flist);
 
     std::list<int> l = {1, 2, 3, 4, 5, 6, 7};
-    mental1104::print(l);
+    ContainerPrinter::print(l);
 
     std::vector<int> v = {1, 2, 3, 4, 5, 6, 7};
-    mental1104::print(v);
+    ContainerPrinter::print(v);
 
     // 测试 map
     std::map<std::string, int> m = {{"a", 1}, {"b", 2}, {"c", 3}};
-    mental1104::print(m);
+    ContainerPrinter::print(m);
 
     // 测试 unordered_map
     std::unordered_map<std::string, int> um = {{"x", 10}, {"y", 20}, {"z", 30}};
-    mental1104::print(um);
+    ContainerPrinter::print(um);
 
     // 测试嵌套 map
     std::map<std::string, std::map<std::string, int>> nested_map = {
         {"outer1", {{"a", 1}, {"b", 2}}},
         {"outer2", {{"c", 3}, {"d", 4}}}
     };
-    mental1104::print(nested_map);
+    ContainerPrinter::print(nested_map);
 
     // 测试嵌套 unordered_map
     std::unordered_map<std::string, std::unordered_map<std::string, int>> nested_umap = {
         {"outer1", {{"a", 1}, {"b", 2}}},
         {"outer2", {{"c", 3}, {"d", 4}}}
     };
-    mental1104::print(nested_umap);
+    ContainerPrinter::print(nested_umap);
 }
 
 
