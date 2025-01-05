@@ -1,104 +1,38 @@
-#include "../include/mental1104/util.h"
-#include "../include/mental1104/timed.h"
-#include "../include/mental1104/container_printer.h"
-
-#include <iostream>
-#include <map>
-#include <iostream>
-#include <list>
-#include <forward_list>
+#include <gtest/gtest.h>
 #include <vector>
-#include <unordered_map>
+#include <list>
+#include <set>
+#include <map>
 #include <string>
-#include <thread>
-#include <functional>
+#include "mental1104/util.h"  // 包含你定义的 mental1104::contains
 
-using namespace::mental1104;
 
-int add(int a, int b) {
-    return a + b;
-}
-
-void complicated_operation(){
-    std::map<int, int> temp;
-    for (int i = 0; i < 100000; i++){
-        temp[i] = i;
-    }
-}
-
-void test_time() {
-    make_timed(complicated_operation, "complicated_operation")();
-    auto temp = make_timed(add, "add")(1, 2);
-}
-
-void test_find() {
+// 测试容器内是否包含特定元素
+TEST(ContainsTest, VectorTest) {
     std::vector<int> vec = {1, 2, 3, 4, 5};
-    // 调用封装的 contains 函数
-    if (contains(vec, 3)) {
-        std::cout << "元素 3 存在于容器中！" << std::endl;
-    } else {
-        std::cout << "元素 3 不存在于容器中！" << std::endl;
-    }
+    EXPECT_TRUE(mental1104::contains(vec, 3));  // 测试元素 3 存在
+    EXPECT_FALSE(mental1104::contains(vec, 6)); // 测试元素 6 不存在
 }
 
-void test_print() {
-    // 测试普通容器
-    std::forward_list<int> flist = {1, 2, 3, 4, 5, 6, 7};
-    ContainerPrinter::print(flist);
-
-    std::list<int> l = {1, 2, 3, 4, 5, 6, 7};
-    ContainerPrinter::print(l);
-
-    std::vector<int> v = {1, 2, 3, 4, 5, 6, 7};
-    ContainerPrinter::print(v);
-
-    // 测试 map
-    std::map<std::string, int> m = {{"a", 1}, {"b", 2}, {"c", 3}};
-    ContainerPrinter::print(m);
-
-    // 测试 unordered_map
-    std::unordered_map<std::string, int> um = {{"x", 10}, {"y", 20}, {"z", 30}};
-    ContainerPrinter::print(um);
-
-    // 测试嵌套 map
-    std::map<std::string, std::map<std::string, int>> nested_map = {
-        {"outer1", {{"a", 1}, {"b", 2}}},
-        {"outer2", {{"c", 3}, {"d", 4}}}
-    };
-    ContainerPrinter::print(nested_map);
-
-    // 测试嵌套 unordered_map
-    std::unordered_map<std::string, std::unordered_map<std::string, int>> nested_umap = {
-        {"outer1", {{"a", 1}, {"b", 2}}},
-        {"outer2", {{"c", 3}, {"d", 4}}}
-    };
-    ContainerPrinter::print(nested_umap);
+TEST(ContainsTest, ListTest) {
+    std::list<std::string> str_list = {"apple", "banana", "cherry"};
+    EXPECT_TRUE(mental1104::contains(str_list, "banana"));  // 测试字符串 "banana" 存在
+    EXPECT_FALSE(mental1104::contains(str_list, "orange")); // 测试字符串 "orange" 不存在
 }
 
+TEST(ContainsTest, SetTest) {
+    std::set<int> int_set = {10, 20, 30, 40};
+    EXPECT_TRUE(mental1104::contains(int_set, 30));  // 测试元素 30 存在
+    EXPECT_FALSE(mental1104::contains(int_set, 50)); // 测试元素 50 不存在
+}
 
-// 定义函数签名
-using TestFunc = std::function<void()>;
+TEST(ContainsTest, MapTest) {
+    std::map<int, std::string> num_map = {{1, "one"}, {2, "two"}, {3, "three"}};
+    EXPECT_TRUE(mental1104::contains(num_map, 2));  // 测试键 2 存在
+    EXPECT_FALSE(mental1104::contains(num_map, 4)); // 测试键 4 不存在
+}
 
-int main() {
-
-    std::vector<TestFunc> test_functions = {
-        test_time,
-        test_print,
-        test_find
-    };
-
-    for (auto& func: test_functions)
-    {
-        std::vector<std::thread> threads;
-        for(unsigned i = 0; i < 1; ++i)
-        {
-            threads.emplace_back(std::ref(func));
-        }
-
-        for(auto& entry: threads)
-            entry.join();
-    }
-    
-
-    return 0;
+TEST(ContainsTest, EmptyContainerTest) {
+    std::vector<int> empty_vec;
+    EXPECT_FALSE(mental1104::contains(empty_vec, 1)); // 测试空容器，元素不存在
 }

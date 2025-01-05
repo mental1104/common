@@ -1,20 +1,12 @@
 #ifndef __MENTAL1104_CONTAINR_PRINTER
 #define __MENTAL1104_CONTAINR_PRINTER
 
-#include <iostream>
-#include <functional>
-#include <string>
-#include <chrono>
-#include <iomanip>
-#include <typeinfo>
-#include <iostream>
 #include <list>
 #include <forward_list>
 #include <vector>
 #include <map>
 #include <unordered_map>
 #include <string>
-#include <iterator>
 #include <type_traits>
 #include <mutex>
 
