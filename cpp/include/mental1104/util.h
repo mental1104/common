@@ -104,55 +104,55 @@ namespace mental1104 {
     // Helper function for containers with size()
     template <typename Container>
     typename std::enable_if<!std::is_same<Container, std::forward_list<typename Container::value_type>>::value, void>::type
-    print_size(const Container& c) {
-        std::cout << "(size: " << c.size() << ") " << std::endl;
+    print_size(const Container& c, std::ostream& out) {
+        out << "(size: " << c.size() << ") " << std::endl;
     }
 
     // Helper function for std::forward_list (no size() member)
     template <typename Container>
     typename std::enable_if<std::is_same<Container, std::forward_list<typename Container::value_type>>::value, void>::type
-    print_size(const Container& c) {
-        std::cout << "(size: " << std::distance(c.begin(), c.end()) << ") " << std::endl;
+    print_size(const Container& c, std::ostream& out) {
+        out << "(size: " << std::distance(c.begin(), c.end()) << ") " << std::endl;
     }
 #endif
 
     // Print container information (print size if .size() method exists)
     template <typename Container, typename SourceLocation = void>
-    void print_info(const Container& c, bool show_info, SourceLocation loc = {}) {
+    void print_info(const Container& c, bool show_info, std::ostream& out, SourceLocation loc = {}) {
 #if __cplusplus >= 202002L
         // If C++20 is supported, use source_location to print file and line
         if (show_info) {
-            std::cout << "[File: " << loc.file_name() << ", Line: " << loc.line() << "] ";  // Use file_name() to get file path
+            out << "[File: " << loc.file_name() << ", Line: " << loc.line() << "] ";  // Use file_name() to get file path
             if constexpr (has_size_method<Container>::value) {
-                std::cout << "(size: " << c.size() << ") " << std::endl;
+                out << "(size: " << c.size() << ") " << std::endl;
             }
         }
 #elif __cplusplus >= 201703L
         // If C++20 is not supported, do not print file and line
         if (show_info) {
             if constexpr (has_size_method<Container>::value) {
-                std::cout << "(size: " << c.size() << ") " << std::endl;
+                out << "(size: " << c.size() << ") " << std::endl;
             }
         } 
 #else 
         if (show_info) {
-            print_size(c);
+            print_size(c, out);
         }
 #endif
     }
 
     // Print container (forward_list, list, vector)
     template <typename Container, typename SourceLocation = void>
-    void print_internal(const Container& c, bool show_info, SourceLocation loc = {}) {
-        print_info(c, show_info, loc);
-        std::cout << "{";
+    void print_internal(const Container& c, bool show_info, std::ostream& out, SourceLocation loc = {}) {
+        print_info(c, show_info, out, loc);
+        out << "{";
         bool first = true;
         for (const auto& element : c) {
-            if (!first) std::cout << ", ";
-            std::cout << element;
+            if (!first) out << ", ";
+            out << element;
             first = false;
         }
-        std::cout << "}" << std::endl;
+        out << "}" << std::endl;
     }
 
     // Check if type is a map or unordered_map
@@ -167,63 +167,63 @@ namespace mental1104 {
 
     // Print map/unordered_map in JSON format
     template <typename K, typename V, typename SourceLocation = void>
-    void print_map_or_unordered_map(const K& key, const V& value, bool is_first_element = true, int indent_level = 0, SourceLocation loc = {}) {
+    void print_map_or_unordered_map(const K& key, const V& value, bool is_first_element = true, int indent_level = 0, std::ostream& out = std::cout, SourceLocation loc = {}) {
         if (!is_first_element) {
-            std::cout << ",\n";
+            out << ",\n";
         }
-        std::cout << std::string(indent_level * 4, ' ') << "\"" << key << "\": ";
+        out << std::string(indent_level * 4, ' ') << "\"" << key << "\": ";
 
         // TODO: 这里省略了constexpr会导致 C++11 和 C++14报错
         if constexpr (is_map<V>::value) {  // If value is map or unordered_map, recursively process
-            std::cout << "{\n";
+            out << "{\n";
             bool first = true;
             for (const auto& [nested_key, nested_value] : value) {
-                print_map_or_unordered_map(nested_key, nested_value, first, indent_level + 1, loc);
+                print_map_or_unordered_map(nested_key, nested_value, first, indent_level + 1, out, loc);
                 first = false;
             }
-            std::cout << "\n" << std::string(indent_level * 4, ' ') << "}";
+            out << "\n" << std::string(indent_level * 4, ' ') << "}";
         } else {  // Regular type
-            std::cout << "\"" << value << "\"";
+            out << "\"" << value << "\"";
         }
     }
 
     // Print map
     template <typename K, typename V, typename SourceLocation = void>
-    void print_internal(const std::map<K, V>& m, bool show_info, SourceLocation loc = {}) {
-        print_info(m, show_info, loc);
-        std::cout << "{\n";
+    void print_internal(const std::map<K, V>& m, bool show_info, std::ostream& out, SourceLocation loc = {}) {
+        print_info(m, show_info, out, loc);
+        out << "{\n";
         bool first = true;
         for (const auto& [key, value] : m) {
-            print_map_or_unordered_map(key, value, first, 1, loc);
+            print_map_or_unordered_map(key, value, first, 1, out, loc);
             first = false;
         }
-        std::cout << "\n}" << std::endl;
+        out << "\n}" << std::endl;
     }
 
     // Print unordered_map
     template <typename K, typename V, typename SourceLocation = void>
-    void print_internal(const std::unordered_map<K, V>& m, bool show_info, SourceLocation loc = {}) {
-        print_info(m, show_info, loc);
-        std::cout << "{\n";
+    void print_internal(const std::unordered_map<K, V>& m, bool show_info, std::ostream& out, SourceLocation loc = {}) {
+        print_info(m, show_info, out, loc);
+        out << "{\n";
         bool first = true;
         for (const auto& [key, value] : m) {
-            print_map_or_unordered_map(key, value, first, 1, loc);
+            print_map_or_unordered_map(key, value, first, 1, out, loc);
             first = false;
         }
-        std::cout << "\n}" << std::endl;
+        out << "\n}" << std::endl;
     }
 
     static std::mutex print_mutex;
     // Unified print function, automatically capture file and line numbers
     template <typename Container>
 #if __cplusplus >= 202002L
-    void print(const Container& c, bool show_info = true, std::source_location loc = std::source_location::current())
+    void print(const Container& c, std::ostream& out = std::cout, bool show_info = true, std::source_location loc = std::source_location::current())
 #else
-    void print(const Container& c, bool show_info = true, no_source_location loc = no_source_location())
+    void print(const Container& c, std::ostream& out = std::cout, bool show_info = true, no_source_location loc = no_source_location())
 #endif
     {
         std::lock_guard<std::mutex> guard(print_mutex); 
-        print_internal(c, show_info, loc);
+        print_internal(c, show_info, out, loc);
     }
 
 

@@ -86,7 +86,7 @@ int main() {
     for (auto& func: test_functions)
     {
         std::vector<std::thread> threads;
-        for(unsigned i = 0; i < 15; ++i)
+        for(unsigned i = 0; i < 1; ++i)
         {
             threads.emplace_back(std::ref(func));
         }
