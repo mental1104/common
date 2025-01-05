@@ -1,0 +1,83 @@
+#ifndef __MENTAL1104_TIMED
+#define __MENTAL1104_TIMED
+
+#include <iostream>
+#include <functional>
+#include <string>
+#include <chrono>
+#include <iomanip>
+#include <typeinfo>
+#include <iostream>
+#include <list>
+#include <forward_list>
+#include <vector>
+#include <map>
+#include <unordered_map>
+#include <string>
+#include <iterator>
+#include <type_traits>
+#include <mutex>
+
+
+
+namespace mental1104 {
+    static std::mutex time_mutex;
+    // 主模板声明
+    template<typename T>
+    class Timed;
+
+    // 针对函数类型 T = R(Args...) 的部分特化
+    template<typename R, typename... Args>
+    class Timed<R(Args...)> {
+    public:
+        Timed(std::function <R(Args...)> func, std::string name) : func{std::move(func)}, name{std::move(name)} {}
+        R operator() (Args... args) {
+            std::cout << "Entering " << name << '\n';
+            auto start = std::chrono::high_resolution_clock::now();
+            R result = func(args...);
+            auto end = std::chrono::high_resolution_clock::now();
+            std::chrono::duration<double> duration = end - start;
+            std::cout << "Exiting " << name << " with " << std::fixed << std::setprecision(10) << duration.count() << " seconds" << std::endl;;
+            return result;
+        }
+    private:
+        std::function<R(Args...)> func;
+        std::string name;
+    };
+
+    // 针对返回类型为void的函数进行部分特化
+    template<typename... Args>
+    class Timed<void(Args...)> {
+    public:
+        Timed(std::function<void(Args...)> func, std::string name) : func{std::move(func)}, name{std::move(name)} {}
+
+        void operator()(Args... args) {
+            std::cout << "Entering " << name << '\n';
+            auto start = std::chrono::high_resolution_clock::now();
+            func(args...);  // 不需要保存返回值
+            auto end = std::chrono::high_resolution_clock::now();
+            std::chrono::duration<double> duration = end - start;
+            std::cout << "Exiting " << (name.size() == 0 ? "with " : name + " with ") << std::fixed << std::setprecision(10) << duration.count() << " seconds" << std::endl;
+        }
+
+    private:
+        std::function<void(Args...)> func;
+        std::string name;
+    };
+
+    template<typename R, typename... Args>
+    Timed<R(Args...)> make_timed(R (*func)(Args...), const std::string & name = std::string()) {
+        std::lock_guard<std::mutex> guard(time_mutex);
+        return Timed<R(Args...)>(std::function<R(Args...)>(func), name);
+    }
+
+    // 针对返回类型为void的函数的辅助函数
+    template<typename... Args>
+    Timed<void(Args...)> make_timed(void (*func)(Args...), const std::string &name = std::string()) {
+        std::lock_guard<std::mutex> guard(time_mutex);
+        return Timed<void(Args...)>(std::function<void(Args...)>(func), name);
+    }
+
+}
+
+#endif
