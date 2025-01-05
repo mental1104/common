@@ -72,9 +72,12 @@ RUN apt-get install -y \
     pip \
     dotnet-sdk-8.0 \
     aspnetcore-runtime-8.0 \
+    libgtest-dev \
+    libboost-all-dev \
     && \
-    ln -s /lib/x86_64-linux-gnu/libtinfo.so.6 /lib/x86_64-linux-gnu/libtinfow.so.6 && ldconfig
-
+    ln -s /lib/x86_64-linux-gnu/libtinfo.so.6 /lib/x86_64-linux-gnu/libtinfow.so.6 && ldconfig && \
+    cd /usr/src/googletest && cmake . && make -j$(nproc) && make install
+    
 ## 2 安装很少变动的软件
 
 ### 2.1 安装qemu
