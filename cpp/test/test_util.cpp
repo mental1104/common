@@ -1,4 +1,7 @@
 #include "../include/mental1104/util.h"
+#include "../include/mental1104/timed.h"
+#include "../include/mental1104/container_printer.h"
+
 #include <iostream>
 #include <map>
 #include <iostream>
