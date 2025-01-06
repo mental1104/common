@@ -73,6 +73,7 @@ RUN apt-get install -y \
     dotnet-sdk-8.0 \
     aspnetcore-runtime-8.0 \
     libgtest-dev \
+    libbenchmark-dev \
     libboost-all-dev \
     lcov \
     && \
