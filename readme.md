@@ -28,6 +28,10 @@ ctest -r
 sudo make install
 ```
 
+测试代码覆盖率报告生成
+```
+make coverage
+```
 
 ### Python
 

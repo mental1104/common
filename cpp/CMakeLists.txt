@@ -68,14 +68,13 @@ if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID STREQUAL "Clang
     endif()
 endif()
 
-# 添加覆盖率生成目标
 if(COVERAGE)
     find_program(LCOV_EXEC lcov REQUIRED)
     find_program(GENHTML_EXEC genhtml REQUIRED)
     if(LCOV_EXEC AND GENHTML_EXEC)
         add_custom_target(coverage
             COMMAND ${LCOV_EXEC} --directory ${CMAKE_BINARY_DIR} --capture --output-file coverage.info
-            COMMAND ${LCOV_EXEC} --remove coverage.info '*/test/*' --output-file coverage_filtered.info
+            COMMAND ${LCOV_EXEC} --remove coverage.info '*/test/*' '/usr/*' '*/external/*' '*/gtest/*' --output-file coverage_filtered.info
             COMMAND ${GENHTML_EXEC} coverage_filtered.info --output-directory ${CMAKE_BINARY_DIR}/coverage_report
             COMMENT "Generating coverage report..."
             WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
