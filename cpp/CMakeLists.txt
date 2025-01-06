@@ -85,7 +85,7 @@ if(COVERAGE)
     find_program(GENHTML_EXEC genhtml REQUIRED)
     if(LCOV_EXEC AND GENHTML_EXEC)
         add_custom_target(coverage
-            COMMAND ${LCOV_EXEC} --directory ${CMAKE_BINARY_DIR} --capture --ignore-errors mismatch --output-file coverage.info
+            COMMAND ${LCOV_EXEC} --directory ${CMAKE_BINARY_DIR} --capture --ignore-errors inconsistent --output-file coverage.info
             COMMAND ${LCOV_EXEC} --ignore-errors unused --remove coverage.info '*/test/*' '/usr/*' '*/external/*' '*/gtest/*' --output-file coverage_filtered.info
             COMMAND ${GENHTML_EXEC} coverage_filtered.info --output-directory ${CMAKE_BINARY_DIR}/coverage_report
             COMMENT "Generating coverage report..."
