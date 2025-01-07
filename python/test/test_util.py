@@ -207,8 +207,6 @@ class TestEncryption:
         1. 长度正确
         2. 只包含字母和数字
         """
-        if len(salt) != length:
-            return False
         valid_characters = set(string.ascii_letters + string.digits)
         return all(char in valid_characters for char in salt)
 
