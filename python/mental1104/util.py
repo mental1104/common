@@ -55,11 +55,12 @@ class Environment:
 
 
 class Encryption:
-    
-    g_salt = "default_salt"
 
     @staticmethod
-    def encrypt(plaintext, key=g_salt, salt=g_salt):
+    def encrypt(plaintext, key="0ePThPnLaJcWFcRc", salt=None):
+        if salt is None:
+            salt = key
+
         key = bytes(key, encoding="utf-8")
         salt = bytes(salt, encoding="utf-8")
         aes = AES.new(key, mode=AES.MODE_CBC, IV=salt)
@@ -70,7 +71,10 @@ class Encryption:
         return base64.b64encode(encrypted)
 
     @staticmethod
-    def decrypt(ciphertext, key=g_salt, salt=g_salt):
+    def decrypt(ciphertext, key="0ePThPnLaJcWFcRc", salt=None):
+        if salt is None:
+            salt = key
+            
         key = bytes(key, encoding="utf-8")
         salt = bytes(salt, encoding="utf-8")
         aes = AES.new(key, mode=AES.MODE_CBC, IV=salt)
@@ -81,6 +85,17 @@ class Encryption:
         unpadded_plaintext = unpad(decrypted, AES.block_size)
 
         return unpadded_plaintext.decode('utf-8')
+    
+    def generate_salt(length=16):
+        if length < 0:
+            raise ValueError("Length must be non-negative")
+
+        import secrets
+        import string
+        # 生成一个包含字母和数字的随机字符串
+        characters = string.ascii_letters + string.digits
+        salt = ''.join(secrets.choice(characters) for _ in range(length))
+        return salt
 
 
 class TimeHelper:
@@ -90,7 +105,3 @@ class TimeHelper:
         from zoneinfo import ZoneInfo
         return datetime.now(ZoneInfo(zone)).strftime(format)
     
-
-if __name__ == '__main__':
-    print(TimeHelper.get_current_time())
-    print(TimeHelper.get_current_time("%Y-%m-%d"))

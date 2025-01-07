@@ -26,6 +26,8 @@ numpy
 seaborn
 BeautifulSoup4
 pytest
+pytest-asyncio
+pytest-mock
 requests
 httpx
 confluent-kafka
@@ -33,3 +35,4 @@ kafka-python
 markitdown
 autopep8
 uvicorn
+coverage

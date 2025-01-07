@@ -4,3 +4,5 @@ build
 a.out
 .env
 __pycache__
+.coverage
+.pytest_cache
