@@ -12,6 +12,11 @@ endif()
 
 message(STATUS "Build type: ${CMAKE_BUILD_TYPE}")
 
+# 设置 C++ 标准版本
+set(CMAKE_CXX_STANDARD 20)  # 可以是 11, 14, 17, 20, 23 等
+set(CMAKE_CXX_STANDARD_REQUIRED ON)  # 确保使用指定的标准版本
+
+message(CXX_STANDARD " ${CMAKE_CXX_STANDARD}")
 # 设置编译选项
 set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -Wall -Wextra -g")
 set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O2 -DNDEBUG")
