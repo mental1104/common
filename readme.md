@@ -33,6 +33,12 @@ sudo make install
 make coverage
 ```
 
+格式化代码：
+
+```
+clang-format -style=Google -i /home/espeon/code/common/cpp/test/test_printer.cpp
+```
+
 ### Python
 
 ```
