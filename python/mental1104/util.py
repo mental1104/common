@@ -5,7 +5,7 @@ import sys
 import base64
 import asyncio
 from datetime import datetime
-from Crypto.Cipher import AES 
+from Crypto.Cipher import AES
 from Crypto.Util.Padding import pad, unpad
 
 
@@ -26,13 +26,14 @@ async def async_delay(delay_seconds: int) -> int:
     print(f'finished sleeping for {delay_seconds} second(s)')
     return delay_seconds
 
+
 class StringHelper:
 
     """将字符串中间的换行符和空白全部替换成指定分隔符
 
     Returns:
         _type_: _description_
-    """    
+    """
     @staticmethod
     def replace_space_with(input_string, seperator='|'):
         words = re.findall(r'\S+', input_string)
@@ -74,7 +75,7 @@ class Encryption:
     def decrypt(ciphertext, key="0ePThPnLaJcWFcRc", salt=None):
         if salt is None:
             salt = key
-            
+
         key = bytes(key, encoding="utf-8")
         salt = bytes(salt, encoding="utf-8")
         aes = AES.new(key, mode=AES.MODE_CBC, IV=salt)
@@ -85,7 +86,7 @@ class Encryption:
         unpadded_plaintext = unpad(decrypted, AES.block_size)
 
         return unpadded_plaintext.decode('utf-8')
-    
+
     def generate_salt(length=16):
         if length < 0:
             raise ValueError("Length must be non-negative")
@@ -99,9 +100,8 @@ class Encryption:
 
 
 class TimeHelper:
-    
+
     @staticmethod
     def get_current_time(format="%Y-%m-%d %H:%M:%S", zone="Asia/Shanghai"):
         from zoneinfo import ZoneInfo
         return datetime.now(ZoneInfo(zone)).strftime(format)
-    

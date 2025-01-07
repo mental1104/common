@@ -8,7 +8,7 @@ class CoroutinePool:
     def __init__(self, loop, max_concurrent_task=5):
         self.loop = loop
         self.semaphore = asyncio.Semaphore(max_concurrent_task)
-    
+
     async def worker(self, coro):
         async with self.semaphore:
             result = await coro()

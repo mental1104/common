@@ -13,17 +13,17 @@ namespace mental1104 {
 
 template <typename K, typename V, typename T>
 bool contains(const std::unordered_map<K, V>& m, const T& value) {
-  return m.find(value) != m.end();
+    return m.find(value) != m.end();
 }
 
 template <typename K, typename V, typename T>
 bool contains(const std::map<K, V>& m, const T& value) {
-  return m.find(value) != m.end();
+    return m.find(value) != m.end();
 }
 
 template <typename Container, typename T>
 bool contains(const Container& c, const T& value) {
-  return std::find(c.begin(), c.end(), value) != c.end();
+    return std::find(c.begin(), c.end(), value) != c.end();
 }
 
 }  // namespace mental1104
