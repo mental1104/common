@@ -35,6 +35,12 @@ make coverage
 
 ### Python
 
+```
+cd python
+coverage run --source=. -m pytest
+coverage report
+```
+
 ## 开发镜像
 
 
