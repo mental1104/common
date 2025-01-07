@@ -36,6 +36,7 @@ RUN apt-get install -y \
     pkg-config \
     libpixman-1-dev \
     clang \
+    clang-format \
     cmake \
     gdb \
     strace \
