@@ -15,14 +15,18 @@ class CoroutinePool:
             return result
 
     @async_timed()
-    async def run_task_batch(self, coros: List[functools.partial]):
+    async def run_task_batch(self, partial_funcs: List[functools.partial]):
+        """
+        接收 partial 函数对象列表，依次执行。
+        """
         tasks = []
-        for coro in coros:
-            task = self.loop.create_task(self.worker(coro))
-            tasks.append(task)
-            
-        result = await asyncio.gather(*task)
-        return result
+        for partial_func in partial_funcs:
+            tasks.append(self.worker(partial_func))  # 将 worker 的协程加入任务列表
+
+        if tasks:
+            result = await asyncio.gather(*tasks)
+            return result
+        return []
 
     def run(self, coros: List[functools.partial]):
         return self.loop.run_until_complete(self.run_task_batch(coros))
