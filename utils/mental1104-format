@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+
+# 检查当前路径是否为 Git 仓库
+if ! git rev-parse --is-inside-work-tree > /dev/null 2>&1; then
+    echo "错误: 当前路径不是一个 Git 仓库。"
+    exit 1
+fi
+
+# 检查是否存在修改的文件
+modified_files=$(git status --porcelain | grep -E '^[ MADRCU\?\?]' | awk '{print $2}')
+
+if [ -z "$modified_files" ]; then
+    echo "没有发现修改的文件。"
+    exit 0
+fi
+
+# 过滤出特定后缀的文件，并获取其绝对路径
+files_to_format=()
+for file in $modified_files; do
+    if [[ $file =~ \.(py|h|cpp|c|hpp|cc|hh)$ ]]; then
+        absolute_path=$(realpath "$file")
+        files_to_format+=("$absolute_path")
+    fi
+done
+
+if [ ${#files_to_format[@]} -eq 0 ]; then
+    echo "没有需要格式化的文件。"
+    exit 0
+fi
+
+# 对 .py 文件进行 autopep8 格式化，对 C/C++ 文件进行 clang-format 格式化
+for file in "${files_to_format[@]}"; do
+    if [[ $file == *.py ]]; then
+        autopep8 --in-place --max-line-length=120 --ignore=E402,E226,E24,W50,W690 "$file"
+    else
+        clang-format -i "$file"
+    fi
+done
+
+# 输出修改过的文件的绝对路径
+echo "已格式化以下文件:"
+for file in "${files_to_format[@]}"; do
+    echo "$file"
+done

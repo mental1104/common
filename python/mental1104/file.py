@@ -20,13 +20,14 @@ def file_iterator(process_function):
 
     return wrapper
 
+
 class CsvHelper:
-    
+
     @staticmethod
     def csv_processor(file_path, has_header=True):
         """
         装饰器，用于处理 CSV 文件，将其内容解析为字典数组或元组数组，并传递给被装饰函数。
-        
+
         Args:
             file_path (str): CSV 文件的路径。
             has_header (bool): 是否包含表头。如果为 True，返回字典数组；否则返回元组数组。
@@ -44,7 +45,7 @@ class CsvHelper:
                     else:
                         reader = csv.reader(f)  # 不包含表头，解析为元组
                         data = [tuple(row) for row in reader]
-                
+
                 # 将解析的内容传递给被装饰函数，并返回结果
                 return func(data, *args, **kwargs)
             return wrapper
@@ -80,6 +81,6 @@ class CsvHelper:
                     if isinstance(val, list):
                         result[key] = ','.join(val)
                 writer.writerow(result)
-        
+
         print(f"CSV 文件已成功导出至：{os.path.abspath(path)}")
         return os.path.abspath(path)
