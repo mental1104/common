@@ -5,7 +5,7 @@ import string
 from datetime import datetime
 from zoneinfo import ZoneInfo
 from unittest.mock import patch, AsyncMock
-from mental1104.util import delay, async_delay, StringHelper, Environment, Encryption, TimeHelper
+from mental1104.util import delay, async_delay, StringHelper, Environment, Encryption, TimeHelper, MissingEnvVarError  
 
 class TestDelayFunction:
     def test_delay_positive(self):
@@ -105,40 +105,25 @@ class TestEnvironment:
         """模拟 os.environ 的 Fixture"""
         return mocker.patch.dict(os.environ, clear=True)
 
-    @pytest.fixture
-    def mock_exit(self, mocker):
-        """模拟 sys.exit 的 Fixture"""
-        return mocker.patch("sys.exit")
-
-    @pytest.fixture
-    def mock_print(self, mocker):
-        """模拟 print 的 Fixture"""
-        return mocker.patch("builtins.print")
-
-    def test_check_required_env_vars_all_present(self, mock_env, mock_exit, mock_print):
+    def test_check_required_env_vars_all_present(self, mock_env):
         # 准备测试数据：所有环境变量存在
         required_env_vars = ["ENV_VAR_1", "ENV_VAR_2"]
         mock_env.update({var: "value" for var in required_env_vars})
 
-        # 调用测试方法
-        Environment.check_required_env_vars(required_env_vars)
+        # 调用测试方法，验证没有抛出异常
+        try:
+            Environment.check_required_env_vars(required_env_vars)
+        except MissingEnvVarError:
+            pytest.fail("MissingEnvVarError raised unexpectedly")
 
-        # 验证行为
-        mock_exit.assert_not_called()  # 确保没有调用 sys.exit
-        mock_print.assert_not_called()  # 确保没有输出错误信息
-
-    def test_check_required_env_vars_missing_var(self, mock_env, mock_exit, mock_print):
+    def test_check_required_env_vars_missing_var(self, mock_env):
         # 准备测试数据：部分环境变量缺失
         required_env_vars = ["ENV_VAR_1", "ENV_VAR_2"]
         mock_env.update({"ENV_VAR_1": "value"})  # 只设置了一个变量
 
-        # 调用测试方法
-        Environment.check_required_env_vars(required_env_vars)
-
-        # 验证行为
-        mock_exit.assert_called_once_with(1)  # 确保调用 sys.exit(1)
-        mock_print.assert_called_once_with("Error: Missing required environment variable: ENV_VAR_2")  # 确保输出了正确的错误信息
-
+        # 调用测试方法，验证是否抛出 MissingEnvVarError 异常
+        with pytest.raises(MissingEnvVarError, match="Missing required environment variables: ENV_VAR_2"):
+            Environment.check_required_env_vars(required_env_vars)
 
 class TestEncryption:
 
