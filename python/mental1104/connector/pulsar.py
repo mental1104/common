@@ -1,30 +1,51 @@
 import os
 import pulsar
+import logging
+import requests
 from pulsar import ConsumerType
 from pulsar.schema import AvroSchema, BytesSchema
 from enum import Enum
-from util import Environment
+from mental1104.util import Environment
+import functools
 
 class PulsarEnvironment(str, Enum):
-    PULSAR_BROKER_HOST = "PULSAR_BROKER_HOST"
+    PULSAR_HOST = "PULSAR_HOST"
     PULSAR_BROKER_PORT = "PULSAR_BROKER_PORT"
-    PULSAR_BROKER_TOKEN = "PULSAR_BROKER_TOKEN"
+    PULSAR_TOKEN = "PULSAR_TOKEN"
+    PULSAR_ADMIN_PORT = "PULSAR_ADMIN_PORT"
 
 class PulsarConnector:
     @staticmethod
     def make_client():
         Environment.check_required_env_vars([
-            PulsarEnvironment.PULSAR_BROKER_HOST.value,
+            PulsarEnvironment.PULSAR_HOST.value,
             PulsarEnvironment.PULSAR_BROKER_PORT.value
         ])
 
         return pulsar.Client('{host}:{port}'.format(
-                host=os.environ[PulsarEnvironment.PULSAR_BROKER_HOST.value],
+                host=os.environ[PulsarEnvironment.PULSAR_HOST.value],
                 port=os.environ[PulsarEnvironment.PULSAR_BROKER_PORT.value]
             ),
-            authentication=pulsar.AuthenticationToken(os.environ[PulsarEnvironment.PULSAR_BROKER_TOKEN.value]) if PulsarEnvironment.PULSAR_BROKER_TOKEN.value in os.environ else None
+            authentication=pulsar.AuthenticationToken(os.environ[PulsarEnvironment.PULSAR_TOKEN.value]) if PulsarEnvironment.PULSAR_TOKEN.value in os.environ else None
         )
         
+    
+    @staticmethod
+    def get_broker_url():
+        Environment.check_required_env_vars([
+            PulsarEnvironment.PULSAR_HOST.value,
+            PulsarEnvironment.PULSAR_BROKER_PORT.value
+        ])
+        return f"pulsar://{os.environ[PulsarEnvironment.PULSAR_HOST.value]}:{os.environ[PulsarEnvironment.PULSAR_BROKER_PORT.value]}"
+    
+    @staticmethod
+    def get_admin_url():
+        Environment.check_required_env_vars([
+            PulsarEnvironment.PULSAR_HOST.value,
+            PulsarEnvironment.PULSAR_ADMIN_PORT.value
+        ])
+        return f"http://{os.environ[PulsarEnvironment.PULSAR_HOST.value]}:{os.environ[PulsarEnvironment.PULSAR_ADMIN_PORT.value]}"
+
 
 class Consumer:
     def __init__(
@@ -48,11 +69,11 @@ class Consumer:
         """
         self.__is_close = True
         if not client:
-            self.__client = make_client()
+            self.__client = PulsarConnector.make_client()
             client = self.__client
             self.__is_close = False
 
-        if schema_t == 'Json':
+        if False:
             real_schema = BytesSchema()
         else:
             real_schema = AvroSchema(None, schema)
@@ -138,11 +159,11 @@ class Producer:
     ):
         self.__is_close = True
         if not client:
-            self.__client = make_client()
+            self.__client = PulsarConnector.make_client()
             client = self.__client
             self.__is_close = False
 
-        if schema_t == 'Json':
+        if False:
             real_schema = BytesSchema()
         else:
             real_schema = AvroSchema(None, schema)
@@ -206,7 +227,7 @@ class Producer:
                         pulsar.Result.AlreadyClosed, pulsar.Result.ConnectError,
                         ]
         if result in resend_error:
-            raise SendCustomError(f"pulsar send msg fail:{result}, msg_id: {msg_id_obj}")
+            logging.error(f"pulsar send msg fail:{result}, msg_id: {msg_id_obj}")
         raise RuntimeError(f"pulsar send msg fail:{result}, msg_id: {msg_id_obj}")
 
     def send_async(self, record, callback=None):
@@ -220,3 +241,142 @@ class Producer:
 
         self.__client.close()
         self.__is_close = True
+
+
+class PulsarAdminHelper:
+
+    @staticmethod
+    def ensure_tenant_namespace_topic(tenant, namespace, topic):
+        """
+        确保租户、命名空间和主题按照顺序创建
+        """
+        pulsar_admin_url = PulsarConnector.get_admin_url()
+        
+        # 检查租户是否存在
+        tenant_url = f"{pulsar_admin_url}/admin/v2/tenants/{tenant}"
+        tenant_response = requests.get(tenant_url)
+        if tenant_response.status_code != 200:
+            logging.info(f"Tenant {tenant} does not exist. Creating it.")
+            PulsarAdminHelper.create_tenant(tenant)
+        
+        # 检查命名空间是否存在
+        namespace_url = f"{pulsar_admin_url}/admin/v2/namespaces/{tenant}/{namespace}"
+        namespace_response = requests.get(namespace_url)
+        if namespace_response.status_code != 200:
+            logging.info(f"Namespace {tenant}/{namespace} does not exist. Creating it.")
+            PulsarAdminHelper.create_namespace(f"{tenant}/{namespace}")
+        
+        # 检查主题是否存在
+        topic_url = f"{pulsar_admin_url}/admin/v2/persistent/{tenant}/{namespace}/{topic}"
+        topic_response = requests.get(topic_url)
+        if topic_response.status_code != 200:
+            logging.info(f"Topic {tenant}/{namespace}/{topic} does not exist. Creating it.")
+            PulsarAdminHelper.create_topic(f"{tenant}/{namespace}/{topic}")
+
+    @staticmethod
+    def create_tenant(tenant):
+        """创建租户"""
+        pulsar_admin_url = PulsarConnector.get_admin_url()
+        url = f"{pulsar_admin_url}/admin/v2/tenants/{tenant}"
+        response = requests.put(url, json={
+            "allowedClusters": ["standalone"]
+        })
+        if response.status_code not in [200, 204]:
+            raise RuntimeError(f"Failed to create tenant {tenant}: {response.text}")
+
+    @staticmethod
+    def create_namespace(namespace):
+        """创建命名空间"""
+        pulsar_admin_url = PulsarConnector.get_admin_url()
+        url = f"{pulsar_admin_url}/admin/v2/namespaces/{namespace}"
+        response = requests.put(url)
+        if response.status_code not in [200, 204]:
+            raise RuntimeError(f"Failed to create namespace {namespace}: {response.text}")
+
+    @staticmethod
+    def create_topic(topic):
+        """创建主题"""
+        pulsar_admin_url = PulsarConnector.get_admin_url()
+        url = f"{pulsar_admin_url}/admin/v2/persistent/{topic}"
+        response = requests.put(url)
+        if response.status_code not in [200, 204]:
+            raise RuntimeError(f"Failed to create topic {topic}: {response.text}")
+    
+    @staticmethod
+    def get_tenant_namespaces(tenant):
+        """获取租户的所有命名空间"""
+        pulsar_admin_url = PulsarConnector.get_admin_url()
+        url = f"{pulsar_admin_url}/admin/v2/namespaces/{tenant}"
+        response = requests.get(url)
+        if response.status_code != 200:
+            raise RuntimeError(f"Failed to list namespaces for tenant {tenant}: {response.text}")
+        return response.json()
+
+    @staticmethod
+    def get_namespace_topics(namespace):
+        """获取命名空间的所有主题"""
+        pulsar_admin_url = PulsarConnector.get_admin_url()
+        url = f"{pulsar_admin_url}/admin/v2/persistent/{namespace}"
+        response = requests.get(url)
+        if response.status_code != 200:
+            raise RuntimeError(f"Failed to list topics for namespace {namespace}: {response.text}")
+        return response.json()
+
+    @staticmethod
+    def delete_topic(topic):
+        """删除主题"""
+        pulsar_admin_url = PulsarConnector.get_admin_url()
+        url = f"{pulsar_admin_url}/admin/v2/persistent/{topic}"
+        response = requests.delete(url)
+        if response.status_code not in [200, 204]:
+            raise RuntimeError(f"Failed to delete topic {topic}: {response.text}")
+
+    @staticmethod
+    def delete_namespace(namespace):
+        """删除命名空间"""
+        pulsar_admin_url = PulsarConnector.get_admin_url()
+        url = f"{pulsar_admin_url}/admin/v2/namespaces/{namespace}"
+        response = requests.delete(url)
+        if response.status_code not in [200, 204]:
+            raise RuntimeError(f"Failed to delete namespace {namespace}: {response.text}")
+
+    @staticmethod
+    def delete_tenant(tenant):
+        """删除租户"""
+        pulsar_admin_url = PulsarConnector.get_admin_url()
+        url = f"{pulsar_admin_url}/admin/v2/tenants/{tenant}"
+        response = requests.delete(url)
+        if response.status_code not in [200, 204]:
+            raise RuntimeError(f"Failed to delete tenant {tenant}: {response.text}")
+
+    @staticmethod
+    def cleanup_tenant(tenant):
+        """清理租户，确保删除所有命名空间和主题"""
+        try:
+            # 获取所有命名空间
+            namespaces = PulsarAdminHelper.get_tenant_namespaces(tenant)
+            for namespace in namespaces:
+                # 获取命名空间下的所有主题并删除
+                topics = PulsarAdminHelper.get_namespace_topics(namespace)
+                for topic in topics:
+                    PulsarAdminHelper.delete_topic(topic)
+                # 删除命名空间
+                PulsarAdminHelper.delete_namespace(namespace)
+            # 删除租户
+            PulsarAdminHelper.delete_tenant(tenant)
+            print(f"Successfully cleaned up tenant: {tenant}")
+        except Exception as e:
+            logging.exception(f"Failed to clean up tenant {tenant}: {e}")
+
+    @staticmethod
+    def is_tenant_exists(tenant):
+        """检查租户是否存在"""
+        pulsar_admin_url = PulsarConnector.get_admin_url()
+        url = f"{pulsar_admin_url}/admin/v2/tenants"
+        response = requests.get(url)
+        
+        if response.status_code != 200:
+            raise RuntimeError(f"Failed to fetch tenants: {response.text}")
+        
+        tenants = response.json()
+        return tenant in tenants
