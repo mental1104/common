@@ -22,10 +22,8 @@ class PulsarConnector:
             PulsarEnvironment.PULSAR_BROKER_PORT.value
         ])
 
-        return pulsar.Client('{host}:{port}'.format(
-                host=os.environ[PulsarEnvironment.PULSAR_HOST.value],
-                port=os.environ[PulsarEnvironment.PULSAR_BROKER_PORT.value]
-            ),
+        return pulsar.Client(
+            PulsarConnector.get_broker_url(),
             authentication=pulsar.AuthenticationToken(os.environ[PulsarEnvironment.PULSAR_TOKEN.value]) if PulsarEnvironment.PULSAR_TOKEN.value in os.environ else None
         )
         
@@ -157,11 +155,10 @@ class Producer:
         client=None,
         batching_enabled=True
     ):
-        self.__is_close = True
+        self.__is_close = False  # 初始状态为未关闭
         if not client:
             self.__client = PulsarConnector.make_client()
             client = self.__client
-            self.__is_close = False
 
         if False:
             real_schema = BytesSchema()
@@ -181,16 +178,13 @@ class Producer:
         )
 
     def __del__(self):
-        if self.__producer:
-            self.__producer.close()
-        self.close()
+        self.close()  # 调用关闭方法
 
     def __enter__(self):
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        self.__producer.close()
-        self.close()
+        self.close()  # 退出时关闭生产者
 
     @classmethod
     def __default_callback(cls, message):
@@ -207,6 +201,8 @@ class Producer:
         return callback
 
     def send(self, record):
+        if self.__is_close:
+            raise RuntimeError("Cannot send message; producer is already closed.")
         self.__producer.send(record)
 
     @classmethod
@@ -224,23 +220,28 @@ class Producer:
         if result == pulsar.Result.Ok:
             return
         resend_error = [pulsar.Result.Timeout, pulsar.Result.NotConnected,
-                        pulsar.Result.AlreadyClosed, pulsar.Result.ConnectError,
-                        ]
+                        pulsar.Result.AlreadyClosed, pulsar.Result.ConnectError]
         if result in resend_error:
             logging.error(f"pulsar send msg fail:{result}, msg_id: {msg_id_obj}")
         raise RuntimeError(f"pulsar send msg fail:{result}, msg_id: {msg_id_obj}")
 
     def send_async(self, record, callback=None):
+        if self.__is_close:
+            raise RuntimeError("Cannot send message; producer is already closed.")
         if callback is None:
             callback = Producer.__default_callback(record)
         self.__producer.send_async(record, callback)
 
     def close(self):
-        if self.__is_close:
+        if self.__is_close:  # 如果已经关闭，直接返回
             return
 
-        self.__client.close()
-        self.__is_close = True
+        if self.__producer:
+            self.__producer.close()  # 关闭生产者
+        if hasattr(self, '__client') and self.__client:
+            self.__client.close()  # 关闭客户端
+        self.__is_close = True  # 更新为已关闭状态
+
 
 
 class PulsarAdminHelper:
@@ -380,3 +381,35 @@ class PulsarAdminHelper:
         
         tenants = response.json()
         return tenant in tenants
+    
+    @staticmethod
+    def is_namespace_exists(tenant, namespace):
+        """检查租户下的命名空间是否存在"""
+        pulsar_admin_url = PulsarConnector.get_admin_url()
+        url = f"{pulsar_admin_url}/admin/v2/namespaces/{tenant}"
+        response = requests.get(url)
+
+        if response.status_code != 200:
+            raise RuntimeError(f"Failed to fetch namespaces for tenant {tenant}: {response.text}")
+
+        namespaces = response.json()
+        return f"{tenant}/{namespace}" in namespaces
+
+    @staticmethod
+    def is_topic_exists(tenant, namespace, topic, topic_type="persistent"):
+        """
+        检查特定租户、命名空间下的主题是否存在
+        :param tenant: 租户名
+        :param namespace: 命名空间名
+        :param topic: 主题名
+        :param topic_type: 主题类型（"persistent" 或 "non-persistent"）
+        """
+        pulsar_admin_url = PulsarConnector.get_admin_url()
+        url = f"{pulsar_admin_url}/admin/v2/{topic_type}/{tenant}/{namespace}"
+        response = requests.get(url)
+
+        if response.status_code != 200:
+            raise RuntimeError(f"Failed to fetch topics for namespace {tenant}/{namespace}: {response.text}")
+
+        topics = response.json()
+        return f"{topic_type}://{tenant}/{namespace}/{topic}" in topics
