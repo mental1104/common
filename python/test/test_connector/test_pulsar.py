@@ -2,7 +2,7 @@ import os
 import pytest
 import requests
 import pulsar
-from mental1104.connector.pulsar import PulsarConnector, PulsarEnvironment, Consumer, Producer
+from mental1104.connector.pulsar import PulsarConnector, PulsarEnvironment, Consumer, Producer, PulsarAdminHelper
 
 
 @pytest.fixture(autouse=True)
@@ -10,12 +10,11 @@ def remove_env_vars():
     # 在测试之前删除环境变量
     if 'HTTP_PROXY' in os.environ:
         del os.environ['HTTP_PROXY']
-    
+
     if 'HTTPS_PROXY' in os.environ:
         del os.environ['HTTPS_PROXY']
     yield
 
-        
 
 @pytest.mark.skipif(not all(env in os.environ for env in [
     PulsarEnvironment.PULSAR_HOST.value,
@@ -91,11 +90,13 @@ class TestPulsarConnector:
 
     def test_get_admin_url(self, admin_url):
         assert admin_url.startswith("http://")
-        
+
 
 from pulsar import ConsumerType
 
 # 动态生成请求头
+
+
 def get_headers():
     token = os.getenv("PULSAR_TOKEN")
     if token:
@@ -207,3 +208,77 @@ class TestPulsarIntegration:
         # Delete topic
         requests.delete(topic_url, headers=get_headers())
         assert requests.get(f"{topic_url}/stats", headers=get_headers()).status_code == 404
+
+
+@pytest.mark.skipif(not all(env in os.environ for env in [
+    PulsarEnvironment.PULSAR_HOST.value,
+    PulsarEnvironment.PULSAR_ADMIN_PORT.value
+]), reason="Environment variables for Pulsar are not set.")
+class TestPulsarAdminHelper:
+
+    @pytest.fixture(autouse=True)
+    def setup_and_teardown(self):
+        """
+        测试前的初始化和测试后的清理。
+        确保租户、命名空间、主题创建和删除。
+        """
+        self.tenant = "test-tenant"
+        self.namespace = "test-namespace"
+        self.topic = "test-topic"
+
+        # 测试前确保干净状态
+        PulsarAdminHelper.cleanup_tenant(self.tenant)
+        yield
+        # 测试后清理租户
+        PulsarAdminHelper.cleanup_tenant(self.tenant)
+
+    def test_create_tenant(self):
+        """测试租户创建"""
+        PulsarAdminHelper.create_tenant(self.tenant)
+        assert PulsarAdminHelper.is_tenant_exists(self.tenant), "Tenant creation failed."
+
+    def test_create_namespace(self):
+        """测试命名空间创建"""
+        PulsarAdminHelper.create_tenant(self.tenant)
+        PulsarAdminHelper.create_namespace(f"{self.tenant}/{self.namespace}")
+        assert PulsarAdminHelper.is_namespace_exists(self.tenant, self.namespace), "Namespace creation failed."
+
+    def test_create_topic(self):
+        """测试主题创建"""
+        PulsarAdminHelper.create_tenant(self.tenant)
+        PulsarAdminHelper.create_namespace(f"{self.tenant}/{self.namespace}")
+        PulsarAdminHelper.create_topic(f"{self.tenant}/{self.namespace}/{self.topic}")
+        assert PulsarAdminHelper.is_topic_exists(self.tenant, self.namespace, self.topic), "Topic creation failed."
+
+    def test_cleanup_tenant(self):
+        """测试租户清理"""
+        PulsarAdminHelper.create_tenant(self.tenant)
+        PulsarAdminHelper.create_namespace(f"{self.tenant}/{self.namespace}")
+        PulsarAdminHelper.create_topic(f"{self.tenant}/{self.namespace}/{self.topic}")
+
+        # 确保租户、命名空间和主题创建成功
+        assert PulsarAdminHelper.is_tenant_exists(self.tenant), "Tenant does not exist before cleanup."
+        assert PulsarAdminHelper.is_namespace_exists(
+            self.tenant, self.namespace), "Namespace does not exist before cleanup."
+        assert PulsarAdminHelper.is_topic_exists(
+            self.tenant, self.namespace, self.topic), "Topic does not exist before cleanup."
+
+        # 清理租户
+        PulsarAdminHelper.cleanup_tenant(self.tenant)
+        assert not PulsarAdminHelper.is_tenant_exists(self.tenant), "Tenant cleanup failed."
+
+    def test_ensure_tenant_namespace_topic(self):
+        """测试 ensure_tenant_namespace_topic 方法"""
+        try:
+            # 调用 ensure_tenant_namespace_topic 方法
+            PulsarAdminHelper.ensure_tenant_namespace_topic(self.tenant, self.namespace, self.topic)
+
+            # 验证租户、命名空间和主题是否被正确创建
+            assert PulsarAdminHelper.is_tenant_exists(self.tenant), "Tenant does not exist after ensure operation."
+            assert PulsarAdminHelper.is_namespace_exists(
+                self.tenant, self.namespace), "Namespace does not exist after ensure operation."
+            assert PulsarAdminHelper.is_topic_exists(
+                self.tenant, self.namespace, self.topic), "Topic does not exist after ensure operation."
+        finally:
+            # 清理确保测试后的环境干净
+            PulsarAdminHelper.cleanup_tenant(self.tenant)
