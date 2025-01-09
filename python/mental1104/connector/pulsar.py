@@ -248,7 +248,7 @@ class Producer:
 class PulsarAdminHelper:
 
     @staticmethod
-    def ensure_tenant_namespace_topic(tenant, namespace, topic):
+    def ensure_tenant_namespace_topic(tenant, namespace=None, topic=None):
         """
         确保租户、命名空间和主题按照顺序创建
         """
@@ -262,6 +262,8 @@ class PulsarAdminHelper:
             PulsarAdminHelper.create_tenant(tenant)
 
         # 检查命名空间是否存在
+        if not namespace:
+            return
         namespace_url = f"{pulsar_admin_url}/admin/v2/namespaces/{tenant}/{namespace}"
         namespace_response = requests.get(namespace_url)
         if namespace_response.status_code != 200:
@@ -269,6 +271,8 @@ class PulsarAdminHelper:
             PulsarAdminHelper.create_namespace(f"{tenant}/{namespace}")
 
         # 检查主题是否存在
+        if not topic:
+            return
         topic_url = f"{pulsar_admin_url}/admin/v2/persistent/{tenant}/{namespace}/{topic}"
         topic_response = requests.get(topic_url)
         if topic_response.status_code != 200:
