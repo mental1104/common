@@ -1,0 +1,38 @@
+#!/usr/bin/env python3
+import sys
+from mental1104.connector.pulsar import PulsarAdminHelper
+
+def validate_and_process_arg(arg):
+    # 检查参数中 `/` 的数量
+    if arg.count("/") > 2:
+        print("错误: 参数中最多只能包含两个 '/'，请重新输入。")
+        sys.exit(1)
+
+    # 根据 `/` 分割参数
+    split_result = arg.split("/")
+
+    # 根据分割结果生成元组
+    while len(split_result) < 3:
+        split_result.append(None)  # 如果不足三个部分，补充 `None`
+
+    # 拆包为三个变量
+    part1, part2, part3 = split_result
+
+    # 返回拆分后的结果
+    return part1, part2, part3
+
+
+if __name__ == "__main__":
+    # 检查是否传入参数
+    if len(sys.argv) < 2:
+        print("错误: 参数不足。请提供一个参数，例如：param1/param2 或 param1。")
+        sys.exit(1)
+
+    # 获取用户输入的参数
+    input_arg = sys.argv[1]
+
+    # 校验并处理参数
+    tenant, namespace, topic = validate_and_process_arg(input_arg)
+    PulsarAdminHelper.ensure_tenant_namespace_topic(tenant, namespace, topic)
+    # 输出结果
+    print(f"{tenant} {namespace} {topic}")
