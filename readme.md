@@ -40,7 +40,7 @@ clang-format -style=Google -i /home/espeon/code/common/cpp/test/test_printer.cpp
 ```
 
 ### Python
-
+export PYTHONPATH=:$PYTHONPATH
 ```
 cd python
 coverage run --source=. -m pytest
