@@ -426,3 +426,52 @@ class PulsarAdminHelper:
 
         topics = response.json()
         return f"{topic_type}://{tenant}/{namespace}/{topic}" in topics
+
+    @staticmethod
+    def get_subscription_stat(topic, subscription):
+        """获取指定 topic 的某个订阅的 stat 信息"""
+        pulsar_admin_url = PulsarConnector.get_admin_url()
+        url = f"{pulsar_admin_url}/admin/v2/persistent/{topic}/subscription/{subscription}"
+        response = requests.get(url)
+        if response.status_code != 200:
+            raise RuntimeError(
+                f"Failed to get subscription stats for topic {topic}, subscription {subscription}: {response.status_code} {response.text}")
+        return response.json()
+
+    @staticmethod
+    def get_msg_backlog(topic, subscription):
+        """获取某个订阅的 msgBacklog 值"""
+        stat = PulsarAdminHelper.get_subscription_stat(topic, subscription)
+        return stat.get("msgBacklog", 0)
+
+import aiohttp
+class AsyncPulsarAdminHelper:
+    @staticmethod
+    async def fetch_topic_backlog(topic, subscription):
+        """
+        异步获取单个 topic 的 backlog。如果 topic 或 subscription 无效，则返回 "N/A"。
+        """
+        # 如果 topic 或 subscription 为空字符串或 None，直接返回 N/A
+        if not topic or not subscription:
+            return topic or "Unknown Topic", subscription or "Unknown Subscription", "N/A"
+
+        async with aiohttp.ClientSession() as session:
+            try:
+                pulsar_admin_url = PulsarConnector.get_admin_url()
+                # 修正 API 路径为 stats
+                url = f"{pulsar_admin_url}/admin/v2/persistent/{topic}/stats"
+                async with session.get(url) as response:
+                    if response.status != 200:
+                        return topic, subscription, "N/A"
+
+                    # 获取 topic 的统计数据
+                    data = await response.json()
+
+                    # 获取订阅信息，如果订阅不存在返回 N/A
+                    subscription_data = data.get("subscriptions", {}).get(subscription, {})
+                    backlog = subscription_data.get("msgBacklog", "N/A")
+                    return topic, subscription, backlog
+
+            except Exception as e:
+                # 捕获异常并返回 N/A
+                return topic, subscription, "N/A"

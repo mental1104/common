@@ -96,7 +96,7 @@ class PulsarMessageSender:
             if (isinstance(self.schema, AvroSchema) or isinstance(self.schema, JsonSchema)) and data_file.endswith('.json'):
                 data_to_send = json.loads(message_data.decode('utf-8'))
             self.producer.send(data_to_send)
-            print(f"Message sent successfully: {message_data}")
+            print(f"Message sent successfully: {data_to_send}")
         except Exception as e:
             print(f"Error: Failed to send message from file {data_file}. Exception: {e}")
             raise  # 重新抛出异常
@@ -172,15 +172,24 @@ def get_data_paths(cli_data_path):
     return cli_data_path or os.getenv(EnvironmentVariables.PULSAR_DATA_PATH.value)
 
 
-def process_data_path(data_path):
+def process_data_path(data_path, full_topic):
     """
     处理数据路径，如果是目录则遍历目录下的所有文件，如果是文件直接返回。
     :param data_path: 文件或目录路径。
     :return: 文件路径列表。
     """
+    def get_last_part(input_string):
+        """
+        根据字符串取得最后一个 '/' 后面的内容。
+        如果没有 '/' 则返回原字符串。
+        """
+        if '/' in input_string:
+            return input_string.rsplit('/', 1)[-1]
+        return input_string
+
     if os.path.isdir(data_path):
         # 如果是目录，遍历该目录下的所有 JSON 文件
-        files = [os.path.join(data_path, f) for f in os.listdir(data_path) if f.endswith('.json')]
+        files = [os.path.join(data_path, f) for f in os.listdir(data_path) if f == f"{get_last_part(full_topic)}.json"]
         if not files:
             print(f"Error: No JSON files found in directory {data_path}.")
             sys.exit(1)
@@ -215,7 +224,7 @@ def main():
         sys.exit(1)
 
     # 处理 data_path，检查是文件还是目录
-    data_files = process_data_path(data_path)
+    data_files = process_data_path(data_path, args.full_topic)
 
     # 初始化 PulsarMessageSender
     sender = PulsarMessageSender(

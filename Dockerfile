@@ -9,6 +9,7 @@ RUN echo "deb http://mirrors.aliyun.com/ubuntu/ focal main restricted universe m
     echo "deb http://mirrors.aliyun.com/ubuntu/ focal-updates main restricted universe multiverse" >> /etc/apt/sources.list && \
     echo "deb http://mirrors.aliyun.com/ubuntu/ focal-backports main restricted universe multiverse" >> /etc/apt/sources.list && \
     echo "deb http://mirrors.aliyun.com/ubuntu/ focal-security main restricted universe multiverse" >> /etc/apt/sources.list && \
+    echo "deb https://mirrors.tuna.tsinghua.edu.cn/clickhouse/deb stable main" | tee /etc/apt/sources.list.d/clickhouse.list && \
     apt-get update && apt-get upgrade -y
 
 RUN chmod 1777 /tmp
@@ -77,10 +78,10 @@ RUN apt-get install -y \
     libbenchmark-dev \
     libboost-all-dev \
     lcov \
+    clickhouse-client \
     && \
     ln -s /lib/x86_64-linux-gnu/libtinfo.so.6 /lib/x86_64-linux-gnu/libtinfow.so.6 && ldconfig && \
     cd /usr/src/googletest && cmake . && make -j$(nproc) && make install
-    
 ## 2 安装很少变动的软件
 
 ### 2.1 安装qemu
@@ -146,9 +147,17 @@ RUN echo "PS1='\\[\033[32;1m\]\\u@\\[\033[38;5;214;1m\]\\h:\\[\033[01;34m\]\\w\\
 
 ### 6.2 加载环境变量
 ### 这里赋一个默认的.env文件，期望宿主机通过挂载环境变量文件的方式将环境变量导入容器，以便ssh使用
-RUN touch /root/.env && echo "MENTAL1104_NOENVRION=TRUE" >> /root/.env && echo "export \$(xargs < ~/.env)" >> /root/.bashrc
+RUN touch /root/.env && echo "MENTAL1104_NOENVRION=TRUE" >> /root/.env && echo "export \$(grep -v '^#' ~/.env | xargs)" >> /root/.bashrc
 
-### 6.3 生成 SSH 主机密钥 && 修改SSH配置文件以允许密码认证
+### 6.3 别名命令定义
+RUN echo "alias vi='vim'" >> /root/.bashrc && \
+    echo "alias view='vim -R'" >> /root/.bashrc && \
+    echo "alias python='python3'" >> /root/.bashrc && \
+    echo 'alias redis="redis-cli -h ${REDIS_HOST} -p ${REDIS_PORT}"' >> /root/.bashrc && \
+    echo 'alias clickhouse="clickhouse-client -h ${CLICKHOUSE_HOST} --port ${CLICKHOUSE_PORT} -d ${CLICKHOUSE_DATABASE} -u ${CLICKHOUSE_USER}"' >> /root/.bashrc && \
+    echo 'alias mongodb="mongo --host ${MONGO_HOST} --port ${MONGO_PORT}"' >> /root/.bashrc
+
+### 6.4 生成 SSH 主机密钥 && 修改SSH配置文件以允许密码认证
 ARG SSH_PRIVATE_KEY
 ENV SSH_PRIVATE_KEY=${SSH_PRIVATE_KEY}
 RUN echo "root:${SSH_PRIVATE_KEY}" | chpasswd && mkdir -p /run/sshd && echo 'PasswordAuthentication yes' | tee -a /etc/ssh/sshd_config && \
