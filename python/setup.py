@@ -6,6 +6,6 @@ setup(
     description="A custom package with useful functions",
     author="mental1104",
     author_email="mental1104@gmail.com",
-    packages={"": "mental1104"},  # 自动查找所有子包
+    packages=find_packages(exclude=["test", "test.*"]),  # 排除 test 目录及其子目录
     install_requires=['aiohttp'],       # 如果你的包依赖于其他包，可以在这里添加
 )
