@@ -1,0 +1,10 @@
+{
+    "tenant": "yzf",
+    "namespace": "test",
+    "topics": {
+	    "test_1": "example-sub",
+	    "test_2": "example-sub",
+	    "test_3": "example-sub"
+    },
+    "step": 3
+}
