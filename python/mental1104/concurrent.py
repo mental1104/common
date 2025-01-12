@@ -24,7 +24,7 @@ class CoroutinePool:
             tasks.append(self.worker(partial_func))  # 将 worker 的协程加入任务列表
 
         if tasks:
-            result = await asyncio.gather(*tasks)
+            result = await asyncio.gather(*tasks, return_exceptions=True)
             return result
         return []
 
