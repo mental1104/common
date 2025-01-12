@@ -55,7 +55,8 @@ async def detect_partitioned_topics(tenant, namespace, topics_subscriptions):
 def main():
     parser = argparse.ArgumentParser(description="Monitor Pulsar topic backlog.")
     parser.add_argument("--step", type=int, help="Time interval (seconds) between backlog requests.")
-    parser.add_argument("--queue-length", type=int, default=1000, help="Queue length for maintaining records (max 100000).")
+    parser.add_argument("--queue-length", type=int, default=1000,
+                        help="Queue length for maintaining records (max 100000).")
     parser.add_argument("--output", type=str, help="Path to save the output CSV file.")
     parser.add_argument("--plot-output", type=str, help="Path to save the rendered plot image.")
     args = parser.parse_args()
