@@ -248,9 +248,11 @@ class Producer:
 class PulsarAdminHelper:
 
     @staticmethod
-    def ensure_tenant_namespace_topic(tenant, namespace=None, topic=None):
+    def ensure_tenant_namespace_topic(tenant, namespace=None, topic=None, partition=None):
         """
-        确保租户、命名空间和主题按照顺序创建
+        确保租户、命名空间和主题按照顺序创建。
+        如果 partition 为 None，则创建非分区主题。
+        如果 partition 是一个整型且大于 0，则创建指定分区数的分区主题。
         """
         pulsar_admin_url = PulsarConnector.get_admin_url()
 
@@ -273,11 +275,22 @@ class PulsarAdminHelper:
         # 检查主题是否存在
         if not topic:
             return
+
         topic_url = f"{pulsar_admin_url}/admin/v2/persistent/{tenant}/{namespace}/{topic}"
         topic_response = requests.get(topic_url)
-        if topic_response.status_code != 200:
-            logging.info(f"Topic {tenant}/{namespace}/{topic} does not exist. Creating it.")
+        if topic_response.status_code == 200:
+            logging.info(f"Topic {tenant}/{namespace}/{topic} already exists. Skipping creation.")
+            return
+
+        # 创建分区或非分区主题
+        if partition is None or (isinstance(partition, int) and partition == 0):
+            logging.info(f"Creating non-partitioned topic: {tenant}/{namespace}/{topic}")
             PulsarAdminHelper.create_topic(f"{tenant}/{namespace}/{topic}")
+        elif isinstance(partition, int) and partition > 0:
+            logging.info(f"Creating partitioned topic: {tenant}/{namespace}/{topic} with {partition} partitions.")
+            PulsarAdminHelper.create_partitioned_topic(f"{tenant}/{namespace}/{topic}", partition)
+        else:
+            raise ValueError("Invalid partition value. Must be None or a positive integer.")
 
     @staticmethod
     def create_tenant(tenant):
@@ -308,6 +321,35 @@ class PulsarAdminHelper:
         response = requests.put(url)
         if response.status_code not in [200, 204, 409]:
             raise RuntimeError(f"Failed to create topic {topic}: {response.status_code} {response.text}")
+
+    @staticmethod
+    def create_partitioned_topic(topic, partitions):
+        """
+        创建分区主题。如果主题已存在，则保持幂等性，不报错。
+
+        Args:
+            topic (str): 完整的主题路径（包括 tenant 和 namespace）。
+            partitions (int): 分区数量。
+
+        Raises:
+            RuntimeError: 如果创建主题失败（除主题已存在的情况外）。
+        """
+        if partitions is None or partitions <= 0:
+            raise ValueError("分区数量必须为正整数。")
+
+        pulsar_admin_url = PulsarConnector.get_admin_url()
+        url = f"{pulsar_admin_url}/admin/v2/persistent/{topic}/partitions"
+
+        headers = {"Content-Type": "text/plain"} 
+        response = requests.put(url, headers=headers, data=str(partitions))
+
+        # 检查响应状态码
+        if response.status_code in [200, 204, 409]:
+            # 200 和 204 表示创建成功，409 表示主题已存在
+            logging.info(f"Partitioned topic {topic} with {partitions} partitions handled successfully (status: {response.status_code}).")
+        else:
+            # 其他状态码为错误
+            raise RuntimeError(f"Failed to create partitioned topic {topic}: {response.status_code} {response.text}")
 
     @staticmethod
     def get_tenant_namespaces(tenant):
@@ -474,4 +516,33 @@ class AsyncPulsarAdminHelper:
 
             except Exception as e:
                 # 捕获异常并返回 N/A
+                return topic, subscription, "N/A"
+
+    @staticmethod
+    async def fetch_partitioned_stats_backlog(topic, subscription):
+        """
+        异步获取分区（partitioned）topic的所有分区堆积量的总和，并返回该总和。
+        """
+        if not topic or not subscription:
+            return topic or "Unknown Topic", subscription or "Unknown Subscription", "N/A"
+
+        async with aiohttp.ClientSession() as session:
+            try:
+                pulsar_admin_url = PulsarConnector.get_admin_url()
+                # 获取分区堆积量的总和
+                url = f"{pulsar_admin_url}/admin/v2/persistent/{topic}/partitioned-stats"
+                async with session.get(url) as response:
+                    if response.status != 200:
+                        return topic, subscription, "N/A"
+
+                    # 获取所有分区堆积量数据
+                    data = await response.json()
+
+                    # 从返回的 JSON 中提取堆积量总和
+                    subscriptions_data = data.get("subscriptions", {}).get(subscription, {})
+                    total_backlog = subscriptions_data.get('msgBacklog', "N/A")
+
+                    return topic, subscription, total_backlog
+
+            except Exception as e:
                 return topic, subscription, "N/A"
