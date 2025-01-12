@@ -7,6 +7,7 @@ from datetime import datetime
 import functools
 import asyncio
 import pytz
+import aiohttp
 from collections import deque
 
 # 固定列宽
@@ -18,9 +19,10 @@ BLUE_BOLD = "\033[1;34m"  # 粗体蓝色
 RESET = "\033[0m"  # 重置格式
 
 from mental1104.concurrent import CoroutinePool
-from mental1104.connector.pulsar import AsyncPulsarAdminHelper
+from mental1104.connector.pulsar import AsyncPulsarAdminHelper, PulsarConnector
 from mental1104.file import CsvHelper
 from mental1104.plot.trend import TimeBasedTrendPlot
+
 
 def load_config(config_path="/root/.mental1104/pulsar/backlog.json"):
     """加载配置文件"""
@@ -28,6 +30,26 @@ def load_config(config_path="/root/.mental1104/pulsar/backlog.json"):
         raise FileNotFoundError(f"配置文件不存在，请创建 {config_path}")
     with open(config_path, "r") as f:
         return json.load(f)
+
+
+async def detect_partitioned_topics(tenant, namespace, topics_subscriptions):
+    """检测配置文件中哪些 topic 是分区 topic"""
+    partitioned_topics = {}
+    async with aiohttp.ClientSession() as session:
+        for topic in topics_subscriptions.keys():
+            topic_path = f"{tenant}/{namespace}/{topic}"
+            partition_url = f"{PulsarConnector.get_admin_url()}/admin/v2/persistent/{topic_path}/partitions"
+            try:
+                async with session.get(partition_url) as response:
+                    if response.status == 200:
+                        result = await response.json()
+                        partitioned_topics[topic] = True if result.get("partitions", 0) > 0 else False
+                    else:
+                        partitioned_topics[topic] = False
+            except Exception as e:
+                print(f"检测 topic 分区信息时出错: {topic_path}, 错误: {e}")
+                partitioned_topics[topic] = False
+    return partitioned_topics
 
 
 def main():
@@ -74,17 +96,36 @@ def main():
 
         pool = CoroutinePool(loop, max_concurrent_task=5)
 
+        # 检测分区 topic 信息
+        partitioned_topics = loop.run_until_complete(
+            detect_partitioned_topics(tenant, namespace, topics_subscriptions)
+        )
+        print(f"分区情况：{partitioned_topics}")
+
         while True:
             try:
                 # 构建异步任务
-                tasks = [
-                    functools.partial(
-                        AsyncPulsarAdminHelper.fetch_topic_backlog,
-                        f"{tenant}/{namespace}/{topic}",
-                        subscription,
-                    )
-                    for topic, subscription in topics_subscriptions.items()
-                ]
+                tasks = []
+                for topic, subscription in topics_subscriptions.items():
+                    topic_path = f"{tenant}/{namespace}/{topic}"
+                    if partitioned_topics.get(topic, False):
+                        # 分区 topic 使用 partitioned-stats 接口
+                        tasks.append(
+                            functools.partial(
+                                AsyncPulsarAdminHelper.fetch_partitioned_stats_backlog,
+                                topic_path,
+                                subscription,
+                            )
+                        )
+                    else:
+                        # 非分区 topic 使用 stats 接口
+                        tasks.append(
+                            functools.partial(
+                                AsyncPulsarAdminHelper.fetch_topic_backlog,
+                                topic_path,
+                                subscription,
+                            )
+                        )
 
                 # 执行任务并同步获取结果
                 results = pool.run(tasks)
