@@ -3,6 +3,7 @@ import sys
 import argparse
 from mental1104.connector.pulsar import PulsarAdminHelper
 
+
 def validate_and_process_arg(arg):
     # 检查参数中 `/` 的数量
     if arg.count("/") > 2:

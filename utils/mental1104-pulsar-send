@@ -8,6 +8,7 @@ from pulsar import Client, AuthenticationToken
 from pulsar.schema import AvroSchema, JsonSchema, BytesSchema
 from mental1104.connector.pulsar import PulsarEnvironment
 
+
 class EnvironmentVariables(Enum):
     PULSAR_SCHEMA_PATH = "PULSAR_SCHEMA_PATH"
     PULSAR_DATA_PATH = "PULSAR_DATA_PATH"
@@ -64,9 +65,9 @@ class PulsarMessageSender:
             schema_file = os.path.join(schema_path, f"{self.full_topic.split('/')[-1]}.json")
             if not os.path.exists(schema_file):
                 print(f"Error: Schema file {schema_file} not found in the directory.")
-                return BytesSchema() # 如果目录下没有找到该文件，退出
+                return BytesSchema()  # 如果目录下没有找到该文件，退出
             schema_path = schema_file  # 更新 schema_path 为找到的文件路径
-    
+
         # 如果不是目录且不是文件，输出错误
         if not os.path.isfile(schema_path):
             print(f"Error: Schema path {schema_path} is not a valid file.")
@@ -115,11 +116,14 @@ def parse_arguments():
     """
     parser = argparse.ArgumentParser(description="向 Pulsar 主题发送消息。")
     # Pulsar 服务地址
-    parser.add_argument('--pulsar-url', type=str, help=f"Pulsar 服务主机地址（不包含协议和端口，例如：localhost）。可以通过环境变量 {PulsarEnvironment.PULSAR_HOST.value} 来设置。")
+    parser.add_argument('--pulsar-url', type=str,
+                        help=f"Pulsar 服务主机地址（不包含协议和端口，例如：localhost）。可以通过环境变量 {PulsarEnvironment.PULSAR_HOST.value} 来设置。")
     # Pulsar 服务端口
-    parser.add_argument('--pulsar-port', type=int, help=f"Pulsar 服务生产者端口（例如：6650）。可以通过环境变量 {PulsarEnvironment.PULSAR_BROKER_PORT.value} 来设置。")
+    parser.add_argument('--pulsar-port', type=int,
+                        help=f"Pulsar 服务生产者端口（例如：6650）。可以通过环境变量 {PulsarEnvironment.PULSAR_BROKER_PORT.value} 来设置。")
     # 完整主题名称
-    parser.add_argument('--full-topic', type=str, required=True, help="完整的主题名称（例如：tenant/namespace/topic）。这是必需的，无法通过环境变量替代。")
+    parser.add_argument('--full-topic', type=str, required=True,
+                        help="完整的主题名称（例如：tenant/namespace/topic）。这是必需的，无法通过环境变量替代。")
     # Schema 文件路径
     parser.add_argument(
         '--schema-path',
@@ -127,11 +131,12 @@ def parse_arguments():
         help=f"Schema 文件或包含 Schema 的目录路径。可以通过环境变量 {EnvironmentVariables.PULSAR_SCHEMA_PATH.value} 来设置。若该字段是个目录，则会寻找该目录下与topic同名的json文件作为schema。"
     )
     # 数据文件路径
-    parser.add_argument('--data-path', type=str, help=f"包含消息数据的 JSON 文件或目录路径。可以通过环境变量 {EnvironmentVariables.PULSAR_DATA_PATH.value} 来设置。")
+    parser.add_argument('--data-path', type=str,
+                        help=f"包含消息数据的 JSON 文件或目录路径。可以通过环境变量 {EnvironmentVariables.PULSAR_DATA_PATH.value} 来设置。")
     # Pulsar 认证 Token
-    parser.add_argument('--token', type=str, help=f"Pulsar 认证 Token（可选）。可以通过环境变量 {PulsarEnvironment.PULSAR_TOKEN.value} 来设置。")
+    parser.add_argument('--token', type=str,
+                        help=f"Pulsar 认证 Token（可选）。可以通过环境变量 {PulsarEnvironment.PULSAR_TOKEN.value} 来设置。")
     return parser.parse_args()
-
 
 
 def get_pulsar_service(cli_url, cli_producer_port):
@@ -243,7 +248,7 @@ def main():
             sender.send_message(message_data, data_file)
         except Exception as e:
             print(f"Error: Failed to load message data from {data_file}. Exception: {e}")
-    
+
     # 关闭生产者和客户端
     sender.close()
 
