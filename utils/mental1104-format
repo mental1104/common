@@ -10,8 +10,14 @@ fi
 modified_files=$(git status --porcelain | grep -E '^[ MADRCU\?\?]' | awk '{print $2}')
 
 if [ -z "$modified_files" ]; then
-    echo "没有发现修改的文件。"
-    exit 0
+    echo "没有发现修改的文件，获取最后一次提交的文件列表..."
+    last_commit_id=$(git rev-parse HEAD) # 获取最后一个提交的 Commit ID
+    modified_files=$(git diff-tree --no-commit-id --name-only -r "$last_commit_id")
+
+    if [ -z "$modified_files" ]; then
+        echo "最后一次提交也没有涉及任何文件。"
+        exit 0
+    fi
 fi
 
 # 过滤出特定后缀的文件，并获取其绝对路径
