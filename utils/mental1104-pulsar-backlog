@@ -6,6 +6,8 @@ import argparse
 from datetime import datetime
 import functools
 import asyncio
+import pytz
+from collections import deque
 
 # 固定列宽
 TIME_COLUMN_WIDTH = 20
@@ -17,7 +19,8 @@ RESET = "\033[0m"  # 重置格式
 
 from mental1104.concurrent import CoroutinePool
 from mental1104.connector.pulsar import AsyncPulsarAdminHelper
-
+from mental1104.file import CsvHelper
+from mental1104.plot.trend import TimeBasedTrendPlot
 
 def load_config(config_path="/root/.mental1104/pulsar/backlog.json"):
     """加载配置文件"""
@@ -30,7 +33,20 @@ def load_config(config_path="/root/.mental1104/pulsar/backlog.json"):
 def main():
     parser = argparse.ArgumentParser(description="Monitor Pulsar topic backlog.")
     parser.add_argument("--step", type=int, help="Time interval (seconds) between backlog requests.")
+    parser.add_argument("--queue-length", type=int, default=1000, help="Queue length for maintaining records (max 100000).")
+    parser.add_argument("--output", type=str, help="Path to save the output CSV file.")
+    parser.add_argument("--plot-output", type=str, help="Path to save the rendered plot image.")
     args = parser.parse_args()
+
+    # 设置默认路径
+    output_path = args.output
+    plot_output_path = args.plot_output
+
+    # 确保队列长度不超过最大值
+    queue_length = min(args.queue_length, 100000)
+
+    # 初始化队列
+    record_queue = deque(maxlen=queue_length)
 
     try:
         # 加载配置文件
@@ -40,6 +56,9 @@ def main():
         namespace = config["namespace"]
         step = args.step or config.get("step", 3)
 
+        # 获取本地时区
+        local_timezone = pytz.timezone("Asia/Shanghai")
+
         # 输出表头
         headers = ["", *topics_subscriptions.keys()]
         formatted_headers = [header.ljust(DATA_COLUMN_WIDTH) for header in headers]
@@ -48,12 +67,11 @@ def main():
 
         # 创建 CoroutinePool 实例
         try:
-            # 尝试获取当前事件循环
             loop = asyncio.get_running_loop()
         except RuntimeError:
-            # 如果没有事件循环，创建一个新的
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
+
         pool = CoroutinePool(loop, max_concurrent_task=5)
 
         while True:
@@ -71,13 +89,14 @@ def main():
                 # 执行任务并同步获取结果
                 results = pool.run(tasks)
 
-                # 获取当前时间
-                timestamp = f"{BLUE_BOLD}{datetime.now().strftime('%Y-%m-%d %H:%M:%S').ljust(TIME_COLUMN_WIDTH)}{RESET}"
+                # 获取当前时间并转换为本地时区
+                current_time = datetime.now().astimezone(local_timezone)
+                timestamp = f"{BLUE_BOLD}{current_time.strftime('%Y-%m-%d %H:%M:%S').ljust(TIME_COLUMN_WIDTH)}{RESET}"
 
                 # 格式化结果输出
                 backlogs = [
                     str(next(
-                        (r[2] for r in results if r[0] == f"{tenant}/{namespace}/{topic}" and r[1] == subscription), 
+                        (r[2] for r in results if r[0] == f"{tenant}/{namespace}/{topic}" and r[1] == subscription),
                         "N/A" if subscription is None else -1  # 如果没有结果返回 "N/A"，否则用 -1 代表无数据
                     )).ljust(DATA_COLUMN_WIDTH)
                     for topic, subscription in topics_subscriptions.items()
@@ -85,10 +104,20 @@ def main():
 
                 print("".join([timestamp, *backlogs]))
 
+                # 保存简化数据到队列
+                record = {"time": current_time.strftime('%Y-%m-%d %H:%M:%S')}
+                for topic, backlog in zip(topics_subscriptions.keys(), backlogs):
+                    record[topic] = backlog.strip()
+                record_queue.append(record)
+
                 # 等待下一个时间间隔
                 time.sleep(step)
             except KeyboardInterrupt:
-                print("程序终止...")
+                print("程序终止...正在导出队列数据...")
+                CsvHelper.csv_writer(data=record_queue, file_path=output_path)
+                TimeBasedTrendPlot.plot_from_iterable(
+                    data_iterable=record_queue, output_file_path=plot_output_path
+                )
                 break
             except Exception as e:
                 print(f"发生错误：{e}")
