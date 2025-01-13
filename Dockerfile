@@ -81,6 +81,7 @@ RUN apt-get install -y \
     clickhouse-client \
     cron \
     logrotate \
+    pandoc \
     && \
     ln -s /lib/x86_64-linux-gnu/libtinfo.so.6 /lib/x86_64-linux-gnu/libtinfow.so.6 && ldconfig && \
     cd /usr/src/googletest && cmake . && make -j$(nproc) && make install
@@ -96,9 +97,17 @@ RUN cd /tmp && wget https://download.qemu.org/qemu-4.1.0.tar.xz && tar xvJf qemu
 COPY INSTALLROOT/amd64 /
 
 ### 2.2 安装golang
-RUN tar -C /usr/local -xzf /tmp/go1.20.5.linux-amd64.tar.gz
+RUN tar -C /usr/local -xzf /tmp/go1.23.4.linux-amd64.tar.gz
 ENV PATH $PATH:/usr/local/go/bin
+ENV GOPROXY=https://mirrors.tencent.com/go/
 
+ENV GOPATH="/go"
+ENV GOBIN="/go/bin"
+ENV PATH="${GOBIN}:${PATH}"
+ENV GO111MODULE="on"
+
+# 安装 gopls
+RUN go install golang.org/x/tools/gopls@latest
 
 ### 2.4 neovim # 这一步要放早一点
 RUN cd /tmp && tar -zxvf nvim-linux64.tar.gz \ 
@@ -125,6 +134,26 @@ RUN while read extension; do \
 COPY INSTALLROOT/root/requirements.txt /root/requirements.txt
 RUN pip3 install  -i https://mirrors.aliyun.com/pypi/simple -r /root/requirements.txt --break-system-packages && rm -f /root/requirements.txt
 
+# 安装 cJSON
+COPY INSTALLROOT/lib/ /tmp/lib
+RUN cd /tmp/lib && unzip cJSON-master.zip && cd cJSON-master && \
+    mkdir build && \
+    cd build && \
+    cmake -DCMAKE_INSTALL_PREFIX=/usr/local .. && \
+    make -j$(nproc)&& \
+    make install && \
+    cd /tmp/lib && rm -rf cJSON-master*
+
+# 安装pystring
+RUN cd /tmp/lib && unzip pystring-master.zip && cd pystring-master && \
+mkdir build && cd build && cmake .. && make -j$(nproc) && make install && \
+cd /tmp/lib && rm -rf pystring-master*
+
+# 安装rapidjson
+RUN cd /tmp/lib && unzip rapidjson-master.zip && cd rapidjson-master && \
+    mkdir build && cd build && cmake -DRAPIDJSON_BUILD_CXX11=OFF -DCMAKE_CXX_STANDARD=20 -DCMAKE_CXX_STANDARD_REQUIRED=ON -DCMAKE_CXX_EXTENSIONS=OFF .. && \
+    make -j$(nproc) && make install && \
+    cd /tmp/lib && rm -rf rapidjson-master*
 
 ## 5. 安装自定义代码
 

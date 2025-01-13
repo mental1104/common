@@ -49,3 +49,4 @@ twxs.cmake
 ms-dotnettools.vscode-dotnet-runtime
 thebarkman.vscode-djaneiro
 ms-dotnettools.vscodeintellicode-csharp
+gaogaotiantian.viztracer-vscode
