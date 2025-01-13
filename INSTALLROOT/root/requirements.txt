@@ -36,3 +36,7 @@ markitdown
 autopep8
 uvicorn
 coverage
+viztracer
+pypandoc
+xlrd
+pymupdf4llm
