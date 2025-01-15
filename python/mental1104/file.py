@@ -1,53 +1,94 @@
 import csv
 import os
+import json
 from functools import wraps
 
 
 def file_iterator(process_function):
     """
-    装饰器，用于遍历指定目录下的所有文件，并对每个文件执行给定的处理函数。
+    装饰器，用于遍历指定目录下的所有文件，或者直接处理给定的文件路径，并对每个文件执行给定的处理函数。
     """
+    @wraps(process_function)
     def wrapper(input_path):
-        for entry in os.listdir(input_path):
-            dir_path = os.path.join(input_path, entry)
-            # 判断是否为目录
-            if os.path.isdir(dir_path):
-                print(entry)
-                for file in os.listdir(dir_path):
-                    full_path = os.path.join(dir_path, file)
-                    if os.path.isfile(full_path):
-                        process_function(file)
+        # 如果输入路径是文件，直接处理该文件
+        if os.path.isfile(input_path):
+            process_function(input_path)  # 传递文件的完整路径
+        # 如果输入路径是目录，递归遍历该目录下的所有文件
+        elif os.path.isdir(input_path):
+            process_directory(input_path)
+        else:
+            raise ValueError(f"输入路径 '{input_path}' 既不是文件也不是目录。")
+
+    def process_directory(directory):
+        """递归处理目录中的所有文件"""
+        for entry in os.listdir(directory):
+            full_path = os.path.join(directory, entry)
+            if os.path.isdir(full_path):
+                # 如果是目录，递归调用
+                process_directory(full_path)
+            elif os.path.isfile(full_path):
+                # 如果是文件，处理该文件
+                process_function(full_path)
 
     return wrapper
 
 
+def json_processor(func):
+    """
+    装饰器，用于处理 JSON 文件，将其内容解析为 Python 对象，并传递给被装饰函数。
+    """
+    @wraps(func)
+    def wrapper(file_path):
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                data = json.load(f)  # 解析 JSON 文件
+            return func(data)  # 将解析后的数据传递给被装饰函数
+        except json.JSONDecodeError as e:
+            print(f"错误: 无法解析 JSON 文件 '{file_path}': {e}")
+            return None  # 返回 None 作为默认值
+        except FileNotFoundError:
+            print(f"错误: 文件 '{file_path}' 未找到。")
+            return None  # 返回 None 作为默认值
+        except Exception as e:
+            print(f"错误: 处理文件 '{file_path}' 时发生异常: {e}")
+            return None  # 返回 None 作为默认值
+
+    return wrapper
+
 class CsvHelper:
 
     @staticmethod
-    def csv_processor(file_path, has_header=True):
+    def csv_processor(has_header=True):
         """
         装饰器，用于处理 CSV 文件，将其内容解析为字典数组或元组数组，并传递给被装饰函数。
-
+        
         Args:
-            file_path (str): CSV 文件的路径。
             has_header (bool): 是否包含表头。如果为 True，返回字典数组；否则返回元组数组。
-
+        
         Returns:
             function: 包装后的函数。
         """
         def decorator(func):
             @wraps(func)
-            def wrapper(*args, **kwargs):
-                with open(file_path, mode='r', encoding='utf-8') as f:
-                    if has_header:
-                        reader = csv.DictReader(f)  # 包含表头，解析为字典
-                        data = [row for row in reader]
-                    else:
-                        reader = csv.reader(f)  # 不包含表头，解析为元组
-                        data = [tuple(row) for row in reader]
+            def wrapper(file_path):
+                try:
+                    with open(file_path, mode='r', encoding='utf-8') as f:
+                        if has_header:
+                            reader = csv.DictReader(f)  # 包含表头，解析为字典
+                            data = [row for row in reader]
+                        else:
+                            reader = csv.reader(f)  # 不包含表头，解析为元组
+                            data = [tuple(row) for row in reader]
 
-                # 将解析的内容传递给被装饰函数，并返回结果
-                return func(data, *args, **kwargs)
+                    # 将解析的内容传递给被装饰函数，并返回结果
+                    return func(data)
+                except FileNotFoundError:
+                    print(f"错误: 文件 '{file_path}' 未找到。")
+                    return None
+                except Exception as e:
+                    print(f"错误: 处理文件 '{file_path}' 时发生异常: {e}")
+                    return None
+
             return wrapper
         return decorator
 
