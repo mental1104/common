@@ -1,9 +1,10 @@
-import pytest
 import os
+import json
 import csv
-from io import StringIO
-from unittest.mock import MagicMock  # 从unittest.mock中导入MagicMock
-from mental1104.file import file_iterator, CsvHelper
+import pytest
+import unittest
+from unittest.mock import call, mock_open, patch, Mock
+from mental1104.file import file_iterator, CsvHelper, json_processor
 
 # 测试用例
 class TestFileIterator:
@@ -19,27 +20,38 @@ class TestFileIterator:
             ["file3.txt"]  # dir2 目录下的文件
         ])
 
-        # 模拟 os.path.isdir 返回值，模拟所有目录都为 True
-        mock_isdir = mocker.patch("os.path.isdir", side_effect=lambda x: x in ["/mock/path/dir1", "/mock/path/dir2"])
+        # 模拟 os.path.isdir 返回值，指定哪些是目录
+        mocker.patch("os.path.isdir", side_effect=lambda x: x in ["/mock/path", "/mock/path/dir1", "/mock/path/dir2"])
 
-        # 模拟 os.path.isfile 返回值，模拟文件路径
-        mock_isfile = mocker.patch("os.path.isfile", side_effect=lambda x: x in [
+        # 模拟 os.path.isfile 返回值，指定哪些是文件
+        mocker.patch("os.path.isfile", side_effect=lambda x: x in [
             "/mock/path/dir1/file1.txt",
             "/mock/path/dir1/file2.txt",
             "/mock/path/dir2/file3.txt"
         ])
 
-        # 记录 process_function 被调用的参数
-        processed_files = []
+        # 创建一个用于记录被处理文件的函数
+        mock_process_function = mocker.Mock()
 
-        def process_function(file):
-            processed_files.append(file)
-
-        # 包裹原始函数
-        decorated_function = file_iterator(process_function)
+        # 应用装饰器
+        decorated_function = file_iterator(mock_process_function)
 
         # 执行被装饰的函数
         decorated_function(input_path)
 
-        # 断言 process_function 函数被调用的文件列表
-        assert processed_files == ["file1.txt", "file2.txt", "file3.txt"]
+        # 验证 os.listdir 被正确调用
+        mock_listdir.assert_has_calls([
+            call("/mock/path"),
+            call("/mock/path/dir1"),
+            call("/mock/path/dir2"),
+        ])
+
+        # 验证处理函数被正确调用了三次，并且参数是文件的完整路径
+        mock_process_function.assert_has_calls([
+            call("/mock/path/dir1/file1.txt"),
+            call("/mock/path/dir1/file2.txt"),
+            call("/mock/path/dir2/file3.txt"),
+        ])
+
+        # 确保处理函数的调用次数符合预期
+        assert mock_process_function.call_count == 3
