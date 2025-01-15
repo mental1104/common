@@ -1,7 +1,7 @@
 import pytest
 import asyncio
 import functools
-from mental1104.concurrent import CoroutinePool  # 请替换为实际模块路径
+from mental1104.concurrent import CoroutinePool
 
 
 class TestCoroutinePool:

@@ -14,7 +14,7 @@ class TestTimedDecorators:
         """
         测试 async_timed 装饰器
         """
-        @async_timed()
+        @async_timed
         async def sample_async_function(x, y):
             await asyncio.sleep(1)  # 模拟异步耗时操作
             return x + y
@@ -37,7 +37,7 @@ class TestTimedDecorators:
         """
         测试 timed 装饰器
         """
-        @timed()
+        @timed
         def sample_function(x, y):
             time.sleep(1)  # 模拟同步耗时操作
             return x * y

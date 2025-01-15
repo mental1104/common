@@ -3,36 +3,34 @@ import time
 from typing import Callable, Any
 import logging
 
-def async_timed():
-    def wrapper(func: Callable) -> Callable:
-        @functools.wraps(func)
-        async def wrapped(*args, **kwargs) -> Any:
-            logging.debug(f'starting {func} with args {args} {kwargs}')
-            start = time.time()
-            try:
-                return await func(*args, **kwargs)
-            finally:
-                end = time.time()
-                total = end - start
-                logging.debug(f'finished {func} in {total:.4f} second(s)')
-        return wrapped
-    return wrapper
+# 无参的 async_timed 装饰器
+def async_timed(func: Callable) -> Callable:
+    @functools.wraps(func)
+    async def wrapped(*args, **kwargs) -> Any:
+        logging.debug(f'starting {func} with args {args} {kwargs}')
+        start = time.time()
+        try:
+            return await func(*args, **kwargs)
+        finally:
+            end = time.time()
+            total = end - start
+            logging.debug(f'finished {func} in {total:.4f} second(s)')
+    return wrapped
 
 
-def timed():
-    def wrapper(func: Callable) -> Callable:
-        @functools.wraps(func)
-        def wrapped(*args, **kwargs) -> Any:
-            logging.debug(f'starting {func} with args {args} {kwargs}')
-            start = time.time()
-            try:
-                return func(*args, **kwargs)
-            finally:
-                end = time.time()
-                total = end - start
-                logging.debug(f'finished {func} in {total:.4f} second(s)')
-        return wrapped
-    return wrapper
+# 无参的 timed 装饰器
+def timed(func: Callable) -> Callable:
+    @functools.wraps(func)
+    def wrapped(*args, **kwargs) -> Any:
+        logging.debug(f'starting {func} with args {args} {kwargs}')
+        start = time.time()
+        try:
+            return func(*args, **kwargs)
+        finally:
+            end = time.time()
+            total = end - start
+            logging.debug(f'finished {func} in {total:.4f} second(s)')
+    return wrapped
 
 
 def parse_time(time_str):
