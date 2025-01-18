@@ -1,0 +1,9 @@
+[submodule "INSTALLROOT/lib/rapidjson"]
+	path = INSTALLROOT/lib/rapidjson
+	url = https://github.com/Tencent/rapidjson.git
+[submodule "INSTALLROOT/lib/pystring"]
+	path = INSTALLROOT/lib/pystring
+	url = https://github.com/imageworks/pystring.git
+[submodule "INSTALLROOT/lib/cJSON"]
+	path = INSTALLROOT/lib/cJSON
+	url = https://github.com/DaveGamble/cJSON.git
