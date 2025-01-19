@@ -136,24 +136,30 @@ RUN pip3 install  -i https://mirrors.aliyun.com/pypi/simple -r /root/requirement
 
 # 安装 cJSON
 COPY INSTALLROOT/lib/ /tmp/lib
-RUN cd /tmp/lib && unzip cJSON-master.zip && cd cJSON-master && \
+RUN cd /tmp/lib && cd cJSON && \
     mkdir build && \
     cd build && \
     cmake -DCMAKE_INSTALL_PREFIX=/usr/local .. && \
     make -j$(nproc)&& \
     make install && \
-    cd /tmp/lib && rm -rf cJSON-master*
+    cd /tmp/lib && rm -rf cJSON*
 
 # 安装pystring
-RUN cd /tmp/lib && unzip pystring-master.zip && cd pystring-master && \
+RUN cd /tmp/lib && cd pystring && \
 mkdir build && cd build && cmake .. && make -j$(nproc) && make install && \
-cd /tmp/lib && rm -rf pystring-master*
+cd /tmp/lib && rm -rf pystring*
 
 # 安装rapidjson
-RUN cd /tmp/lib && unzip rapidjson-master.zip && cd rapidjson-master && \
+RUN cd /tmp/lib && cd rapidjson && \
     mkdir build && cd build && cmake -DRAPIDJSON_BUILD_CXX11=OFF -DCMAKE_CXX_STANDARD=20 -DCMAKE_CXX_STANDARD_REQUIRED=ON -DCMAKE_CXX_EXTENSIONS=OFF .. && \
     make -j$(nproc) && make install && \
-    cd /tmp/lib && rm -rf rapidjson-master*
+    cd /tmp/lib && rm -rf rapidjson*
+
+# 安装DataStruncture
+RUN cd /tmp/lib && cd DataStructure && \
+    mkdir build && cd build && cmake .. && \
+    make -j$(nproc) && make install && \
+    cd /tmp/lib && rm -rf DataStructure*
 
 ## 5. 安装自定义代码
 
@@ -194,6 +200,7 @@ ENV SSH_PRIVATE_KEY=${SSH_PRIVATE_KEY}
 RUN echo "root:${SSH_PRIVATE_KEY}" | chpasswd && mkdir -p /run/sshd && echo 'PasswordAuthentication yes' | tee -a /etc/ssh/sshd_config && \
     echo 'PermitRootLogin yes' | tee -a /etc/ssh/sshd_config
 
+RUN ldconfig
 
 EXPOSE 22
 CMD ["/usr/sbin/sshd", "-D"]
