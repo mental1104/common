@@ -7,3 +7,6 @@
 [submodule "INSTALLROOT/lib/cJSON"]
 	path = INSTALLROOT/lib/cJSON
 	url = https://github.com/DaveGamble/cJSON.git
+[submodule "INSTALLROOT/lib/DataStructure"]
+	path = INSTALLROOT/lib/DataStructure
+	url = https://github.com/mental1104/DataStructure.git
