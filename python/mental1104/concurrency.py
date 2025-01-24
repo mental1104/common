@@ -1,16 +1,23 @@
+'''
+Date: 2025-01-24 13:55:33
+Author: mental1104 mental1104@gmail.com
+LastEditors: mental1104 mental1104@gmail.com
+LastEditTime: 2025-01-24 22:51:17
+'''
 import functools
 import asyncio
+from asyncio import Future
 from typing import List, Callable, Generator
 from mental1104.timed import async_timed
 
 # 策略基类
 class TaskExecutionStrategy:
-    def execute(self, loop, tasks: List[Callable[[], asyncio.Future]]):
+    def execute(self, loop, tasks: List[Callable[[], Future]]):
         raise NotImplementedError("Each strategy must implement the 'execute' method.")
 
 # 策略1：所有任务一起执行，等待所有完成
 class GatherStrategy(TaskExecutionStrategy):
-    async def execute(self, loop, tasks: List[Callable[[], asyncio.Future]]) -> List:
+    async def execute(self, loop, tasks: List[Callable[[], Future]]) -> List:
         return await asyncio.gather(*tasks, return_exceptions=True)
 
 class CoroutinePool:
