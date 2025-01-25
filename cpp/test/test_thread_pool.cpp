@@ -79,7 +79,7 @@ TEST(ThreadPoolTest, IOBoundTasks) {
     std::vector<std::future<void>> futures;
 
     for (int i = 0; i < numTasks; ++i) {
-        futures.push_back(pool.submit([i] {
+        futures.push_back(pool.submit([] {
             std::this_thread::sleep_for(std::chrono::milliseconds(50)); // 模拟 I/O 等待
         }));
     }
