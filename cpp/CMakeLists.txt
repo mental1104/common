@@ -17,6 +17,7 @@ set(CMAKE_CXX_STANDARD 20)  # 可以是 11, 14, 17, 20, 23 等
 set(CMAKE_CXX_STANDARD_REQUIRED ON)  # 确保使用指定的标准版本
 
 message(CXX_STANDARD " ${CMAKE_CXX_STANDARD}")
+
 # 设置编译选项
 set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -Wall -Wextra -g")
 set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O2 -DNDEBUG")
@@ -26,11 +27,10 @@ set(CMAKE_CXX_FLAGS_MINSIZEREL "${CMAKE_CXX_FLAGS_MINSIZEREL} -Os -DNDEBUG")
 # 包含头文件目录
 include_directories(${PROJECT_SOURCE_DIR}/include)
 
-# 查找 src 中的所有源文件
-# file(GLOB SOURCES "src/*.cpp")
+# 包含 googletest 和 googlemock 的头文件目录
+add_subdirectory(thirdparty/googletest)
 
-# 创建静态库或动态库
-# add_library(mental1104 SHARED ${SOURCES})  # STATIC 可以替换为 SHARED 创建动态库
+include_directories(${gtest_SOURCE_DIR}/include ${gmock_SOURCE_DIR}/include)
 
 # 安装头文件
 install(DIRECTORY include/mental1104
@@ -39,10 +39,6 @@ install(DIRECTORY include/mental1104
 # 安装目标库
 # install(TARGETS mental1104
 #         DESTINATION lib)  # 安装到 /usr/local/lib
-
-# 添加测试可执行文件
-# add_executable(test_example tests/test_example.cpp)
-# target_link_libraries(test_example my_library)  # 链接库到测试
 
 # 3. 设置测试目录
 enable_testing()
@@ -59,8 +55,8 @@ foreach(TEST_FILE ${TEST_FILES})
     get_filename_component(TEST_NAME ${TEST_FILE} NAME_WE)
     # 为每个测试文件创建独立的可执行文件
     add_executable(${TEST_NAME} ${TEST_FILE})
-    # 链接所需的库（例如 GTest 或其他库）
-    target_link_libraries(${TEST_NAME} PRIVATE gtest gtest_main pthread)
+    # 链接 gtest, gmock 和 pthread
+    target_link_libraries(${TEST_NAME} PRIVATE gtest gmock gtest_main pthread)
     # 将可执行文件添加为一个 CTest 测试
     add_test(NAME ${TEST_NAME} COMMAND ${TEST_NAME})
 endforeach()
