@@ -2,7 +2,7 @@
  * @Date: 2025-01-31 13:34:35
  * @Author: mental1104 mental1104@gmail.com
  * @LastEditors: mental1104 mental1104@gmail.com
- * @LastEditTime: 2025-01-31 13:34:38
+ * @LastEditTime: 2025-01-31 14:43:38
  */
 #include <gtest/gtest.h>
 #include "mental1104/cache.h"  // 引入你的LRUCache类定义
@@ -33,7 +33,7 @@ TEST(LRUCacheTest, BasicCacheBehavior) {
 
 // 测试无限容量缓存
 TEST(LRUCacheTest, UnlimitedCacheBehavior) {
-    auto cache = make_cache(compute);  // 使用 make_cache 创建无限容量缓存
+    auto cache = make_cache<int, int>(compute);  // 使用 make_cache 创建无限容量缓存
 
     // 测试无限容量缓存，验证缓存大小没有限制
     EXPECT_EQ(cache(1), 2);
