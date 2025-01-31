@@ -2,10 +2,11 @@
  * @Date: 2025-01-31 13:34:35
  * @Author: mental1104 mental1104@gmail.com
  * @LastEditors: mental1104 mental1104@gmail.com
- * @LastEditTime: 2025-01-31 14:43:38
+ * @LastEditTime: 2025-01-31 22:18:06
  */
 #include <gtest/gtest.h>
 #include "mental1104/cache.h"  // 引入你的LRUCache类定义
+#include "mental1104/container_printer.h"
 
 // 一个简单的计算函数，用来作为缓存的测试函数
 int compute(int x) {
@@ -67,4 +68,34 @@ TEST(LRUCacheTest, CacheHitBehavior) {
     // 检查缓存命中情况
     EXPECT_EQ(cache(1), 2);  // 1 被移除，所以这里会重新计算
     EXPECT_EQ(cache(4), 8);  // 4 被缓存，应该命中
+}
+
+TEST(LRUCacheTest, ComputeFibonacci50) {
+    std::unique_ptr<LRUCache<int, unsigned long long>> cache_ptr;
+
+    std::function<unsigned long long(int)> fibonacci = [&](int n) -> unsigned long long {
+        if (n == 0) return 0;
+        if (n == 1) return 1;
+
+        // 打印调试信息
+        std::cout << "Calculating Fibonacci(" << n << ")" << std::endl;
+
+        return (*cache_ptr)(n - 1) + (*cache_ptr)(n - 2);
+    };
+
+    // 绑定 LRUCache（容量 50，使用 Fibonacci 计算）
+    cache_ptr = std::make_unique<LRUCache<int, unsigned long long>>(40, fibonacci);
+
+    // 计算 Fibonacci(50)
+    unsigned long long fib40 = (*cache_ptr)(40);
+    
+    mental1104::ContainerPrinter::print(std::move(*cache_ptr));
+    // 打印计算结果
+    std::cout << "Computed Fibonacci(40): " << fib40 << std::endl;
+
+    // 预期 Fibonacci(50) 的值
+    unsigned long long expected_fib40 = 102334155ULL;
+
+    // 断言
+    EXPECT_EQ(fib40, expected_fib40);
 }

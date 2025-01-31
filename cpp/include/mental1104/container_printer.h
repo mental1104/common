@@ -167,7 +167,7 @@ class ContainerPrinter {
 
     // 集成 LRUCache 的 print 方法，输出为 JSON 格式
     template <typename Ret, typename... Args>
-    static void print_internal(LRUCache<Ret, Args...>&& cache, std::ostream& os) {
+    static void print_internal(const LRUCache<Ret, Args...>& cache, std::ostream& os) {
         os << "{\n";
         
         bool first = true;
@@ -213,7 +213,7 @@ class ContainerPrinter {
 
     // Print LRUCache specifically
     template <typename Ret, typename... Args>
-    static void print(LRUCache<Ret, Args...>&& cache, std::ostream& os) {
+    static void print(LRUCache<Ret, Args...>&& cache, std::ostream& os = std::cout) {
         std::lock_guard<std::mutex> guard(ContainerPrinter::print_mutex);
         ContainerPrinter::print_internal(std::move(cache), os);
     }
