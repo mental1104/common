@@ -10,6 +10,7 @@
 #include <unordered_map>
 #include <vector>
 
+#include "cache.h"
 // 判断编译器是否支持 C++20
 #if __cplusplus >= 202002L
 #include <source_location>
@@ -164,6 +165,34 @@ class ContainerPrinter {
         out << "\n}" << std::endl;
     }
 
+    // 集成 LRUCache 的 print 方法，输出为 JSON 格式
+    template <typename Ret, typename... Args>
+    static void print_internal(LRUCache<Ret, Args...>&& cache, std::ostream& os) {
+        os << "{\n";
+        
+        bool first = true;
+        for (auto it = cache.lru_list.begin(); it != cache.lru_list.end(); ++it) {
+            if (!first) {
+                os << ",\n";
+            }
+            first = false;
+
+            // 打印 Key 的元组，按顺序转换为 JSON 的键
+            os << "    \"";
+            bool key_first = true;
+            
+            // Use std::apply to unpack and print each element of the tuple
+            std::apply([&](const auto&... key_elements) {
+                ((key_first ? (key_first = false, os << key_elements) : (os << "_" << key_elements)), ...);
+            }, it->first);
+
+            // 打印键值对
+            os << "\": \"" << it->second << "\"";
+        }
+        
+        os << "\n}\n";
+    }
+
    public:
     // Unified print function, automatically capture file and line numbers
     template <typename Container>
@@ -180,6 +209,13 @@ class ContainerPrinter {
     {
         std::lock_guard<std::mutex> guard(ContainerPrinter::print_mutex);
         ContainerPrinter::print_internal(c, show_info, out, loc);
+    }
+
+    // Print LRUCache specifically
+    template <typename Ret, typename... Args>
+    static void print(LRUCache<Ret, Args...>&& cache, std::ostream& os) {
+        std::lock_guard<std::mutex> guard(ContainerPrinter::print_mutex);
+        ContainerPrinter::print_internal(std::move(cache), os);
     }
 };
 
