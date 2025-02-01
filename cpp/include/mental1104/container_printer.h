@@ -193,6 +193,33 @@ class ContainerPrinter {
         os << "\n}\n";
     }
 
+    template <typename Ret, typename... Args>
+    static void print_internal(const LFUCache<Ret, Args...>& cache, std::ostream& os) {
+        os << "{\n";
+
+        bool first_entry = true;
+        for (const auto& [key, entry] : cache.cache) {
+            if (!first_entry) {
+                os << ",\n";
+            }
+            first_entry = false;
+
+            os << "    \"";
+
+            // 将 key（tuple 类型）转换为字符串
+            bool key_first = true;
+            std::apply([&](const auto&... key_elements) {
+                ((key_first ? (key_first = false, os << key_elements) : (os << "_" << key_elements)), ...);
+            }, key);
+
+            os << "\": {\n"
+            << "        \"freq\": " << entry.frequency << ",\n"
+            << "        \"value\": " << entry.value << "\n"
+            << "    }";
+        }
+
+        os << "\n}\n";
+    }
    public:
     // Unified print function, automatically capture file and line numbers
     template <typename Container>
@@ -216,6 +243,13 @@ class ContainerPrinter {
     static void print(LRUCache<Ret, Args...>&& cache, std::ostream& os = std::cout) {
         std::lock_guard<std::mutex> guard(ContainerPrinter::print_mutex);
         ContainerPrinter::print_internal(std::move(cache), os);
+    }
+
+    // 打印 LFUCache
+    template <typename Ret, typename... Args>
+    static void print(LFUCache<Ret, Args...>&& cache, std::ostream& os = std::cout) {
+        std::lock_guard<std::mutex> guard(print_mutex);
+        print_internal(std::move(cache), os);
     }
 };
 

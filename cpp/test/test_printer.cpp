@@ -456,3 +456,112 @@ TEST(LRUCacheTest, PrintInternalWithLRUBehavior) {
 }
 )");
 }
+
+TEST(LFUCacheTest, PrintInternal) {
+    auto square = [](int x) { return x * x; };
+    auto cache = make_lfu_cache<int, int>(3, square);
+    std::stringstream ss;
+
+    // 插入元素并检查输出
+    cache(1); // 1 -> 1
+    mental1104::ContainerPrinter::print(std::move(cache), ss);
+    EXPECT_EQ(ss.str(), R"({
+    "1": {
+        "freq": 1,
+        "value": 1
+    }
+}
+)");
+    ss.str(""); ss.clear();
+
+    cache(2); // 2 -> 4
+    mental1104::ContainerPrinter::print(std::move(cache), ss);
+    EXPECT_EQ(ss.str(), R"({
+    "2": {
+        "freq": 1,
+        "value": 4
+    },
+    "1": {
+        "freq": 1,
+        "value": 1
+    }
+}
+)");
+    ss.str(""); ss.clear();
+
+    cache(3); // 3 -> 9
+    mental1104::ContainerPrinter::print(std::move(cache), ss);
+    EXPECT_EQ(ss.str(), R"({
+    "3": {
+        "freq": 1,
+        "value": 9
+    },
+    "2": {
+        "freq": 1,
+        "value": 4
+    },
+    "1": {
+        "freq": 1,
+        "value": 1
+    }
+}
+)");
+    ss.str(""); ss.clear();
+
+    cache(4); // 淘汰 1, 4 -> 16
+    mental1104::ContainerPrinter::print(std::move(cache), ss);
+    EXPECT_EQ(ss.str(), R"({
+    "4": {
+        "freq": 1,
+        "value": 16
+    },
+    "3": {
+        "freq": 1,
+        "value": 9
+    },
+    "2": {
+        "freq": 1,
+        "value": 4
+    }
+}
+)");
+    ss.str(""); ss.clear();
+
+    cache(2); // 访问 2, 频率增加
+    mental1104::ContainerPrinter::print(std::move(cache), ss);
+    EXPECT_EQ(ss.str(), R"({
+    "4": {
+        "freq": 1,
+        "value": 16
+    },
+    "3": {
+        "freq": 1,
+        "value": 9
+    },
+    "2": {
+        "freq": 2,
+        "value": 4
+    }
+}
+)");
+
+    ss.str(""); ss.clear();
+    // 插入新元素，驱逐一个频率为 1 的元素
+    cache(5); // 驱逐 3，5 -> 25
+    mental1104::ContainerPrinter::print(std::move(cache), ss);
+    EXPECT_EQ(ss.str(), R"({
+    "5": {
+        "freq": 1,
+        "value": 25
+    },
+    "4": {
+        "freq": 1,
+        "value": 16
+    },
+    "2": {
+        "freq": 2,
+        "value": 4
+    }
+}
+)");
+}
