@@ -2,7 +2,7 @@
  * @Date: 2025-01-31 13:34:35
  * @Author: mental1104 mental1104@gmail.com
  * @LastEditors: mental1104 mental1104@gmail.com
- * @LastEditTime: 2025-01-31 22:18:06
+ * @LastEditTime: 2025-02-01 11:33:56
  */
 #include <gtest/gtest.h>
 #include "mental1104/cache.h"  // 引入你的LRUCache类定义
@@ -83,7 +83,7 @@ TEST(LRUCacheTest, ComputeFibonacci50) {
         return (*cache_ptr)(n - 1) + (*cache_ptr)(n - 2);
     };
 
-    // 绑定 LRUCache（容量 50，使用 Fibonacci 计算）
+    // 绑定 LRUCache（容量 40，使用 Fibonacci 计算）
     cache_ptr = std::make_unique<LRUCache<int, unsigned long long>>(40, fibonacci);
 
     // 计算 Fibonacci(50)
@@ -93,9 +93,51 @@ TEST(LRUCacheTest, ComputeFibonacci50) {
     // 打印计算结果
     std::cout << "Computed Fibonacci(40): " << fib40 << std::endl;
 
-    // 预期 Fibonacci(50) 的值
+    // 预期 Fibonacci(40) 的值
     unsigned long long expected_fib40 = 102334155ULL;
 
     // 断言
     EXPECT_EQ(fib40, expected_fib40);
+}
+
+
+// 计算平方的模拟慢函数
+int slowFunction(int x) {
+    return x * x;
+}
+
+// 测试 LFU 基本功能
+TEST(LFUCacheTest, BasicFunctionality) {
+    auto cachedFunc = make_lfu_cache<int, int>(2, slowFunction);
+
+    EXPECT_EQ(cachedFunc(2), 4); // 计算并缓存 2
+    EXPECT_EQ(cachedFunc(3), 9); // 计算并缓存 3
+    EXPECT_EQ(cachedFunc(2), 4); // 直接命中 2
+    EXPECT_EQ(cachedFunc(3), 9); // 直接命中 3
+}
+
+// 测试 LFU 淘汰策略
+TEST(LFUCacheTest, EvictionPolicy) {
+    auto cachedFunc = make_lfu_cache<int, int>(2, slowFunction);
+    
+    EXPECT_EQ(cachedFunc(2), 4); // 计算并缓存 2
+    EXPECT_EQ(cachedFunc(3), 9); // 计算并缓存 3
+    EXPECT_EQ(cachedFunc(2), 4); // 访问 2，使 2 频率增加
+    EXPECT_EQ(cachedFunc(4), 16); // 淘汰 3（因 3 频率最低）
+    EXPECT_EQ(cachedFunc(2), 4); // 仍然在缓存中
+    EXPECT_EQ(cachedFunc(4), 16); // 仍然在缓存中
+    EXPECT_EQ(cachedFunc(3), 9); // 3 被淘汰，需重新计算
+}
+
+// 测试 LFU 频率更新
+TEST(LFUCacheTest, FrequencyUpdate) {
+    auto cachedFunc = make_lfu_cache<int, int>(2, slowFunction);
+    
+    EXPECT_EQ(cachedFunc(1), 1);  // 计算并缓存 1
+    EXPECT_EQ(cachedFunc(2), 4);  // 计算并缓存 2
+    EXPECT_EQ(cachedFunc(1), 1);  // 访问 1，使 1 频率增加
+    EXPECT_EQ(cachedFunc(3), 9);  // 淘汰 2（因 2 频率最低）
+    EXPECT_EQ(cachedFunc(1), 1);  // 仍然在缓存中
+    EXPECT_EQ(cachedFunc(3), 9);  // 仍然在缓存中
+    EXPECT_EQ(cachedFunc(2), 4);  // 2 被淘汰，需重新计算
 }
