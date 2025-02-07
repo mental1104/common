@@ -161,6 +161,10 @@ RUN cd /tmp/lib && cd DataStructure && \
     make -j$(nproc) && make install && \
     cd /tmp/lib && rm -rf DataStructure*
 
+# 安装lazyvim
+COPY INSTALLROOT/root/.config /root/.config
+COPY INSTALLROOT/root/.local /root/.local
+
 ## 5. 安装自定义代码
 
 ### 5.1 安装cpp代码
