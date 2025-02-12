@@ -204,6 +204,9 @@ ENV SSH_PRIVATE_KEY=${SSH_PRIVATE_KEY}
 RUN echo "root:${SSH_PRIVATE_KEY}" | chpasswd && mkdir -p /run/sshd && echo 'PasswordAuthentication yes' | tee -a /etc/ssh/sshd_config && \
     echo 'PermitRootLogin yes' | tee -a /etc/ssh/sshd_config
 
+### 6.5 调整时区
+RUN ln -sf /usr/share/zoneinfo/Asia/Shanghai /etc/localtime
+
 RUN ldconfig
 
 EXPOSE 22
