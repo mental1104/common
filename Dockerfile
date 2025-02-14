@@ -82,6 +82,7 @@ RUN apt-get install -y \
     cron \
     logrotate \
     pandoc \
+    jq \
     && \
     ln -s /lib/x86_64-linux-gnu/libtinfo.so.6 /lib/x86_64-linux-gnu/libtinfow.so.6 && ldconfig && \
     cd /usr/src/googletest && cmake . && make -j$(nproc) && make install
