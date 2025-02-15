@@ -209,6 +209,9 @@ RUN echo "root:${SSH_PRIVATE_KEY}" | chpasswd && mkdir -p /run/sshd && echo 'Pas
 RUN ln -sf /usr/share/zoneinfo/Asia/Shanghai /etc/localtime
 ### 6.6 映射neovim的clangd为系统clangd
 RUN mkdir -p /root/.local/share/nvim/mason/packages/clangd/clangd_19.1.2/bin && ln -s /usr/bin/clangd /root/.local/share/nvim/mason/packages/clangd/clangd_19.1.2/bin/clangd
+### 6.7 送入clang-format
+COPY INSTALLROOT/root/.clang-format /usr/lib/llvm-18/bin
+COPY INSTALLROOT/root/.clang-format /root
 
 RUN ldconfig
 
