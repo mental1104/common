@@ -43,7 +43,6 @@ local function get_git_header(ext)
     return lines
 end
 
--- 针对头文件生成 header guard，同时调整空行与光标位置
 local function get_header_for_h_file(filename)
     -- 原始的宏定义
     local macro = string.upper(filename:gsub("%.", "_")) .. "_H"
@@ -177,3 +176,4 @@ vim.api.nvim_create_autocmd("BufWritePre", {
     pattern = { "*.py", "*.sh", "*.c", "*.cpp", "*.h", "*.cc", "*.hh", "*.go", "*.hpp" },
     callback = update_last_edit_time
 })
+
