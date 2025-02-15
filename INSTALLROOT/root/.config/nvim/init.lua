@@ -1,6 +1,16 @@
 -- bootstrap lazy.nvim, LazyVim and your plugins
 require("config.lazy")
 
+-- 设置制表符为 4 个空格
+vim.opt.tabstop = 4
+
+-- 设置自动缩进的宽度为 4 个空格
+vim.opt.shiftwidth = 4
+
+-- 使用空格代替制表符
+vim.opt.expandtab = true
+
+
 local function get_git_user()
     local git_user = vim.fn.systemlist("git config --global user.name")[1]
     if git_user and git_user ~= "" then return git_user end
