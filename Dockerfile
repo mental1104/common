@@ -4,18 +4,15 @@ FROM ubuntu:24.04
 
 ENV DEBIAN_FRONTEND=noninteractive
 
-# 更新软件源并使用阿里云镜像
+RUN chmod 1777 /tmp
+
+## 1. 安装基础库
 RUN echo "deb http://mirrors.aliyun.com/ubuntu/ focal main restricted universe multiverse" > /etc/apt/sources.list && \
     echo "deb http://mirrors.aliyun.com/ubuntu/ focal-updates main restricted universe multiverse" >> /etc/apt/sources.list && \
     echo "deb http://mirrors.aliyun.com/ubuntu/ focal-backports main restricted universe multiverse" >> /etc/apt/sources.list && \
     echo "deb http://mirrors.aliyun.com/ubuntu/ focal-security main restricted universe multiverse" >> /etc/apt/sources.list && \
     echo "deb https://mirrors.tuna.tsinghua.edu.cn/clickhouse/deb stable main" | tee /etc/apt/sources.list.d/clickhouse.list && \
-    apt-get update && apt-get upgrade -y
-
-RUN chmod 1777 /tmp
-
-## 1. 安装基础库
-RUN apt-get install -y \
+    apt-get update && apt-get upgrade -y && apt-get install -y \
     gcc \
     g++ \
     make \
@@ -83,6 +80,9 @@ RUN apt-get install -y \
     logrotate \
     pandoc \
     jq \
+    xclip \
+    xsel \
+    clangd \
     && \
     ln -s /lib/x86_64-linux-gnu/libtinfo.so.6 /lib/x86_64-linux-gnu/libtinfow.so.6 && ldconfig && \
     cd /usr/src/googletest && cmake . && make -j$(nproc) && make install
@@ -100,7 +100,7 @@ COPY INSTALLROOT/amd64 /
 ### 2.2 安装golang
 RUN tar -C /usr/local -xzf /tmp/go1.23.4.linux-amd64.tar.gz
 ENV PATH $PATH:/usr/local/go/bin
-ENV GOPROXY=https://mirrors.tencent.com/go/
+ENV GOPROXY=https://goproxy.cn,direct
 
 ENV GOPATH="/go"
 ENV GOBIN="/go/bin"
@@ -207,6 +207,8 @@ RUN echo "root:${SSH_PRIVATE_KEY}" | chpasswd && mkdir -p /run/sshd && echo 'Pas
 
 ### 6.5 调整时区
 RUN ln -sf /usr/share/zoneinfo/Asia/Shanghai /etc/localtime
+### 6.6 映射neovim的clangd为系统clangd
+RUN mkdir -p /root/.local/share/nvim/mason/packages/clangd/clangd_19.1.2/bin && ln -s /usr/bin/clangd /root/.local/share/nvim/mason/packages/clangd/clangd_19.1.2/bin/clangd
 
 RUN ldconfig
 
