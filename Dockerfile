@@ -83,6 +83,8 @@ RUN echo "deb http://mirrors.aliyun.com/ubuntu/ focal main restricted universe m
     xclip \
     xsel \
     clangd \
+    libmpfr-dev \
+    libgmp-dev \
     && \
     ln -s /lib/x86_64-linux-gnu/libtinfo.so.6 /lib/x86_64-linux-gnu/libtinfow.so.6 && ldconfig && \
     cd /usr/src/googletest && cmake . && make -j$(nproc) && make install
