@@ -213,6 +213,8 @@ RUN mkdir -p /root/.local/share/nvim/mason/packages/clangd/clangd_19.1.2/bin && 
 COPY INSTALLROOT/root/.clang-format /usr/lib/llvm-18/bin
 COPY INSTALLROOT/root/.clang-format /root
 
+### 6.8 建立go相关的软链接
+RUN ln -s /usr/local/go/bin/go /usr/bin/go && ln -s /go/bin/gopls /usr/bin/gopls
 RUN ldconfig
 
 EXPOSE 22
