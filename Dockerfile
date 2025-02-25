@@ -168,6 +168,16 @@ RUN cd /tmp/lib && cd DataStructure && \
 COPY INSTALLROOT/root/.config /root/.config
 COPY INSTALLROOT/root/.local /root/.local
 
+# 安装redis相关库
+RUN cd /tmp/lib && cd hiredis && \
+    mkdir build && cd build && cmake .. && \
+    make -j$(nproc) && make install && \
+    cd /tmp/lib && rm -rf hiredis* && \
+    cd redis-plus-plus && \
+    mkdir build && cd build && cmake .. && \
+    make -j$(nproc) && make install && \
+    cd /tmp/lib && rm -rf redis-plus-plus*
+
 ## 5. 安装自定义代码
 
 ### 5.1 安装cpp代码
