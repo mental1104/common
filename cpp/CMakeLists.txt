@@ -56,7 +56,7 @@ foreach(TEST_FILE ${TEST_FILES})
     # 为每个测试文件创建独立的可执行文件
     add_executable(${TEST_NAME} ${TEST_FILE})
     # 链接 gtest, gmock 和 pthread
-    target_link_libraries(${TEST_NAME} PRIVATE gmp mpfr gtest gmock gtest_main pthread)
+    target_link_libraries(${TEST_NAME} PRIVATE hiredis redis++ gmp mpfr gtest gmock gtest_main pthread)
     # 将可执行文件添加为一个 CTest 测试
     add_test(NAME ${TEST_NAME} COMMAND ${TEST_NAME})
 endforeach()

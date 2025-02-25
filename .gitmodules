@@ -16,3 +16,9 @@
 [submodule "INSTALLROOT/lib/lazyvim"]
 	path = INSTALLROOT/lib/lazyvim
 	url = https://github.com/LazyVim/starter.git
+[submodule "INSTALLROOT/lib/hiredis"]
+	path = INSTALLROOT/lib/hiredis
+	url = git@github.com:redis/hiredis.git
+[submodule "INSTALLROOT/lib/redis-plus-plus"]
+	path = INSTALLROOT/lib/redis-plus-plus
+	url = git@github.com:sewenew/redis-plus-plus.git
