@@ -41,7 +41,7 @@ class TestRedisLock:
         except Exception as e:
             pytest.skip("Cannot connect to Redis: " + str(e))
 
-    def test_connection_context_manager(self):
+    def test_connection_context_manager(self, redis_client):
         """测试 RedisConnection 上下文管理器能否正常返回 Redis 客户端"""
         with RedisConnection() as client:
             assert client.ping() is True, "RedisConnection 未能正确连接到 Redis"
@@ -67,7 +67,7 @@ class TestRedisLock:
         assert acquired2, "释放后应能获取锁"
         lock2.unlock()
 
-    def test_multiprocess_lock(self):
+    def test_multiprocess_lock(self, redis_client):
         """测试多进程下使用 try_lock 与 unlock 保证互斥性"""
         def worker(counter, redis_params):
             with RedisConnection(

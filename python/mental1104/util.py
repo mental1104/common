@@ -1,9 +1,10 @@
 import time
 import os
 import re
-import sys
 import base64
 import asyncio
+import random
+from functools import singledispatch
 from datetime import datetime
 from Crypto.Cipher import AES
 from Crypto.Util.Padding import pad, unpad
@@ -94,6 +95,7 @@ class Encryption:
 
         return unpadded_plaintext.decode('utf-8')
 
+    @staticmethod
     def generate_salt(length=16):
         if length < 0:
             raise ValueError("Length must be non-negative")
@@ -112,3 +114,20 @@ class TimeHelper:
     def get_current_time(format="%Y-%m-%d %H:%M:%S", zone="Asia/Shanghai"):
         from zoneinfo import ZoneInfo
         return datetime.now(ZoneInfo(zone)).strftime(format)
+
+
+class RandomHelper:
+    get = singledispatch(lambda obj: f"default: {obj}")
+
+    @get.register
+    def _(data: list):
+        if not data:
+            raise ValueError("Cannot choose from an empty list.")
+        return random.choice(data)
+
+    @get.register
+    def _(data: dict):
+        if not data:
+            raise ValueError("Cannot choose from an empty dictionary.")
+        key = random.choice(list(data.keys()))
+        return key, data[key]
