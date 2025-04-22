@@ -1,11 +1,11 @@
 import pytest
 import os
-import sys
+import re
 import string
 from datetime import datetime
 from zoneinfo import ZoneInfo
 from unittest.mock import patch, AsyncMock
-from mental1104.util import delay, async_delay, StringHelper, Environment, Encryption, TimeHelper, MissingEnvVarError  
+from mental1104.util import delay, async_delay, StringHelper, Environment, Encryption, TimeHelper, MissingEnvVarError, RandomHelper
 
 class TestDelayFunction:
     def test_delay_positive(self):
@@ -239,3 +239,29 @@ class TestTimeHelper:
         invalid_zone = "Invalid/Zone"
         with pytest.raises(KeyError):
             TimeHelper.get_current_time(zone=invalid_zone)
+
+    def test_get_current_time_format(self):
+        time_str = TimeHelper.get_current_time()
+        # 检查格式是否为 YYYY-MM-DD HH:MM:SS
+        assert re.match(r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}", time_str)
+
+
+class TestRandomHelper:
+    def test_random_from_list(self):
+        items = [1, 2, 3, 4]
+        result = RandomHelper.get(items)
+        assert result in items
+
+    def test_random_from_dict(self):
+        data = {"a": 1, "b": 2}
+        key, value = RandomHelper.get(data)
+        assert key in data
+        assert value == data[key]
+
+    def test_random_from_empty_list_raises(self):
+        with pytest.raises(ValueError):
+            RandomHelper.get([])
+
+    def test_random_from_empty_dict_raises(self):
+        with pytest.raises(ValueError):
+            RandomHelper.get({})
