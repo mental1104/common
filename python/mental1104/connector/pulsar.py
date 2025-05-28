@@ -262,6 +262,9 @@ class Producer:
 
 class PulsarAdminHelper:
 
+    """
+    新增类的函数接口
+    """
     @staticmethod
     def ensure_tenant_namespace_topic(tenant, namespace=None, topic=None, partition=None):
         """
@@ -365,6 +368,9 @@ class PulsarAdminHelper:
             # 其他状态码为错误
             raise RuntimeError(f"Failed to create partitioned topic {topic}: {response.status_code} {response.text}")
 
+    """
+    查询类的函数接口
+    """
     @staticmethod
     def get_tenant_namespaces(tenant):
         """获取租户的所有命名空间"""
@@ -385,6 +391,28 @@ class PulsarAdminHelper:
             raise RuntimeError(
                 f"Failed to list topics for namespace {namespace}: {response.status_code} {response.text}")
         return response.json()
+
+    """
+    删除类的函数接口
+    """
+    @staticmethod
+    def cleanup_tenant(tenant):
+        """清理租户，确保删除所有命名空间和主题"""
+        try:
+            # 获取所有命名空间
+            namespaces = PulsarAdminHelper.get_tenant_namespaces(tenant)
+            for namespace in namespaces:
+                # 获取命名空间下的所有主题并删除
+                topics = PulsarAdminHelper.get_namespace_topics(namespace)
+                for topic in topics:
+                    PulsarAdminHelper.delete_topic(topic)
+                # 删除命名空间
+                PulsarAdminHelper.delete_namespace(namespace)
+            # 删除租户
+            PulsarAdminHelper.delete_tenant(tenant)
+            print(f"Successfully cleaned up tenant: {tenant}")
+        except Exception as e:
+            logging.exception(f"Failed to clean up tenant {tenant}: {e}")
 
     @staticmethod
     def delete_topic(topic):
@@ -417,25 +445,9 @@ class PulsarAdminHelper:
         if response.status_code not in [200, 204, 404]:
             raise RuntimeError(f"Failed to delete tenant {tenant}: {response.status_code} {response.text}")
 
-    @staticmethod
-    def cleanup_tenant(tenant):
-        """清理租户，确保删除所有命名空间和主题"""
-        try:
-            # 获取所有命名空间
-            namespaces = PulsarAdminHelper.get_tenant_namespaces(tenant)
-            for namespace in namespaces:
-                # 获取命名空间下的所有主题并删除
-                topics = PulsarAdminHelper.get_namespace_topics(namespace)
-                for topic in topics:
-                    PulsarAdminHelper.delete_topic(topic)
-                # 删除命名空间
-                PulsarAdminHelper.delete_namespace(namespace)
-            # 删除租户
-            PulsarAdminHelper.delete_tenant(tenant)
-            print(f"Successfully cleaned up tenant: {tenant}")
-        except Exception as e:
-            logging.exception(f"Failed to clean up tenant {tenant}: {e}")
-
+    """
+    存在性校验的函数接口
+    """
     @staticmethod
     def is_tenant_exists(tenant):
         """检查租户是否存在"""
@@ -483,6 +495,9 @@ class PulsarAdminHelper:
         topics = response.json()
         return f"{topic_type}://{tenant}/{namespace}/{topic}" in topics
 
+    """
+    topic详细信息相关接口
+    """
     @staticmethod
     def get_subscription_stat(topic, subscription):
         """获取指定 topic 的某个订阅的 stat 信息"""
@@ -502,6 +517,9 @@ class PulsarAdminHelper:
 
 import aiohttp
 class AsyncPulsarAdminHelper:
+    """
+    异步获取pulsar信息的api，适用于大批量查询场景
+    """
     @staticmethod
     async def fetch_topic_backlog(topic, subscription):
         """

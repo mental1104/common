@@ -13,6 +13,7 @@ import redis
 # -------------------------------
 class RedisConnection:
     """
+    redis连接类
     使用上下文管理器管理 Redis 连接。
     连接参数默认从环境变量读取：
       REDIS_HOST: Redis 主机（默认为 localhost）

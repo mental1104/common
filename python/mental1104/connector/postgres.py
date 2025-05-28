@@ -108,3 +108,101 @@ def open_session():
         raise
     finally:
         session.close()
+
+
+"""
+从数据库中获取markdown文件
+"""
+
+import psycopg2
+from functools import wraps
+
+def db_connection(db_type, db_params):
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            conn = None
+            cursor = None
+            try:
+                # 连接数据库
+                if db_type == 'postgresql':
+                    conn = psycopg2.connect(**db_params)
+                    cursor = conn.cursor()
+                else:
+                    raise ValueError("Unsupported database type.")
+                
+                offset = 0
+                limit = 1000
+                
+                while True:
+                    # 执行传入的 SQL 语句
+                    sql, params = kwargs.get('sql'), kwargs.get('params', {})
+                    if not sql:
+                        raise ValueError("SQL query must be provided.")
+
+                    # 处理 SQL 语句的 offset 和 limit
+                    params.update({"offset": offset, "limit": limit})
+                    if db_type == 'postgresql':
+                        cursor.execute(sql, params)
+                        result = cursor.fetchall()
+
+                    if len(result) == 0:
+                        break  # 当记录数为 0 时退出
+                        
+                    # 针对每一条记录执行传入的处理函数
+                    for item in result:
+                        func(item)
+                    
+                    offset += limit
+
+            except Exception as e:
+                if conn:
+                    if db_type == 'postgresql':
+                        conn.rollback()
+                print(f"错误: {str(e)}")
+            finally:
+                # 关闭连接
+                if cursor:
+                    cursor.close()
+                if conn and db_type == 'postgresql':
+                    conn.close()
+    
+        return wrapper
+    
+    return decorator
+
+# 使用示例
+db_params_postgres = {
+    "database": "xdlp",
+    "user": "xdlp",
+    "password": "xdlpllm2024",
+    "host": "10.74.113.42",
+    "port": "5432"
+}
+
+db_params_clickhouse = {
+    "host": "clickhouse_host",
+    "user": "default",
+    "password": "password"
+}
+
+@db_connection('postgresql', db_params_postgres)
+def process_record(item):
+    # 处理每条记录的逻辑
+    markdown, file_name, label = item
+    print(f"Processing file: {file_name}, with label: {label}, content")
+
+# 调用示例
+sql_query = """
+SELECT markdown, file_name, label FROM dataset
+WHERE markdown != '' AND markdown != 'XDLP ERROR'
+ORDER BY sha_256 ASC
+LIMIT %(limit)s OFFSET %(offset)s
+"""
+
+params = {
+    "version": "yzf-v00"
+}
+
+# 调用装饰器时传入 SQL 和参数
+# process_record(sql=sql_query, params=params)
