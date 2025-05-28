@@ -4,13 +4,8 @@ Author: mental1104 mental1104@gmail.com
 LastEditors: mental1104 mental1104@gmail.com
 LastEditTime: 2025-01-24 22:57:53
 '''
-import os
-import json
-import csv
-import pytest
-import unittest
-from unittest.mock import call, mock_open, patch, Mock
-from mental1104.file import file_iterator, CsvHelper, json_processor
+from unittest.mock import call
+from mental1104 import file_iterator
 
 # 测试用例
 class TestFileIterator:
