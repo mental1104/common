@@ -5,7 +5,7 @@ import requests
 from pulsar import ConsumerType
 from pulsar.schema import AvroSchema, BytesSchema
 from enum import Enum
-from mental1104.util import Environment
+from mental1104 import check_required_env_vars
 import functools
 
 
@@ -19,7 +19,7 @@ class PulsarEnvironment(str, Enum):
 class PulsarConnector:
     @staticmethod
     def make_client():
-        Environment.check_required_env_vars([
+        check_required_env_vars([
             PulsarEnvironment.PULSAR_HOST.value,
             PulsarEnvironment.PULSAR_BROKER_PORT.value
         ])
@@ -32,7 +32,7 @@ class PulsarConnector:
 
     @staticmethod
     def get_broker_url():
-        Environment.check_required_env_vars([
+        check_required_env_vars([
             PulsarEnvironment.PULSAR_HOST.value,
             PulsarEnvironment.PULSAR_BROKER_PORT.value
         ])
@@ -40,7 +40,7 @@ class PulsarConnector:
 
     @staticmethod
     def get_admin_url():
-        Environment.check_required_env_vars([
+        check_required_env_vars([
             PulsarEnvironment.PULSAR_HOST.value,
             PulsarEnvironment.PULSAR_ADMIN_PORT.value
         ])

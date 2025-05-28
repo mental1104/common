@@ -1,7 +1,7 @@
 import pytest
 import asyncio
 import functools
-from mental1104.concurrency import CoroutinePool
+from mental1104 import CoroutinePool
 
 
 class TestCoroutinePool:
