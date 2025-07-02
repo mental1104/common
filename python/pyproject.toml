@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mental1104"
+version = "0.1.1"
+description = "A custom package with useful functions"
+authors = [
+  { name = "mental1104", email = "mental1104@gmail.com" }
+]
+requires-python = ">=3.7"
+dependencies = [
+  "aiohttp"
+]
+
+[tool.setuptools.packages.find]
+exclude = ["test", "test.*"]
+

@@ -4,9 +4,5 @@ pip3 install . --upgrade
 
 ## 版本更新
 
-通过bumpversion来进行管理：
+执行python -m build进行包的构建
 
-```
-pip install bumpversion
-bumpversion patch --new-version 0.1.1
-```
