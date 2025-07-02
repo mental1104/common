@@ -6,7 +6,7 @@ from mental1104.csv_processor import csv_processor, csv_writer, export_csv_from_
 from mental1104.encryption import encrypt, decrypt, generate_salt
 from mental1104.string import replace_space_with
 from mental1104.random import random_pick
-from mental1104.json_processor import json_processor
+from mental1104.json_processor import PARSERS, PARSER_NAMES, parse_json, json_processor
 from mental1104.concurrency import TaskExecutionStrategy, GatherStrategy, CoroutinePool
 from mental1104.util import delay, async_delay
 from mental1104.http_package import fetch_status
@@ -32,6 +32,9 @@ __all__ = [
     'generate_salt',
     'replace_space_with',
     'random_pick',
+    'PARSERS',
+    'PARSER_NAMES',
+    'parse_json',
     'json_processor',
     'TaskExecutionStrategy',
     'GatherStrategy',
