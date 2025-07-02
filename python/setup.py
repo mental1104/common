@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="mental1104",  # 包的名称
-    version="0.1.0",     # 版本号
+    version="0.1.1",     # 版本号
     description="A custom package with useful functions",
     author="mental1104",
     author_email="mental1104@gmail.com",
