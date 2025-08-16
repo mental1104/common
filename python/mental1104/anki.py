@@ -24,6 +24,20 @@ class AnkiApkgGenerator:
             deck_name)
 
     def add_notes_from_json(self, json_file):
+        """json文件按如下组织：
+        {
+            "办理登机手续": "Check in for my flight",
+            "登机牌": "Boarding pass",
+            "托运行李额：20公斤": "Checked baggage allowance: 20 kilograms",
+            "随身行李": "Carry-on luggage",
+            "护照有效期至少六个月": "Passport valid for at least six months",
+            "入境卡": "Immigration card",
+            "海关申报表": "Customs declaration form",
+            "汇率": "Currency exchange rate",
+            "免签入境": "Visa-free entry",
+            "安检": "Security check"
+        }
+        """
         with open(json_file, "r", encoding="utf-8") as f:
             data = json.load(f)
         

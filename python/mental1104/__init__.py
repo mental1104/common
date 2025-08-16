@@ -9,6 +9,7 @@ from mental1104.random import random_pick
 from mental1104.json_processor import PARSERS, PARSER_NAMES, parse_json, json_processor
 from mental1104.concurrency import TaskExecutionStrategy, GatherStrategy, CoroutinePool
 from mental1104.util import delay, async_delay
+from mental1104.anki import AnkiApkgGenerator
 from mental1104.http_package import fetch_status
 from mental1104.connector.redis import RedisConnection, RedisLock
 from mental1104.connector.pulsar import PulsarEnvironment, PulsarConnector, Consumer, Producer, PulsarAdminHelper, AsyncPulsarAdminHelper
@@ -41,6 +42,7 @@ __all__ = [
     'CoroutinePool',
     'delay',
     'async_delay',
+    'AnkiApkgGenerator',
     'fetch_status',
     'RedisConnection',
     'RedisLock',
