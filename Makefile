@@ -129,15 +129,15 @@ clean:
 	rm -rf "$(GTEST_DIR)/build"
 	@echo "Clean finished."
 
-.PHONY: run-tests
-run-tests: build-cpp
+.PHONY: test
+test: build
 	@echo "Running ctest (if available)..."
 	@if [ -d "$(CPP_BUILD)" ]; then cd $(CPP_BUILD) && ctest --output-on-failure || true; else echo "No build dir at $(CPP_BUILD)"; fi
 
-# Run all tests: first build-cpp, then run tests in each submodule under cpp/lib,
+# Run all tests: first build, then run tests in each submodule under cpp/lib,
 # finally run top-level cpp/build tests.
-.PHONY: test
-test: build-cpp
+.PHONY: run-tests
+run-tests: build
 	@echo "=== Running all tests (submodules + cpp) ==="
 	@FAILS=0; \
 	# 先跑子仓库测试

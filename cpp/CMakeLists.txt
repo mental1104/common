@@ -135,13 +135,24 @@ set(TEST_DIR ${CMAKE_CURRENT_SOURCE_DIR}/test)
 # 查找 test 目录下的所有 cpp 测试文件
 file(GLOB TEST_FILES "${TEST_DIR}/*.cpp")
 
-# 遍历每个测试文件
+# 测试目录
+set(TEST_DIR ${CMAKE_CURRENT_SOURCE_DIR}/test)
+file(GLOB TEST_FILES "${TEST_DIR}/*.cpp")
+
+# googletest include 和 lib 路径
+set(GTEST_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/googletest/googletest/include")
+set(GTEST_LIB_DIR "${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/googletest/build/lib")
+set(GTEST_LIBS "${GTEST_LIB_DIR}/libgtest.a" "${GTEST_LIB_DIR}/libgtest_main.a")
+
 foreach(TEST_FILE ${TEST_FILES})
     get_filename_component(TEST_NAME ${TEST_FILE} NAME_WE)
     add_executable(${TEST_NAME} ${TEST_FILE})
 
-    # include dirs
-    target_include_directories(${TEST_NAME} PRIVATE ${THIRD_INCLUDE_DIRS} ${gtest_SOURCE_DIR}/include ${gmock_SOURCE_DIR}/include)
+    # 添加 include
+    target_include_directories(${TEST_NAME} PRIVATE 
+        ${THIRD_INCLUDE_DIRS} 
+        ${GTEST_INCLUDE_DIR}
+    )
 
     # link redis/hiredis if exist
     set(EXTRA_LIBS "")
@@ -152,12 +163,19 @@ foreach(TEST_FILE ${TEST_FILES})
         list(APPEND EXTRA_LIBS ${HIREDIS_LIB_PATH})
     endif()
 
-    # link gmock_main (包含 gtest_main) + pthread
-    list(APPEND EXTRA_LIBS gmp mpfr gmock gmock_main gtest pthread)
+    list(APPEND EXTRA_LIBS mpfr gmp)
 
-    target_link_libraries(${TEST_NAME} PRIVATE ${EXTRA_LIBS})
+    # 链接库
+    target_link_libraries(${TEST_NAME} PRIVATE
+        ${EXTRA_LIBS} 
+        ${GTEST_LIBS}      # gtest 静态库
+        pthread             # 必须的
+
+    )
+
     add_test(NAME ${TEST_NAME} COMMAND ${TEST_NAME})
 endforeach()
+
 
 
 # coverage option
