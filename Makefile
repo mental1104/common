@@ -133,3 +133,48 @@ clean:
 run-tests: build-cpp
 	@echo "Running ctest (if available)..."
 	@if [ -d "$(CPP_BUILD)" ]; then cd $(CPP_BUILD) && ctest --output-on-failure || true; else echo "No build dir at $(CPP_BUILD)"; fi
+
+# Run all tests: first build-cpp, then run tests in each submodule under cpp/lib,
+# finally run top-level cpp/build tests.
+.PHONY: test
+test: build-cpp
+	@echo "=== Running all tests (submodules + cpp) ==="
+	@FAILS=0; \
+	# 先跑子仓库测试
+	for d in $(THIRD_SUBS); do \
+		BUILD_DIR="$(INSTALLROOT_LIB)/$$d/build"; \
+		if [ -d "$$BUILD_DIR" ]; then \
+			echo ">>> Running tests in $$d ..."; \
+			cd "$$BUILD_DIR"; \
+			if command -v ctest >/dev/null 2>&1 && [ -f CTestTestfile.cmake ]; then \
+				ctest --output-on-failure --parallel $(NUMJOBS) || FAILS=$$((FAILS+1)); \
+			else \
+				TESTS=$$(find . -type f -executable \( -name 'test*' -o -name '*test' -o -name '*_test' \) -print); \
+				for t in $$TESTS; do \
+					echo "---- Running $$d:$$t ----"; \
+					"./$$t" || { echo "FAIL: $$d:$$t"; FAILS=$$((FAILS+1)); }; \
+				done; \
+			fi; \
+		fi; \
+	done; \
+	# 再跑主cpp/build的测试
+	if [ -d "$(CPP_BUILD)" ]; then \
+		echo ">>> Running tests in cpp/build ..."; \
+		cd "$(CPP_BUILD)"; \
+		if command -v ctest >/dev/null 2>&1 && [ -f CTestTestfile.cmake ]; then \
+			ctest --output-on-failure --parallel $(NUMJOBS) || FAILS=$$((FAILS+1)); \
+		else \
+			TESTS=$$(find . -type f -executable \( -name 'test*' -o -name '*test' -o -name '*_test' \) -print); \
+			for t in $$TESTS; do \
+				echo "---- Running cpp:$$t ----"; \
+				"./$$t" || { echo "FAIL: cpp:$$t"; FAILS=$$((FAILS+1)); }; \
+			done; \
+		fi; \
+	fi; \
+	# 汇总结果
+	if [ $$FAILS -ne 0 ]; then \
+		echo "=== $$FAILS test group(s) failed ==="; exit 1; \
+	else \
+		echo "=== All tests passed ==="; \
+	fi
+

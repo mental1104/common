@@ -10,6 +10,7 @@
 [submodule "cpp/lib/DataStructure"]
 	path = cpp/lib/DataStructure
 	url = https://github.com/mental1104/DataStructure.git
+	branch = main
 [submodule "cpp/thirdparty/googletest"]
 	path = cpp/thirdparty/googletest
 	url = https://github.com/google/googletest.git
