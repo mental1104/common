@@ -1,1 +1,0 @@
-{"secondary_sources":[],"schema_version":"1.1","name":"golangci-lint","links":{"bin":{"golangci-lint":"golangci-lint-1.64.5-linux-amd64\/golangci-lint"},"share":{},"opt":{}},"primary_source":{"type":"registry+v1","id":"pkg:github\/golangci\/golangci-lint@v1.64.5"},"metrics":{"start_time":1739612222552,"completion_time":1739612225699}}

@@ -32,6 +32,92 @@ add_subdirectory(thirdparty/googletest)
 
 include_directories(${gtest_SOURCE_DIR}/include ${gmock_SOURCE_DIR}/include)
 
+# ---- BEGIN: scan cpp/lib built thirdparty and add include/lib dirs ----
+set(THIRDROOT "${CMAKE_SOURCE_DIR}/lib")
+message(STATUS "THIRDROOT = ${THIRDROOT}")
+
+set(THIRD_INCLUDE_DIRS "")
+set(THIRD_LIB_DIRS "")
+
+if(EXISTS ${THIRDROOT})
+    # 找到各库的 build/include（包含二级目录）
+    file(GLOB THIRD_INC_CANDIDATES RELATIVE ${CMAKE_SOURCE_DIR} "${THIRDROOT}/*/build/include" "${THIRDROOT}/*/build/include/*")
+    # ---- locate redis++ and hiredis library files and set rpath ----
+    # THIRDROOT assumed to be "${CMAKE_SOURCE_DIR}/lib"
+    set(REDISPP_LIB_PATH "")
+    set(HIREDIS_LIB_PATH "")
+    set(THIRD_LIB_DIRS_FOR_RPATH "")
+
+    # try redis-plus-plus lib (.so or .a)
+    if(EXISTS "${CMAKE_SOURCE_DIR}/lib/redis-plus-plus/build")
+        file(GLOB REDISPP_CANDIDATES
+            "${CMAKE_SOURCE_DIR}/lib/redis-plus-plus/build/lib/libredis++.so"
+            "${CMAKE_SOURCE_DIR}/lib/redis-plus-plus/build/lib/libredis++.so.*"
+            "${CMAKE_SOURCE_DIR}/lib/redis-plus-plus/build/lib/libredis++.a"
+        )
+        if(REDISPP_CANDIDATES)
+            list(GET REDISPP_CANDIDATES 0 REDISPP_LIB_PATH)
+            message(STATUS "Found redis++ lib: ${REDISPP_LIB_PATH}")
+            list(APPEND THIRD_LIB_DIRS_FOR_RPATH "${CMAKE_SOURCE_DIR}/lib/redis-plus-plus/build/lib")
+        endif()
+    endif()
+
+    # try hiredis lib (.so or .a)
+    if(EXISTS "${CMAKE_SOURCE_DIR}/lib/hiredis/build")
+        file(GLOB HIREDIS_CANDIDATES
+            "${CMAKE_SOURCE_DIR}/lib/hiredis/build/lib/libhiredis.so"
+            "${CMAKE_SOURCE_DIR}/lib/hiredis/build/lib/*.a"
+        )
+        if(HIREDIS_CANDIDATES)
+            list(GET HIREDIS_CANDIDATES 0 HIREDIS_LIB_PATH)
+            message(STATUS "Found hiredis lib: ${HIREDIS_LIB_PATH}")
+            list(APPEND THIRD_LIB_DIRS_FOR_RPATH "${CMAKE_SOURCE_DIR}/lib/hiredis/build/lib")
+        endif()
+    endif()
+
+    # set RPATH so built executables know where to find shared libs at runtime (relative or absolute)
+    if(THIRD_LIB_DIRS_FOR_RPATH)
+        # join with semicolon for CMake list -> string
+        string(REPLACE ";" ":" THIRD_RPATH_STR "${THIRD_LIB_DIRS_FOR_RPATH}")
+        message(STATUS "Setting CMAKE_INSTALL_RPATH to: ${THIRD_RPATH_STR}")
+        set(CMAKE_INSTALL_RPATH "${THIRD_RPATH_STR}")
+        # also for immediate build/run:
+        set(CMAKE_BUILD_RPATH "${THIRD_RPATH_STR}")
+    endif()
+    # ---- end locate redis/hiredis ----
+
+    foreach(increl ${THIRD_INC_CANDIDATES})
+        set(incdir "${CMAKE_SOURCE_DIR}/${increl}")
+        if(EXISTS ${incdir})
+            list(APPEND THIRD_INCLUDE_DIRS ${incdir})
+            message(STATUS "Found thirdparty include: ${incdir}")
+        endif()
+    endforeach()
+
+    # 找到各库的 build/lib
+    file(GLOB THIRD_LIB_CANDIDATES RELATIVE ${CMAKE_SOURCE_DIR} "${THIRDROOT}/*/build/lib")
+    foreach(librel ${THIRD_LIB_CANDIDATES})
+        set(libdir "${CMAKE_SOURCE_DIR}/${librel}")
+        if(EXISTS ${libdir})
+            list(APPEND THIRD_LIB_DIRS ${libdir})
+            message(STATUS "Found thirdparty lib dir: ${libdir}")
+        endif()
+    endforeach()
+endif()
+
+# 把 include 目录加入全局（确保在 add_executable 之前执行）
+if(THIRD_INCLUDE_DIRS)
+    include_directories(${THIRD_INCLUDE_DIRS})
+endif()
+
+# 作为备选，记录 lib 目录（会用于 link_directories 以及后续寻找具体 .so 路径）
+if(THIRD_LIB_DIRS)
+    link_directories(${THIRD_LIB_DIRS})
+endif()
+# ---- END: scan cpp/lib ----
+
+
+
 # 安装头文件
 install(DIRECTORY include/mental1104
         DESTINATION include)  # 安装到 /usr/local/include
@@ -56,7 +142,20 @@ foreach(TEST_FILE ${TEST_FILES})
     # 为每个测试文件创建独立的可执行文件
     add_executable(${TEST_NAME} ${TEST_FILE})
     # 链接 gtest, gmock 和 pthread
-    target_link_libraries(${TEST_NAME} PRIVATE hiredis redis++ gmp mpfr gtest gmock gtest_main pthread)
+    # prepare list of libraries to link for this test
+    set(EXTRA_LIBS "")
+    if(REDISPP_LIB_PATH)
+        list(APPEND EXTRA_LIBS ${REDISPP_LIB_PATH})
+    endif()
+    if(HIREDIS_LIB_PATH)
+        list(APPEND EXTRA_LIBS ${HIREDIS_LIB_PATH})
+    endif()
+    # keep gmp/mpfr/system libs (CMake will find them normally if installed)
+    list(APPEND EXTRA_LIBS gmp mpfr gtest gmock gtest_main pthread)
+
+    # link using absolute paths for redis/hiredis when available
+    target_link_libraries(${TEST_NAME} PRIVATE ${EXTRA_LIBS})
+    # target_link_libraries(${TEST_NAME} PRIVATE hiredis redis++ gmp mpfr gtest gmock gtest_main pthread)
     # 将可执行文件添加为一个 CTest 测试
     add_test(NAME ${TEST_NAME} COMMAND ${TEST_NAME})
 endforeach()
