@@ -13,9 +13,6 @@
 [submodule "cpp/thirdparty/googletest"]
 	path = cpp/thirdparty/googletest
 	url = https://github.com/google/googletest.git
-[submodule "INSTALLROOT/lib/lazyvim"]
-	path = INSTALLROOT/lib/lazyvim
-	url = https://github.com/LazyVim/starter.git
 [submodule "INSTALLROOT/lib/hiredis"]
 	path = INSTALLROOT/lib/hiredis
 	url = git@github.com:redis/hiredis.git
