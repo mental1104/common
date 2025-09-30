@@ -137,12 +137,13 @@ file(GLOB TEST_FILES "${TEST_DIR}/*.cpp")
 
 # 遍历每个测试文件
 foreach(TEST_FILE ${TEST_FILES})
-    # 获取测试文件名（不包含路径和后缀）
     get_filename_component(TEST_NAME ${TEST_FILE} NAME_WE)
-    # 为每个测试文件创建独立的可执行文件
     add_executable(${TEST_NAME} ${TEST_FILE})
-    # 链接 gtest, gmock 和 pthread
-    # prepare list of libraries to link for this test
+
+    # include dirs
+    target_include_directories(${TEST_NAME} PRIVATE ${THIRD_INCLUDE_DIRS} ${gtest_SOURCE_DIR}/include ${gmock_SOURCE_DIR}/include)
+
+    # link redis/hiredis if exist
     set(EXTRA_LIBS "")
     if(REDISPP_LIB_PATH)
         list(APPEND EXTRA_LIBS ${REDISPP_LIB_PATH})
@@ -150,15 +151,14 @@ foreach(TEST_FILE ${TEST_FILES})
     if(HIREDIS_LIB_PATH)
         list(APPEND EXTRA_LIBS ${HIREDIS_LIB_PATH})
     endif()
-    # keep gmp/mpfr/system libs (CMake will find them normally if installed)
-    list(APPEND EXTRA_LIBS gmp mpfr gtest gmock gtest_main pthread)
 
-    # link using absolute paths for redis/hiredis when available
+    # link gmock_main (包含 gtest_main) + pthread
+    list(APPEND EXTRA_LIBS gmp mpfr gmock gmock_main gtest pthread)
+
     target_link_libraries(${TEST_NAME} PRIVATE ${EXTRA_LIBS})
-    # target_link_libraries(${TEST_NAME} PRIVATE hiredis redis++ gmp mpfr gtest gmock gtest_main pthread)
-    # 将可执行文件添加为一个 CTest 测试
     add_test(NAME ${TEST_NAME} COMMAND ${TEST_NAME})
 endforeach()
+
 
 # coverage option
 OPTION (ENABLE_COVERAGE "Use gcov" ON)
