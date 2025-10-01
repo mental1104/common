@@ -227,7 +227,8 @@ install: build
 
 	@# 5) Python 包安装（稳健、优先 --user，失败时回退到 per-user venv）
 	@echo "  - installing python package (user install preferred)"; \
-	$(PYTHON) -m pip install --upgrade --force-reinstall ./python --break-system-package;
+	$(PYTHON) -m pip install --upgrade --force-reinstall ./python --break-system-package; \
+	$(PYTHON) python/generate_init.py;
 
 # install-system: 仅在你明确想把文件放到系统级目录时用 sudo 调用（只把最必要步骤 sudo 掉）
 install-system:
