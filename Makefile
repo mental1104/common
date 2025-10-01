@@ -178,3 +178,90 @@ run-tests: build
 		echo "=== All tests passed ==="; \
 	fi
 
+# ---------- safer install targets ----------
+PYTHON ?= python3
+PIP := $(PYTHON) -m pip
+VENV_DIR ?= $(HOME)/.local/venvs/mental1104
+
+.PHONY: install install-system uninstall
+
+install: build
+	@echo ">>> Installing headers/libs and python package for current user (PREFIX=$(PREFIX))"
+	@# 1) 安装头文件到单一的目标目录（避免双层 mental1104）
+	@if [ -d "cpp/include/mental1104" ]; then \
+	  DEST_INC="$(PREFIX)/include/mental1104"; \
+	  mkdir -p "$$(dirname $$DEST_INC)"; \
+	  cp -aR cpp/include/mental1104 "$$DEST_INC"; \
+	else \
+	  DEST_INC="$(PREFIX)/include/mental1104"; \
+	  mkdir -p "$$DEST_INC"; \
+	  cp -aR cpp/include/. "$$DEST_INC"; \
+	fi; \
+	echo "  headers copied -> $$DEST_INC"
+
+	@# 2) 拷贝库文件（只拷贝存在的 .so/.so.* 到 PREFIX/lib）
+	@mkdir -p "$(PREFIX)/lib"; \
+	if [ -d "$(CPP_BUILD)" ]; then \
+	  find "$(CPP_BUILD)" -type f \( -name "*.so" -o -name "*.so.*" \) -exec cp -u {} "$(PREFIX)/lib/" \; -print 2>/dev/null || true; \
+	fi; \
+	for d in $(THIRD_SUBS); do \
+	  LIBDIR="$(INSTALLROOT_LIB)/$$d/build/lib"; \
+	  if [ -d "$$LIBDIR" ]; then \
+	    find "$$LIBDIR" -type f \( -name "*.so" -o -name "*.so.*" \) -exec cp -u {} "$(PREFIX)/lib/" \; -print 2>/dev/null || true; \
+	  fi; \
+	done; \
+	echo "  libs copied -> $(PREFIX)/lib (if any)"
+
+	@# 3) 只对我们实际写入的目标目录修改权限（绝不对 /lib 或系统根做递归）
+	@echo "  fixing permissions on installed files (only on targets we wrote)"; \
+	if [ -n "$$DEST_INC" ] && [ -d "$$DEST_INC" ]; then chmod -R a+rX "$$DEST_INC" || true; fi; \
+	find "$(PREFIX)/lib" -maxdepth 1 -type f \( -name "*.so" -o -name "*.so.*" \) -exec chmod a+rX {} \; || true
+
+	@# 4) 尝试刷新链接缓存（仅提示，可能需要 sudo；ldconfig 的警告通常是非致命）
+	@if command -v ldconfig >/dev/null 2>&1; then \
+	  echo "  running ldconfig to refresh linker cache (may need sudo)"; \
+	  ldconfig || true; \
+	else \
+	  echo "  ldconfig not found; skip."; \
+	fi
+
+	@# 5) Python 包安装（稳健、优先 --user，失败时回退到 per-user venv）
+	@echo "  - installing python package (user install preferred)"; \
+	$(PYTHON) -m pip install --upgrade --force-reinstall ./python --break-system-package;
+
+# install-system: 仅在你明确想把文件放到系统级目录时用 sudo 调用（只把最必要步骤 sudo 掉）
+install-system:
+	@echo ">>> System install (will use sudo for actions that require root)"
+	@sudo mkdir -p $(PREFIX)/include $(PREFIX)/lib
+	@# 复制头：若 cpp/include/mental1104 存在，则直接复制该目录到 /usr/local/include/
+	@if [ -d "cpp/include/mental1104" ]; then \
+	  sudo cp -aR cpp/include/mental1104 $(PREFIX)/include/; \
+	else \
+	  sudo mkdir -p $(PREFIX)/include/mental1104; \
+	  sudo cp -aR cpp/include/. $(PREFIX)/include/mental1104/; \
+	fi
+	@# 复制库
+	@for f in $(shell find $(CPP_BUILD) -type f \( -name "*.so" -o -name "*.so.*" \) 2>/dev/null); do sudo cp -u $$f $(PREFIX)/lib/; done
+	@for d in $(THIRD_SUBS); do \
+	  LIBDIR="$(INSTALLROOT_LIB)/$$d/build/lib"; \
+	  if [ -d "$$LIBDIR" ]; then \
+	    for f in $$(find "$$LIBDIR" -type f \( -name "*.so" -o -name "*.so.*" \) 2>/dev/null); do sudo cp -u $$f $(PREFIX)/lib/; done; \
+	  fi; \
+	done
+	@echo "  running sudo ldconfig"; sudo ldconfig || true
+	@echo ">>> system install finished."
+
+uninstall:
+	@echo ">>> Uninstalling (user-level best-effort)"
+	@rm -rf "$(PREFIX)/include/mental1104" || true
+	@for f in $(shell find "$(CPP_BUILD)" -type f \( -name "*.so" -o -name "*.so.*" \) 2>/dev/null -printf "%f\n"); do rm -f "$(PREFIX)/lib/$$f" || true; done
+	@for d in $(THIRD_SUBS); do \
+	  if [ -d "$(INSTALLROOT_LIB)/$$d/build/lib" ]; then \
+	    for f in $$(find "$(INSTALLROOT_LIB)/$$d/build/lib" -type f \( -name "*.so" -o -name "*.so.*" \) 2>/dev/null -printf "%f\n"); do \
+	      rm -f "$(PREFIX)/lib/$$f" || true; \
+	    done; \
+	  fi; \
+	done
+	@echo "  uninstalling python package from user site (best-effort)"
+	@$(PYTHON) -m pip uninstall -y mental1104 || true
+	@echo ">>> uninstall finished."
