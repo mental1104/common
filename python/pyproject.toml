@@ -19,7 +19,10 @@ dependencies = [
   "pulsar-client>=2.10", 
   "pycryptodome", 
   "aiohttp", 
-  "genanki"
+  "genanki",
+  "pytest",
+  "pytest-asyncio",
+  "pytest-mock"
 ]
 
 [tool.setuptools.packages.find]
