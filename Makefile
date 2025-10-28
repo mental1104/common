@@ -53,6 +53,20 @@ install: ## 安装本地包（非editable）
 		$(SUDO) $(PIP3) install python/ --upgrade $(BREAK_FLAG); \
 		echo "[ok] 安装完成。"'
 
+clean: ## 清理python构建/缓存产物（不触及已安装包）
+	$(SHELL) -lc 'set -e; \
+	echo "[info] 清理 Python 缓存与构建产物…"; \
+	rm -rf python/build python/dist python/*.egg-info .pytest_cache .mypy_cache .coverage htmlcov; \
+	find python -type d -name "__pycache__" -exec rm -rf {} +; \
+	find python -type f -name "*.py[co]" -delete; \
+	find python -type d -name ".pytest_cache" -exec rm -rf {} +; \
+	echo "[ok] clean 完成。"'
+
+coverage:
+	$(SHELL) -lc 'set -e; \
+	echo "[info] 运行python单元测试覆盖率"; \
+	cd python && $(PYTHON) -m coverage run --source=. -m pytest && coverage report;' \
+
 help:   ## 帮助
 	echo "可用目标："
 	echo "  make / setup   安装依赖并执行generate_init.py（python）"

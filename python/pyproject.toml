@@ -22,7 +22,8 @@ dependencies = [
   "genanki",
   "pytest",
   "pytest-asyncio",
-  "pytest-mock"
+  "pytest-mock",
+  "coverage"
 ]
 
 [tool.setuptools.packages.find]
