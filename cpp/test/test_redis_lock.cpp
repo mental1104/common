@@ -1,5 +1,5 @@
 // redis_lock_test.cpp
-#include <sw/redis++/redis++.h>
+// #include <sw/redis++/redis++.h>
 #include <gtest/gtest.h>
 #include <cstdlib>
 #include <iostream>
