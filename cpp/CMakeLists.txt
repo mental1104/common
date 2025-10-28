@@ -103,81 +103,92 @@ endif()
 include(CMakeParseArguments)
 set_property(GLOBAL PROPERTY COMPONENT_RPATH_DIRS "")
 
-function(register_component NAME SUBPATH LIB_GLOB)
-	set(options)
-	set(oneValueArgs)
-	set(multiValueArgs INC_REL)
-	cmake_parse_arguments(CMP "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
+function(register_component NAME SUBPATH)
+    set(options)
+    set(oneValueArgs)
+    set(multiValueArgs INC_REL LIB_GLOBS)
+    cmake_parse_arguments(CMP "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
 
-	set(_root "${CMAKE_SOURCE_DIR}/${SUBPATH}")
+    set(_root "${CMAKE_SOURCE_DIR}/${SUBPATH}")
 
-	# 1) 判断组件是否“非空”（有 CMakeLists.txt）
-	if (EXISTS "${_root}/CMakeLists.txt")
-		set(HAVE_${NAME} TRUE PARENT_SCOPE)
-		message(STATUS "Component ${NAME} = AVAILABLE at ${SUBPATH}")
-	else()
-		set(HAVE_${NAME} FALSE PARENT_SCOPE)
-		message(STATUS "Component ${NAME} = MISSING at ${SUBPATH} (no CMakeLists.txt)")
-	endif()
+    # 存在性：仅用于“可用与否”判断
+    if (EXISTS "${_root}/CMakeLists.txt")
+        set(HAVE_${NAME} TRUE PARENT_SCOPE)
+        message(STATUS "Component ${NAME} = AVAILABLE at ${SUBPATH}")
+    else()
+        set(HAVE_${NAME} FALSE PARENT_SCOPE)
+        message(STATUS "Component ${NAME} = MISSING at ${SUBPATH} (no CMakeLists.txt)")
+    endif()
 
-	# 2) include 目录（仅按显式 INC_REL）
-	set(_inc_abs "")
-	foreach(rel ${CMP_INC_REL})
-		if (EXISTS "${_root}/${rel}")
-			list(APPEND _inc_abs "${_root}/${rel}")
-		endif()
-	endforeach()
-	list(REMOVE_DUPLICATES _inc_abs)
+    # include 列表
+    set(_inc_abs "")
+    foreach(rel ${CMP_INC_REL})
+        if (EXISTS "${_root}/${rel}")
+            list(APPEND _inc_abs "${_root}/${rel}")
+        endif()
+    endforeach()
+    list(REMOVE_DUPLICATES _inc_abs)
+    set(${NAME}_INC_DIRS "${_inc_abs}" PARENT_SCOPE)
 
-	# 导出到父作用域，供测试聚合
-	set(${NAME}_INC_DIRS "${_inc_abs}" PARENT_SCOPE)
+    # INTERFACE 头目标
+    set(_hdr_tgt "${NAME}::headers")
+    if (NOT TARGET ${_hdr_tgt})
+        add_library(${_hdr_tgt} INTERFACE IMPORTED)
+    endif()
+    set_target_properties(${_hdr_tgt} PROPERTIES
+        INTERFACE_INCLUDE_DIRECTORIES "${_inc_abs}"
+    )
+    message(STATUS "${_hdr_tgt}.INCLUDES = ${_inc_abs}")
 
-	# 2.1 headers 目标（INTERFACE）
-	set(_hdr_tgt "${NAME}::headers")
-	if (NOT TARGET ${_hdr_tgt})
-		add_library(${_hdr_tgt} INTERFACE IMPORTED)
-	endif()
-	set_target_properties(${_hdr_tgt} PROPERTIES
-		INTERFACE_INCLUDE_DIRECTORIES "${_inc_abs}"
-	)
-	message(STATUS "${_hdr_tgt}.INCLUDES = ${_inc_abs}")
+    # 在 build/ build/lib build/src 下用多模式找库
+    set(_lib_path "")
+    if (EXISTS "${_root}/build")
+        foreach(d "" "lib" "src")
+            foreach(pat IN LISTS CMP_LIB_GLOBS)
+                file(GLOB _cands "${_root}/build/${d}/${pat}")
+                if (_cands)
+                    # 拿第一个命中
+                    list(GET _cands 0 _lib_path)
+                    break()
+                endif()
+            endforeach()
+            if (_lib_path)
+                break()
+            endif()
+        endforeach()
+    endif()
 
-	# 3) 扫描库产物：build/、build/lib/、build/src/
-	set(_lib_path "")
-	if (EXISTS "${_root}/build")
-		foreach(d "" "lib" "src")
-			file(GLOB _cands "${_root}/build/${d}/${LIB_GLOB}")
-			if (_cands)
-				list(GET _cands 0 _lib_path)
-				break()
-			endif()
-		endforeach()
-	endif()
+    if (_lib_path)
+        set(_lib_tgt "${NAME}::lib")
+        if (NOT TARGET ${_lib_tgt})
+            add_library(${_lib_tgt} UNKNOWN IMPORTED)
+        endif()
+        set_target_properties(${_lib_tgt} PROPERTIES
+            IMPORTED_LOCATION "${_lib_path}"
+            INTERFACE_INCLUDE_DIRECTORIES "${_inc_abs}"
+        )
+        get_filename_component(_libdir "${_lib_path}" DIRECTORY)
+        set_property(GLOBAL APPEND PROPERTY COMPONENT_RPATH_DIRS "${_libdir}")
 
-	if (_lib_path)
-		set(_lib_tgt "${NAME}::lib")
-		if (NOT TARGET ${_lib_tgt})
-			add_library(${_lib_tgt} UNKNOWN IMPORTED)
-		endif()
-		set_target_properties(${_lib_tgt} PROPERTIES
-			IMPORTED_LOCATION "${_lib_path}"
-			INTERFACE_INCLUDE_DIRECTORIES "${_inc_abs}"
-		)
-		get_filename_component(_libdir "${_lib_path}" DIRECTORY)
-		set_property(GLOBAL APPEND PROPERTY COMPONENT_RPATH_DIRS "${_libdir}")
-
-		set(HAVE_LIB_${NAME} TRUE PARENT_SCOPE)
-		message(STATUS "Found ${NAME} lib: ${_lib_path}")
-	else()
-		set(HAVE_LIB_${NAME} FALSE PARENT_SCOPE)
-	endif()
+        set(HAVE_LIB_${NAME} TRUE PARENT_SCOPE)
+        message(STATUS "Found ${NAME} lib: ${_lib_path}")
+    else()
+        set(HAVE_LIB_${NAME} FALSE PARENT_SCOPE)
+    endif()
 endfunction()
 
-# ---- 在此“一处声明”第三方库 ----
-# hiredis：头在项目根
-register_component(HIREDIS   "lib/hiredis"         "libhiredis.*"   INC_REL .)
-# redis-plus-plus：头在 src/
-register_component(REDISPP   "lib/redis-plus-plus" "libredis++.*"   INC_REL src)
+
+# hiredis：会生成 libhiredis.so / libhiredisd.so / .a / .dylib 等
+register_component(HIREDIS "lib/hiredis"
+    LIB_GLOBS "libhiredis*.so*" "libhiredis*.a" "libhiredis*.dylib"
+    INC_REL .
+)
+
+# redis-plus-plus：也放宽以兼容 debug 后缀与多平台
+register_component(REDISPP "lib/redis-plus-plus"
+    LIB_GLOBS "libredis++*.so*" "libredis++*.a" "libredis++*.dylib"
+    INC_REL src
+)
 
 # ====== TEMP PATCH (BEGIN) ———— redis-plus-plus 缺失 cxx_utils.h 的临时修复 ======
 # 说明：
@@ -442,17 +453,34 @@ if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID STREQUAL "Clang
 endif()
 
 if(COVERAGE)
-	find_program(LCOV_EXEC lcov REQUIRED)
-	find_program(GENHTML_EXEC genhtml REQUIRED)
-	if(LCOV_EXEC AND GENHTML_EXEC)
-		add_custom_target(coverage
-			COMMAND ${LCOV_EXEC} --directory ${CMAKE_BINARY_DIR} --capture --ignore-errors inconsistent --output-file coverage.info
-			COMMAND ${LCOV_EXEC} --ignore-errors unused --remove coverage.info '*/test/*' '/usr/*' '*/external/*' '*/gtest/*' --output-file coverage_filtered.info
-			COMMAND ${GENHTML_EXEC} coverage_filtered.info --output-directory ${CMAKE_BINARY_DIR}/coverage_report
-			COMMENT "Generating coverage report..."
-			WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
-		)
-	else()
-		message(WARNING "lcov or genhtml not found, coverage target will not work")
-	endif()
+  find_program(LCOV_EXEC lcov REQUIRED)
+  find_program(GENHTML_EXEC genhtml REQUIRED)
+  if(LCOV_EXEC AND GENHTML_EXEC)
+    add_custom_target(coverage
+      COMMAND ${LCOV_EXEC}
+              --directory ${CMAKE_BINARY_DIR}
+              --capture
+              --ignore-errors mismatch,inconsistent
+              --rc geninfo_unexecuted_blocks=1
+              --output-file coverage.info
+      COMMAND ${LCOV_EXEC}
+              --remove coverage.info
+              '*/test/*' '/usr/*' '*/external/*' '*/gtest/*'
+              --ignore-errors unused
+              --output-file coverage_filtered.info
+      # === 新增：把每个文件的覆盖率打印到命令行（并保存一份文本） ===
+      COMMAND ${CMAKE_COMMAND} -E env LC_ALL=C
+              ${LCOV_EXEC} --list coverage_filtered.info
+              --ignore-errors mismatch,inconsistent
+              --rc geninfo_unexecuted_blocks=1
+      COMMAND ${GENHTML_EXEC} coverage_filtered.info
+              --output-directory ${CMAKE_BINARY_DIR}/coverage_report
+      COMMENT "Generating coverage report..."
+      WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+    )
+  else()
+    message(WARNING "lcov or genhtml not found, coverage target will not work")
+  endif()
 endif()
+
+
