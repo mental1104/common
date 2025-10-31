@@ -9,7 +9,7 @@ import asyncio
 from asyncio import Future
 from abc import ABC, abstractmethod
 from typing import List, Callable
-from mental1104.timed import async_timed
+from mental1104 import async_timed
 
 # 策略基类
 class TaskExecutionStrategy(ABC):
