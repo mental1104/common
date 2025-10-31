@@ -1,9 +1,10 @@
 import pytest
+import json
 from io import StringIO, BytesIO
 from contextlib import redirect_stdout
 
-# 关键：使用既有 API load_json，并从 JsonUtil 取只读视图
-from mental1104 import load_json, JsonUtil
+# 关键：沿用既有入口与只读视图
+from mental1104 import load_json, dump_json, JsonUtil
 
 PARSERS = JsonUtil.get_parsers()             # MappingProxyType，只读
 PARSER_NAMES = JsonUtil.get_parser_names()   # tuple，只读
@@ -22,6 +23,7 @@ invalid_json = '''
 }
 '''
 valid_json = '{"name": "Espeon", "age": 25}'
+obj_simple = {"name": "中文", "age": 25, "tags": ["a", "b"]}
 
 
 class TestParseJson:
@@ -88,3 +90,92 @@ class TestParseJson:
         assert result is None
         assert "[解析失败]" in output
         # 同上：BinaryIO 下也不强求上下文片段与 '^'
+
+
+class TestDumpJson:
+    # ==== 返回字符串（默认 ensure_ascii=True）====
+    @pytest.mark.parametrize("parser_name", PARSER_NAMES)
+    def test_return_str_default_ensure_ascii_true(self, parser_name):
+        s = dump_json(obj_simple, parser=parser_name)
+        assert isinstance(s, str)
+        # 默认转义非 ASCII
+        assert "\\u" in s and "中文" not in s
+        # 反序列化应等价
+        roundtrip = load_json(s, parser=parser_name)
+        assert roundtrip == obj_simple
+
+    # ==== 返回字符串（ensure_ascii=False, 缩进=2）====
+    @pytest.mark.parametrize("parser_name", PARSER_NAMES)
+    def test_return_str_ensure_ascii_false_with_indent(self, parser_name):
+        s = dump_json(obj_simple, parser=parser_name, ensure_ascii=False, indent=2)
+        assert isinstance(s, str)
+        # 不转义中文 + 存在换行与 2 空格缩进痕迹
+        assert "中文" in s
+        assert "\n" in s
+        assert ('  "name"' in s) or ('  "age"' in s) or ('  "tags"' in s)
+        assert load_json(s, parser=parser_name) == obj_simple
+
+    # ==== 写入文本流（TextIO）====
+    @pytest.mark.parametrize("parser_name", PARSER_NAMES)
+    def test_write_to_text_stream(self, parser_name):
+        fp = StringIO()
+        ret = dump_json(obj_simple, fp, parser=parser_name, ensure_ascii=False, indent=2)
+        assert ret is None
+        text = fp.getvalue()
+        assert "中文" in text and "\n" in text
+        # 从文本再读回
+        rt = load_json(text, parser=parser_name)
+        assert rt == obj_simple
+
+    # ==== 写入二进制流（BinaryIO）====
+    @pytest.mark.parametrize("parser_name", PARSER_NAMES)
+    def test_write_to_binary_stream(self, parser_name):
+        fp = BytesIO()
+        ret = dump_json(obj_simple, fp, parser=parser_name, ensure_ascii=True)
+        assert ret is None
+        data = fp.getvalue()
+        assert isinstance(data, (bytes, bytearray))
+        # ensure_ascii=True → 内容应含 \u 转义
+        assert b"\\u" in data
+        # 从二进制流再读回
+        rt = load_json(BytesIO(data), parser=parser_name)
+        assert rt == obj_simple
+
+    # ==== 类型校验：非 dict/list 抛出 TypeError ====
+    def test_invalid_first_arg_type_raises(self):
+        with pytest.raises(TypeError):
+            dump_json(("a", "b"))  # 仅支持 dict 或 list
+
+    # ==== 非法解析器名抛出 ValueError ====
+    def test_unknown_parser_raises(self):
+        with pytest.raises(ValueError):
+            dump_json({"a": 1}, parser="__not_exist__")
+
+    # ==== orjson 特性：indent≠2 时应回退到标准库语义 ====
+    def test_orjson_indent_not_2_falls_back_to_stdlib(self):
+        if "orjson" not in PARSERS:
+            pytest.skip("orjson 未安装，跳过该用例")
+        obj = {"a": [1, 2, 3], "b": {"x": 1}}
+        out = dump_json(obj, parser="orjson", ensure_ascii=False, indent=4)
+        expected = json.dumps(obj, ensure_ascii=False, indent=4)
+        # 精确一致，表示按预期回退到标准库格式
+        assert out == expected
+
+    # ==== ensure_ascii=False + BinaryIO：应写入原生 UTF-8 中文 ====
+    @pytest.mark.parametrize("parser_name", PARSER_NAMES)
+    def test_binary_stream_with_unicode_no_escape(self, parser_name):
+        fp = BytesIO()
+        dump_json({"t": "中文"}, fp, parser=parser_name, ensure_ascii=False)
+        raw = fp.getvalue()
+        text = raw.decode("utf-8")
+        assert "中文" in text
+        assert "\\u" not in text
+
+    # ==== 非文件句柄对象应报错 ====
+    @pytest.mark.parametrize("parser_name", PARSER_NAMES)
+    def test_invalid_fp_type_raises(self, parser_name):
+        class Dummy:
+            pass
+
+        with pytest.raises(TypeError):
+            dump_json(obj_simple, Dummy(), parser=parser_name)

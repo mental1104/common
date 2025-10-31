@@ -15,7 +15,7 @@ from mental1104.schema.common_schema import JsonSerializable
 from mental1104.string import replace_space_with
 from mental1104.timed import async_timed, get_current_time, parse_time, timed
 from mental1104.util import async_delay, delay
-from mental1104.utils.parse_json import JsonUtil, load_json
+from mental1104.utils.parse_json import JsonUtil, dump_json, load_json
 
 # ---- Lazy exports (risky modules; may import mental1104 at top-level) ----
 _EXPORT_MAP = {
@@ -71,6 +71,7 @@ __all__ = [
     'deciprobe',
     'decrypt',
     'delay',
+    'dump_json',
     'encrypt',
     'ensure_database_exists',
     'ensure_tables_exist',

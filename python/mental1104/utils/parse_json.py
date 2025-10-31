@@ -1,5 +1,6 @@
 import json
 import io
+import importlib
 from functools import singledispatch
 from types import MappingProxyType
 from typing import Any, Callable, Mapping
@@ -129,4 +130,112 @@ def load_json(s: str, parser: str = "json"):
             print("[错误上下文]")
             print(snippet)
             print(pointer)
+        return None
+
+
+def dump_json(
+    obj: Any,
+    fp: io.IOBase | None = None,
+    *,
+    parser: str = "json",
+    ensure_ascii: bool = True,
+    indent: int | None = None,
+) -> str | None:
+    """
+    通用 JSON 序列化器：
+    - 第一个参数仅支持 dict 或 list
+    - 未提供 fp：返回字符串
+    - 提供 fp（文本/二进制流）：写入 fp 并返回 None
+    - 统一兼容 json/ujson/orjson 的 ensure_ascii 与 indent 语义
+      * orjson：支持 ensure_ascii；indent 仅支持 2，其他缩进回退到标准库格式
+    """
+    if not isinstance(obj, (dict, list)):
+        raise TypeError("dump_json 的第一个参数必须是 dict 或 list")
+
+    # 非空 fp 必须是标准 IO 类型（提前拦截，避免异常被吞）
+    if fp is not None and not isinstance(fp, (io.TextIOBase, io.BufferedIOBase, io.RawIOBase)):
+        raise TypeError("fp 必须是文本或二进制文件对象")
+
+    # 校验解析器是否已注册（与 load_json 一致）
+    parsers = JsonUtil.get_parsers()
+    names = JsonUtil.get_parser_names()
+    if parser not in parsers:
+        raise ValueError(f"未知解析器 '{parser}'，可选: {list(names)}")
+
+    # 安全导入对应模块（'json'/'ujson'/'orjson'）
+    try:
+        mod = importlib.import_module(parser)
+    except Exception:
+        mod = json  # 理论上不会走到；兜底到标准库
+
+    def _write_to_fp(text: str) -> None:
+        # 这里不再做类型分支的兜底，前置校验已保证 fp 合法
+        assert fp is not None
+        if isinstance(fp, io.TextIOBase):
+            fp.write(text)
+        else:  # BinaryIO
+            fp.write(text.encode("utf-8"))
+
+    # --- orjson 特殊适配 ---
+    if parser == "orjson":
+        try:
+            import orjson  # 获取常量
+            opts = 0
+            if ensure_ascii:
+                opts |= orjson.OPT_ESCAPE_UNICODE
+
+            # orjson 仅支持 2 空格缩进；其他缩进为确保语义一致，回退标准库
+            if indent is not None and int(indent) != 2:
+                text = json.dumps(obj, ensure_ascii=ensure_ascii, indent=indent)
+                if fp is not None:
+                    _write_to_fp(text)
+                    return None
+                return text
+
+            if indent == 2:
+                opts |= orjson.OPT_INDENT_2
+
+            data_bytes = orjson.dumps(obj, option=opts)
+            text = data_bytes.decode("utf-8")
+            if fp is not None:
+                _write_to_fp(text)
+                return None
+            return text
+        except Exception as e:
+            print(f"[序列化失败-orjson] 错误信息：{e}")
+            return None
+
+    # --- json / ujson 路径 ---
+    try:
+        dumps = getattr(mod, "dumps", None)
+        dump = getattr(mod, "dump", None)
+
+        if fp is None:
+            # 返回字符串
+            if dumps is None:
+                # 极少见：没有 dumps 时回退标准库
+                return json.dumps(obj, ensure_ascii=ensure_ascii, indent=indent)
+            try:
+                return dumps(obj, ensure_ascii=ensure_ascii, indent=indent)  # type: ignore[arg-type]
+            except TypeError:
+                # 有些 ujson 老版本不完全支持参数；回退标准库保证语义
+                return json.dumps(obj, ensure_ascii=ensure_ascii, indent=indent)
+        else:
+            # 写入文件流
+            if dump is not None:
+                try:
+                    dump(obj, fp, ensure_ascii=ensure_ascii, indent=indent)  # type: ignore[arg-type]
+                    return None
+                except TypeError:
+                    # 参数不兼容时，先用标准库 dumps，再统一写入
+                    text = json.dumps(obj, ensure_ascii=ensure_ascii, indent=indent)
+                    _write_to_fp(text)
+                    return None
+            else:
+                # 模块无 dump（极少见），回退标准库生成文本后手写
+                text = json.dumps(obj, ensure_ascii=ensure_ascii, indent=indent)
+                _write_to_fp(text)
+                return None
+    except Exception as e:
+        print(f"[序列化失败-{parser}] 错误信息：{e}")
         return None
