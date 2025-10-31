@@ -1,6 +1,6 @@
 from functools import wraps
 import json
-from mental1104.utils.load_json import load_json
+from mental1104.utils.parse_json import load_json
 
 def iterator_json(func):
     """
