@@ -5,11 +5,12 @@
 from mental1104.app.anki import AnkiApkgGenerator
 from mental1104.connector.postgres import Base, db_connection, db_params_clickhouse, db_params_postgres, ensure_database_exists, ensure_tables_exist, get_db_config, logger, open_session, params, process_record, sql_query, startup
 from mental1104.connector.redis import RedisConnection, RedisLock
-from mental1104.csv_processor import csv_processor, csv_writer, export_csv_from_database
+from mental1104.csv_processor import csv_writer, export_csv_from_database
 from mental1104.deciprobe import ELLIPSIS_CHAR, FUNC_FIELD_WIDTH, HEAD_PREFIX, ID_FIELD_WIDTH, SITE_FIELD_WIDTH, TRACE_IF_ENABLED, TYPE_FIELD_WIDTH, deciprobe, trace_if
 from mental1104.encryption import decrypt, encrypt, generate_salt
 from mental1104.environment import MissingEnvVarError, check_required_env_vars
 from mental1104.file import file_iterator
+from mental1104.iterator.iterator_csv import iterator_csv
 from mental1104.random import random_pick
 from mental1104.schema.common_schema import JsonSerializable
 from mental1104.string import replace_space_with
@@ -63,7 +64,6 @@ __all__ = [
     'async_delay',
     'async_timed',
     'check_required_env_vars',
-    'csv_processor',
     'csv_writer',
     'db_connection',
     'db_params_clickhouse',
@@ -81,6 +81,7 @@ __all__ = [
     'generate_salt',
     'get_current_time',
     'get_db_config',
+    'iterator_csv',
     'iterator_json',
     'load_json',
     'logger',
