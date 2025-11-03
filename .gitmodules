@@ -1,22 +1,29 @@
 [submodule "cpp/lib/rapidjson"]
 	path = cpp/lib/rapidjson
 	url = https://github.com/Tencent/rapidjson.git
+	ignore = dirty
 [submodule "cpp/lib/pystring"]
 	path = cpp/lib/pystring
 	url = https://github.com/imageworks/pystring.git
+	ignore = dirty
 [submodule "cpp/lib/cJSON"]
 	path = cpp/lib/cJSON
 	url = https://github.com/DaveGamble/cJSON.git
+	ignore = dirty
 [submodule "cpp/lib/DataStructure"]
 	path = cpp/lib/DataStructure
 	url = https://github.com/mental1104/DataStructure.git
 	branch = main
+	ignore = dirty
 [submodule "cpp/thirdparty/googletest"]
 	path = cpp/thirdparty/googletest
 	url = https://github.com/google/googletest.git
+	ignore = dirty
 [submodule "cpp/lib/hiredis"]
 	path = cpp/lib/hiredis
 	url = git@github.com:redis/hiredis.git
+	ignore = dirty
 [submodule "cpp/lib/redis-plus-plus"]
 	path = cpp/lib/redis-plus-plus
 	url = git@github.com:sewenew/redis-plus-plus.git
+	ignore = dirty
