@@ -132,16 +132,28 @@ define _coverage_cpp
 	$(SHELL) -lc 'set -e; \
 		cd cpp/build; \
 		ctest --output-on-failure || true; \
-		cmake --build . --target coverage -j$$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 8); \
 		if command -v gcovr >/dev/null 2>&1; then \
-			echo "[info] 使用 gcovr 打印终端表格："; \
+			echo "[info] 使用 gcovr 汇总覆盖率（已排除 lib/ 与 thirdparty/）"; \
 			gcovr -r .. --object-directory . \
-			      --exclude "(^|.*/)(test|external|gtest)/" \
-			      --txt --print-summary || true; \
+			      --exclude "(^|.*/)(test|external|gtest|lib|thirdparty|overlay)/" \
+			      --exclude "/usr/include/.*" \
+			      --txt --print-summary; \
 		else \
-			echo "[info] 未安装 gcovr，已用 lcov --list 在上一步输出覆盖率"; \
+			echo "[info] 未检测到 gcovr，回退到 lcov"; \
+			if ! command -v lcov >/dev/null 2>&1; then \
+				echo "[error] 未安装 lcov；请安装 gcovr 或 lcov 任一工具"; exit 1; \
+			fi; \
+			lcov --directory . --capture --output-file coverage.info \
+			     --ignore-errors mismatch,negative,inconsistent \
+			     --no-external --rc geninfo_unexecuted_blocks=1; \
+			lcov --remove coverage.info \
+			     "*/test/*" "*/external/*" "*/gtest/*" "*/lib/*" "*/thirdparty/*" "/usr/*" "/overlay/*" \
+			     -o coverage.filtered.info || true; \
+			lcov --list coverage.filtered.info || lcov --list coverage.info; \
+			echo "[ok] 生成：cpp/build/coverage.info（过滤版：coverage.filtered.info）"; \
 		fi'
 endef
+
 
 define _install_cpp
 	$(SUDO_MSG)
