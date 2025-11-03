@@ -55,18 +55,24 @@ endef
 
 # ---- Python: 安装/测试/安装包/清理/覆盖率
 define _setup_python
-	$(SUDO_MSG)
-	$(SHELL) -lc 'set -e; \
-		echo "[info] 平台: $(UNAME_S)$(if $(IS_UBUNTU), (ubuntu),)"; \
-		echo "[info] $(PIP3) install python/ --upgrade $(BREAK_FLAG)"; \
-		$(SUDO) $(PIP3) install python/ --upgrade $(BREAK_FLAG); \
-		if [[ -f python/generate_init.py ]]; then \
-			echo "[info] 执行 python/generate_init.py …"; \
-			$(SUDO) $(PYTHON) python/generate_init.py; \
+	$(SHELL) -lc "set -e; \
+		echo \"[info] 平台: $(UNAME_S)$(if $(IS_UBUNTU), (ubuntu),)\"; \
+		if [[ -f python/requirements.txt ]]; then \
+			echo \"[pip] 安装依赖到用户目录: python/requirements.txt\"; \
+			$(PYTHON) -m pip install --user -r python/requirements.txt $(BREAK_FLAG); \
 		else \
-			echo "[info] 未找到 python/generate_init.py，跳过。"; \
+			echo \"[info] 未找到 python/requirements.txt，跳过依赖安装。\"; \
 		fi; \
-		echo "[ok] setup 完成。"' 
+		if [[ -f python/generate_init.py ]]; then \
+			echo \"[info] 执行 python/generate_init.py …\"; \
+			$(PYTHON) python/generate_init.py; \
+		else \
+			echo \"[info] 未找到 python/generate_init.py，跳过。\"; \
+		fi; \
+		echo \"[info] 构建本地 wheel（不安装本体）…\"; \
+		mkdir -p python/dist; \
+		$(PYTHON) -m pip wheel --no-deps -w python/dist python/; \
+		echo \"[ok] setup 完成（依赖 --user 安装 + 构建 wheel，不安装本体）。\""
 endef
 
 define _test_python

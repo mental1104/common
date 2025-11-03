@@ -1,0 +1,13 @@
+matplotlib
+psycopg2-binary>=2.9 
+sqlalchemy 
+requests 
+redis>=5.0 
+pulsar-client>=2.10 
+pycryptodome 
+aiohttp 
+genanki
+pytest
+pytest-asyncio
+pytest-mock
+coverage
