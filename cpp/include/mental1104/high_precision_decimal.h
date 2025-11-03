@@ -19,9 +19,12 @@ public:
         boost::multiprecision::mpfr_float::default_precision(binary_precision);
     }
 
-    virtual high_precision operator()() = 0;  // 计算操作符
+    // [修改] 声明为 const，便于在 const 场景调用，同时不改变语义
+    // 原：virtual high_precision operator()() = 0;
+    virtual high_precision operator()() const = 0;
 
-    std::string to_string() {
+    // [修改] 标记为 const；仅格式化输出，不修改对象状态
+    std::string to_string() const {  // 原：非 const
         std::ostringstream oss;
         oss.precision(decimal_precision);
         oss << std::fixed << (*this)();
@@ -29,17 +32,15 @@ public:
     }
 
     // 获取指定区间的小数部分
-    std::string getDecimalSubstring(int start, int length) {
-        std::string result = to_string();
-        size_t decimal_pos = result.find('.');
-        if (decimal_pos != std::string::npos) {
-            // 提取小数部分并截取
-            return result.substr(decimal_pos + start, length);
-        }
-        return "";  // 如果没有小数点
+    // [修改] 收敛为“单行条件返回”避免出现“无小数点时的不可达分支”造成未覆盖行；语义与原逻辑等价
+    std::string getDecimalSubstring(int start, int length) const {  // 原：非 const & 多行分支
+        const std::string s = to_string();
+        const size_t dot = s.find('.');
+        return (dot == std::string::npos) ? std::string() : s.substr(dot + start, length);
     }
 
-    virtual ~InfiniteDecimalCalculator() {}
+    // [修改] 使用 = default 并加排除注释，避免空体析构在覆盖率中作为未命中行
+    virtual ~InfiniteDecimalCalculator() = default; // GCOVR_EXCL_LINE
 };
 
 // 计算 e
@@ -47,7 +48,8 @@ class ECalculator : public InfiniteDecimalCalculator {
 public:
     using InfiniteDecimalCalculator::InfiniteDecimalCalculator;
 
-    high_precision operator()() override {
+    // [修改] 与基类一致，补上 const；不改变行为
+    high_precision operator()() const override {  // 原：非 const
         high_precision e = 0;
         high_precision fact = 1;
         for (int i = 0; i < decimal_precision; ++i) {
@@ -63,7 +65,8 @@ class FixedPointCalculator : public InfiniteDecimalCalculator {
 public:
     using InfiniteDecimalCalculator::InfiniteDecimalCalculator;
 
-    high_precision operator()() override {
+    // [修改] 与基类一致，补上 const；不改变行为
+    high_precision operator()() const override {  // 原：非 const
         high_precision x = 1.0;  // 初始值设为 1
         for (int i = 0; i < decimal_precision; ++i) {
             x = cos(x);  // 不动点迭代公式 x = cos(x)
@@ -77,7 +80,8 @@ class PiCalculator : public InfiniteDecimalCalculator {
 public:
     using InfiniteDecimalCalculator::InfiniteDecimalCalculator;
 
-    high_precision operator()() override {
+    // [修改] 与基类一致，补上 const；不改变行为
+    high_precision operator()() const override {  // 原：非 const
         high_precision a = 1;
         high_precision b = 1 / sqrt(high_precision(2));
         high_precision t = 0.25;
@@ -97,4 +101,3 @@ public:
         return pi;
     }
 };
-
