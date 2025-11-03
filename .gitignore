@@ -8,3 +8,5 @@ __pycache__
 .pytest_cache
 dist
 cpp/lib/*
+coverage.html
+coverage.out
