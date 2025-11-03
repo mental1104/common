@@ -10,22 +10,10 @@ authors = [
   { name = "mental1104", email = "mental1104@gmail.com" }
 ]
 requires-python = ">=3.7"
-dependencies = [
-  "matplotlib",
-  "psycopg2-binary>=2.9", 
-  "sqlalchemy", 
-  "requests", 
-  "redis>=5.0", 
-  "pulsar-client>=2.10", 
-  "pycryptodome", 
-  "aiohttp", 
-  "genanki",
-  "pytest",
-  "pytest-asyncio",
-  "pytest-mock",
-  "coverage"
-]
+dynamic = ["dependencies"]
 
 [tool.setuptools.packages.find]
 exclude = ["test", "test.*"]
 
+[tool.setuptools.dynamic]
+dependencies = { file = ["requirements.txt"] }
