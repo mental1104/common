@@ -219,6 +219,114 @@ define _clean_cpp_submodules
 		echo "[clean-submods] 完成。"'
 endef
 
+# =================== Go 工具与参数 ===================
+GO            ?= go
+GO_DIR        := golang
+GO_COVER_OUT  := $(GO_DIR)/coverage.out
+GO_COVER_HTML := $(GO_DIR)/coverage.html
+
+# 可覆盖：例如 make coverage-go GOPROXY=https://goproxy.io,direct
+GOPROXY     ?=
+GOPRIVATE   ?=
+GOTOOLCHAIN ?= local
+GOWORK      ?= off                # 强制忽略 go.work
+
+# ---- Go: setup/build/test/coverage ----
+define _setup_go
+	$(SHELL) -lc 'set -e; \
+		echo "[go] 目录: $(GO_DIR)"; \
+		if ! command -v $(GO) >/dev/null 2>&1; then echo "[error] 未找到 go 命令"; exit 1; fi; \
+		if [[ ! -f "$(GO_DIR)/go.mod" ]]; then \
+			echo "[warn] $(GO_DIR)/go.mod 不存在，请先在 $(GO_DIR) 执行: go mod init <module>"; \
+			exit 1; \
+		fi; \
+		cd "$(GO_DIR)"; \
+		echo "[go] env: GOWORK=$(GOWORK) GOTOOLCHAIN=$(GOTOOLCHAIN) GOPROXY=$(GOPROXY) GOPRIVATE=$(GOPRIVATE)"; \
+		GOWORK=$(GOWORK) GOTOOLCHAIN=$(GOTOOLCHAIN) GOPROXY="$(GOPROXY)" GOPRIVATE="$(GOPRIVATE)" $(GO) mod tidy; \
+		GOWORK=$(GOWORK) GOTOOLCHAIN=$(GOTOOLCHAIN) GOPROXY="$(GOPROXY)" GOPRIVATE="$(GOPRIVATE)" $(GO) mod download; \
+		echo "[ok] go setup 完成。"'
+endef
+
+define _build_go
+	$(SHELL) -lc 'set -e; \
+		cd "$(GO_DIR)"; \
+		echo "[go] build ./... (库包仅做编译检查，不产生仓库内产物)"; \
+		GOWORK=$(GOWORK) GOTOOLCHAIN=$(GOTOOLCHAIN) GOPROXY="$(GOPROXY)" GOPRIVATE="$(GOPRIVATE)" $(GO) build ./...; \
+		echo "[ok] go build 完成。"'
+endef
+
+# 发现 package main 并在 golang/bin 下产出可执行文件
+define _build_go_bins
+	$(SHELL) -lc 'set -e; \
+		cd "$(GO_DIR)"; mkdir -p bin; \
+		echo "[go] 扫描 package main …"; \
+		$(GO) list -f "{{if eq .Name \"main\"}}{{.ImportPath}}|{{.Dir}}{{end}}" ./... \
+		  | sed "/^$$/d" \
+		  | while IFS="|" read -r pkg dir; do \
+				name=$$(basename "$$dir"); \
+				echo "  - build $$pkg -> bin/$$name"; \
+				GOWORK=$(GOWORK) GOTOOLCHAIN=$(GOTOOLCHAIN) GOPROXY="$(GOPROXY)" GOPRIVATE="$(GOPRIVATE)" \
+				$(GO) build -o "bin/$$name" "$$pkg"; \
+			done; \
+		echo "[ok] go 可执行产物已生成到 $(GO_DIR)/bin/";'
+endef
+
+define _test_go
+	$(SHELL) -lc 'set -e; \
+		cd "$(GO_DIR)"; \
+		echo "[go] test -count=1 -v ./..."; \
+		GOWORK=$(GOWORK) GOTOOLCHAIN=$(GOTOOLCHAIN) GOPROXY="$(GOPROXY)" GOPRIVATE="$(GOPRIVATE)" $(GO) test -count=1 -v ./...; \
+		echo "[ok] go test 通过。"'
+endef
+
+define _coverage_go
+	$(SHELL) -lc 'set -e; \
+		cd "$(GO_DIR)"; \
+		echo "[go] 计算 coverpkg（跨包覆盖）…"; \
+		PKGS=$$($(GO) list ./... | paste -sd, -); \
+		PKGS=$$(echo "$$PKGS" | sed "s/,\$$//"); \
+		echo "[go] test -covermode=atomic -coverpkg=$$PKGS -coverprofile=coverage.out ./..."; \
+		GOWORK=$(GOWORK) GOTOOLCHAIN=$(GOTOOLCHAIN) GOPROXY="$(GOPROXY)" GOPRIVATE="$(GOPRIVATE)" \
+		$(GO) test -count=1 -covermode=atomic -coverpkg="$$PKGS" -coverprofile=coverage.out ./...; \
+		echo "[go] 覆盖率汇总："; \
+		$(GO) tool cover -func=coverage.out; \
+		echo "[go] 生成 HTML 报告：$(GO_COVER_HTML)"; \
+		$(GO) tool cover -html=coverage.out -o coverage.html; \
+		echo "[ok] 覆盖率生成完成：$(GO_COVER_OUT) / $(GO_COVER_HTML)";'
+endef
+
+
+# 可选：自定义可执行安装路径
+GOBIN ?=
+
+define _install_go
+	$(SHELL) -lc 'set -e; \
+		cd "$(GO_DIR)"; \
+		echo "[go] install ./... （仅对 package main 生效）"; \
+		GOWORK=$(GOWORK) GOTOOLCHAIN=$(GOTOOLCHAIN) GOPROXY="$(GOPROXY)" GOPRIVATE="$(GOPRIVATE)" \
+		GOBIN="$(GOBIN)" $(GO) install ./...; \
+		if [[ -n "$(GOBIN)" ]]; then \
+			echo "[ok] 可执行文件安装到: $(GOBIN)"; \
+		else \
+			echo "[ok] 可执行文件已安装到默认 GOBIN（见: go env GOBIN 或 GOPATH/bin）"; \
+		fi'
+endef
+
+define _clean_go
+	$(SHELL) -lc 'set -e; \
+		cd "$(GO_DIR)"; \
+		echo "[go] 清理覆盖率与产物 …"; \
+		rm -f coverage.out coverage.html; \
+		rm -rf bin; \
+		echo "[go] 执行 go clean（移除测试缓存与临时对象） …"; \
+		GOWORK=$(GOWORK) $(GO) clean -testcache; \
+		GOWORK=$(GOWORK) $(GO) clean ./...; \
+		echo "[ok] go clean 完成。"'
+endef
+
+
+
+
 # =================== 直达入口（Python） ===================
 .PHONY: setup-python build-python test-python install-python clean-python coverage-python
 setup-python:   ; $(call _setup_python)
@@ -227,6 +335,16 @@ test-python:    ; $(call _test_python)
 install-python: ; $(call _install_python)
 clean-python:   ; $(call _clean_python)
 coverage-python:; $(call _coverage_python)
+
+# =================== 直达入口（Go） ===================
+.PHONY: setup-go build-go test-go coverage-go install-go clean-go
+setup-go:    ; $(call _setup_go)
+build-go:    | setup-go ; $(call _build_go)
+test-go:     ; $(call _test_go)
+coverage-go: | test-go  ; $(call _coverage_go) 
+install-go: ; $(call _install_go)
+clean-go:   ; $(call _clean_go)
+
 
 # =================== 直达入口（C++） ===================
 .PHONY: git-submodules setup-cpp build-cpp test-cpp install-cpp clean-cpp coverage-cpp
@@ -251,12 +369,12 @@ coverage-cpp:   | test-cpp  ; $(call _coverage_cpp)
 
 # =================== 聚合入口（Python + C++） ===================
 .PHONY: setup build test install clean coverage help
-setup:    setup-python setup-cpp
-build:    build-python build-cpp
-test:     test-python  test-cpp
-install:  install-python install-cpp
-clean:    clean-python  clean-cpp
-coverage: coverage-python coverage-cpp
+setup:    setup-python setup-go setup-cpp
+build:    build-python build-go build-cpp
+test:     test-python test-go test-cpp
+install:  install-python install-go install-cpp
+clean:    clean-python clean-go clean-cpp
+coverage: coverage-python coverage-go coverage-cpp
 
 help:
 	@echo "可用目标："
