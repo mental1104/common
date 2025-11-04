@@ -11,5 +11,7 @@ pytest
 pytest-asyncio
 pytest-mock
 pytest-benchmark
+pytest-leaks
+memray
 autopep8
 coverage

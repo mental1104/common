@@ -430,16 +430,239 @@ define _install_rust
 		echo "[ok] rust 安装完成：库到 $$libd，文档到 $$docd/mental1104"'
 endef
 
+# 可选：最低行覆盖率阈值（不带%）。不设则不触发失败
+RUST_COVER_FAIL_UNDER ?=
+
 define _coverage_rust
 	$(SHELL) -lc 'set -e; \
 		cd "$(RUST_DIR)"; \
 		rustup component add llvm-tools-preview >/dev/null 2>&1 || true; \
 		if ! command -v cargo-llvm-cov >/dev/null 2>&1; then cargo install cargo-llvm-cov; fi; \
-		mkdir -p coverage/html; \
-		cargo llvm-cov --all-features --ignore-filename-regex "(^|/)(tests?|benches?|examples)/" --html --output-dir coverage/html; \
-		cargo llvm-cov --all-features --ignore-filename-regex "(^|/)(tests?|benches?|examples)/" --lcov --output-path coverage/lcov.info; \
-		echo "[ok] 覆盖率生成：coverage/html/index.html 与 coverage/lcov.info"'
+		mkdir -p coverage/html coverage; \
+		IGNORE="(^|/)(tests?|benches?|examples)/"; \
+		echo "[info] 生成 HTML 与 LCOV 报告（仅统计源码，忽略 tests/benches/examples）…"; \
+		cargo llvm-cov --all-features --ignore-filename-regex "$$IGNORE" \
+			--html --output-dir coverage/html; \
+		cargo llvm-cov --all-features --ignore-filename-regex "$$IGNORE" \
+			--lcov --output-path coverage/lcov.info; \
+		echo "[ok] HTML: coverage/html/index.html"; \
+		echo "[ok] LCOV: coverage/lcov.info"; \
+		FAIL_ARG=""; \
+		if [[ -n "$${RUST_COVER_FAIL_UNDER:-}" ]]; then FAIL_ARG="--fail-under-lines $$RUST_COVER_FAIL_UNDER"; fi; \
+		echo "[info] 覆盖率汇总（最后打印）"; \
+		cargo llvm-cov --all-features --ignore-filename-regex "$$IGNORE" \
+			--summary-only $$FAIL_ARG; \
+	'
 endef
+
+
+define _vet_rust
+	$(SHELL) -lc 'set -e; \
+		cd rust/mental1104; \
+		echo "[info] 运行 cargo clippy..."; \
+		cargo clippy --all-targets --all-features || true; \
+		echo "[ok] vet-rust 检查完成（忽略警告）。"'
+endef
+
+
+define _vet_go
+	$(SHELL) -lc 'set -e; \
+		cd golang; \
+		echo "[info] 运行 go vet 静态分析..."; \
+		out=$$(GOWORK=$(GOWORK) $(GO) vet ./... 2>&1 || true); \
+		if [ -z "$$out" ]; then \
+			echo "[ok] go vet 未发现问题。"; \
+		else \
+			echo "$$out"; \
+			exit 1; \
+		fi'
+endef
+
+
+define _vet_python
+	$(SHELL) -lc 'set -e; cd python; \
+		if ! $(PYTHON) -c "import importlib,sys; sys.exit(0 if importlib.util.find_spec(\"ruff\") else 1)"; then \
+			echo \"[error] 未找到 ruff；请先执行: $(PYTHON) -m pip install --user ruff\"; exit 1; \
+		fi; \
+		$(PYTHON) -m ruff check --select F,B,UP,PERF mental1104'
+endef
+
+# 你想检查的目录，默认仅测单元测试目录，避免把 bench/ 拉进来
+VET_DIR ?= cpp/test
+CPP_BUILD_DIR ?= cpp/build
+
+define _vet_cpp
+	$(SHELL) -lc 'set -e; \
+		if ! command -v clang-tidy >/dev/null 2>&1; then \
+			echo "[error] 未找到 clang-tidy（如：sudo apt install clang-tidy）"; exit 1; \
+		fi; \
+		if [[ ! -f "$(CPP_BUILD_DIR)/compile_commands.json" ]]; then \
+			echo "[hint] 先生成编译数据库：cmake -S cpp -B $(CPP_BUILD_DIR) -DCMAKE_EXPORT_COMPILE_COMMANDS=ON && cmake --build $(CPP_BUILD_DIR)"; \
+			exit 1; \
+		fi; \
+		echo "[info] clang-tidy 目录: $(VET_DIR)"; \
+		find "$(VET_DIR)" -type f \( -name "*.cpp" -o -name "*.cc" -o -name "*.cxx" \) -print0 \
+		| xargs -0 -r clang-tidy -p "$(CPP_BUILD_DIR)" --quiet \
+			--checks="-*,bugprone-*,performance-*,clang-analyzer-*" \
+			--warnings-as-errors="*" \
+			-header-filter="^.*/cpp/include/mental1104/.*"; \
+		echo "[ok] vet-cpp 完成。"; \
+	'
+endef
+
+.PHONY: vet vet-rust vet-go vet-python vet-cpp
+vet:        vet-python vet-cpp vet-go vet-rust
+vet-rust:   ; $(call _vet_rust)
+vet-go:     ; $(call _vet_go)
+vet-python: ; $(call _vet_python)
+vet-cpp:    ; $(call _vet_cpp)
+
+
+define _guard_cpp
+	$(SHELL) -lc 'set -e -o pipefail; MODE="${MODE:-mem}"; \
+		if [ "$$MODE" = "all" ]; then $(MAKE) guard-cpp MODE=mem; $(MAKE) guard-cpp MODE=race; exit 0; fi; \
+		if [ "$$MODE" = "heap" ]; then \
+			if ! command -v valgrind >/dev/null 2>&1; then echo "[error] 未安装 valgrind"; exit 1; fi; \
+			cmake -S cpp -B cpp/build -DCMAKE_BUILD_TYPE=Debug -DCMAKE_EXPORT_COMPILE_COMMANDS=ON; cmake --build cpp/build -j $(JOBS); \
+			echo "[info] 运行 massif 生成内存占用画像"; \
+			find cpp/build/bin -maxdepth 1 -type f -name "test_*" -executable | while read -r t; do \
+				out="`basename $$t`.massif"; echo "[info] massif $$t -> $$out"; valgrind --tool=massif --time-unit=ms --stacks=yes --massif-out-file="$$out" "$$t" || true; \
+			done; echo "[ok] guard-cpp[heap] 已生成 massif 报告"; exit 0; \
+		fi; \
+		if [ "$$MODE" = "race" ]; then \
+			B="cpp/build-tsan"; CFLAGS="-O1 -g -fno-omit-frame-pointer -fsanitize=thread"; \
+			TS="TSAN_OPTIONS=halt_on_error=1"; cmake -S cpp -B "$$B" -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_FLAGS="$$CFLAGS" -DCMAKE_EXE_LINKER_FLAGS="$$CFLAGS" -DCMAKE_EXPORT_COMPILE_COMMANDS=ON; \
+			cmake --build "$$B" -j $(JOBS); cd "$$B"; log="guard_tsan.log"; \
+			if ! env $$TS ctest --output-on-failure -j $(JOBS) -LE bench | tee "$$log"; then \
+				if grep -qiE "ThreadSanitizer|data race" "$$log"; then echo "[fail][concurrency] 并发竞态问题, 日志 $$B/$$log"; else echo "[fail][test] 非并发导致失败, 日志 $$B/$$log"; fi; exit 1; \
+			fi; if grep -qiE "ThreadSanitizer|data race" "$$log"; then echo "[fail][concurrency] 并发竞态问题, 日志 $$B/$$log"; exit 1; fi; \
+			echo "[ok] guard-cpp[race] 通过"; exit 0; \
+		fi; \
+		B="cpp/build-asan"; CFLAGS="-O1 -g -fno-omit-frame-pointer -fsanitize=address,undefined"; \
+		AA="ASAN_OPTIONS=detect_leaks=1:strict_string_checks=1:check_initialization_order=1:detect_stack_use_after_return=1:halt_on_error=1"; \
+		UA="UBSAN_OPTIONS=print_stacktrace=1:halt_on_error=1"; \
+		cmake -S cpp -B "$$B" -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_FLAGS="$$CFLAGS" -DCMAKE_EXE_LINKER_FLAGS="$$CFLAGS" -DCMAKE_EXPORT_COMPILE_COMMANDS=ON; \
+		cmake --build "$$B" -j $(JOBS); cd "$$B"; log="guard_asan.log"; \
+		if ! env $$AA $$UA ctest --output-on-failure -j $(JOBS) -LE bench | tee "$$log"; then \
+			if grep -qiE "AddressSanitizer|heap-use-after-free|use-after-free|stack-use-after-return|buffer-overflow|leak" "$$log"; then echo "[fail][memory] 内存读写或泄漏问题, 日志 $$B/$$log"; \
+			elif grep -qiE "UndefinedBehaviorSanitizer|runtime error" "$$log"; then echo "[fail][ub] 未定义行为问题, 日志 $$B/$$log"; \
+			else echo "[fail][test] 非内存导致失败, 日志 $$B/$$log"; fi; exit 1; \
+		fi; echo "[ok] guard-cpp[mem] 通过"; \
+	'
+endef
+
+define _guard_go
+	$(SHELL) -lc 'set -e -o pipefail; cd "$(GO_DIR)"; log=$$(mktemp -t guard_go.XXXX).log; \
+		echo "[go] go test -race -count=1 ./..."; \
+		if ! GOWORK=$(GOWORK) GOTOOLCHAIN=$(GOTOOLCHAIN) $(GO) test -race -count=1 ./... | tee "$$log"; then \
+			if grep -q "DATA RACE" "$$log"; then echo "[fail][concurrency] 并发竞态问题, 日志 $$log"; else echo "[fail][test] 测试失败, 日志 $$log"; fi; exit 1; \
+		fi; if grep -q "DATA RACE" "$$log"; then echo "[fail][concurrency] 并发竞态问题, 日志 $$log"; exit 1; fi; \
+		echo "[ok] guard-go 通过"; \
+	'
+endef
+
+RUST_DIR ?= rust/mental1104
+MODE ?= all
+
+# 可选：设为 1 时自动安装缺失的 nightly / 组件；默认仅提示
+AUTO_SETUP_RUST_NIGHTLY ?= 0
+
+# 根目录下的 Rust 工程相对路径
+RUST_DIR ?= rust/mental1104
+
+# 设个默认模式，用户也可临时覆盖：make guard-rust MODE=mem
+MODE ?= all
+# AUTO_SETUP_RUST_NIGHTLY=1 时才自动安装 nightly/组件；默认只提示
+AUTO_SETUP_RUST_NIGHTLY ?= 0
+
+# 根目录相对路径
+RUST_DIR ?= rust/mental1104
+# 默认跑内存 + 并发
+MODE ?= all
+
+define _guard_rust
+	$(SHELL) -lc 'set -euo pipefail; \
+		cd "$(RUST_DIR)"; \
+		MODE_VAL="$${MODE:-all}"; \
+		case "$$MODE_VAL" in mem|race|miri|all) ;; *) echo "[error] MODE 仅支持 mem|race|miri|all"; exit 2;; esac; \
+		echo "[info] rust guard MODE=$$MODE_VAL"; \
+		if [ "$$MODE_VAL" = "all" ]; then MODES="mem race"; else MODES="$$MODE_VAL"; fi; \
+		NEED_NIGHTLY=0; for m in $$MODES; do case "$$m" in mem|race|miri) NEED_NIGHTLY=1;; esac; done; \
+		if [ $$NEED_NIGHTLY -eq 1 ]; then \
+			if ! rustup toolchain list | grep -q "^nightly"; then \
+				echo "[error] 未检测到 nightly 工具链。请先运行: rustup toolchain install nightly"; exit 3; \
+			fi; \
+		fi; \
+		for m in $$MODES; do \
+			if [ "$$m" = "mem" ]; then \
+				echo "[mem] AddressSanitizer 开始"; \
+				export RUSTFLAGS="-Zsanitizer=address"; \
+				export RUSTDOCFLAGS="-Zsanitizer=address"; \
+				export ASAN_OPTIONS="detect_leaks=1:halt_on_error=1:malloc_context_size=20"; \
+				cargo +nightly test --tests -Zbuild-std || { echo "[fail][memory] 内存问题"; exit 1; }; \
+				echo "[ok] mem 通过"; \
+			elif [ "$$m" = "race" ]; then \
+				echo "[race] ThreadSanitizer 开始"; \
+				export RUSTFLAGS="-Zsanitizer=thread"; \
+				export RUSTDOCFLAGS="-Zsanitizer=thread"; \
+				export TSAN_OPTIONS="halt_on_error=1:report_signal_unsafe=0"; \
+				cargo +nightly test --tests -Zbuild-std || { echo "[fail][race] 并发竞态问题"; exit 1; }; \
+				echo "[ok] race 通过"; \
+			else \
+				echo "[miri] 开始"; \
+				if ! cargo +nightly miri --version >/dev/null 2>&1; then \
+					echo "[error] 未安装 miri。请执行: rustup +nightly component add miri"; exit 4; \
+				fi; \
+				cargo +nightly miri test || { echo "[fail][miri] 未定义行为"; exit 1; }; \
+				echo "[ok] miri 通过"; \
+			fi; \
+		done'
+endef
+
+.PHONY: guard-rust guard-rust-mem guard-rust-race guard-rust-miri
+guard-rust:
+	$(call _guard_rust)
+
+guard-rust-mem:
+	$(MAKE) --no-print-directory guard-rust MODE=mem
+
+guard-rust-race:
+	$(MAKE) --no-print-directory guard-rust MODE=race)
+
+guard-rust-miri:
+	$(MAKE) --no-print-directory guard-rust MODE=miri
+
+
+define _guard_python
+	@set -euo pipefail; \
+	cd python; \
+	if python3 -c "import importlib.util,sys; sys.exit(0 if importlib.util.find_spec(\"memray\") else 1)"; then \
+		echo "[py] memray 运行 pytest 以生成内存分配画像"; \
+		python3 -m memray run -o memray.bin -m pytest -q \
+		|| { echo "[fail][memory] pytest 失败或内存画像生成失败 (python/memray.bin)"; exit 1; }; \
+		python3 -m memray summary memray.bin || true; \
+		echo "[ok] guard-python[memray] 完成"; \
+	elif python3 -c "import importlib.util,sys; sys.exit(0 if importlib.util.find_spec(\"pytest_leaks\") else 1)"; then \
+		echo "[py] 使用 pytest-leaks 检测引用泄漏"; \
+		pytest --leaks -q \
+		|| { echo "[fail][memory] 可能存在引用泄漏"; exit 1; }; \
+		echo "[ok] guard-python[leaks] 通过"; \
+	else \
+		echo "[hint] 未安装 memray 或 pytest-leaks，回退为纯 pytest"; \
+		python3 -m pytest -q \
+		|| { echo "[fail][test] pytest 失败"; exit 1; }; \
+		echo "[ok] guard-python 通过"; \
+	fi
+endef
+
+
+.PHONY: guard guard-cpp guard-go guard-rust guard-python
+guard-cpp:    ; $(call _guard_cpp)
+guard-go:     ; $(call _guard_go)
+guard-python: ; $(call _guard_python)
+guard:        guard-cpp guard-go guard-rust guard-python
+
+
 
 
 .PHONY: setup-rust build-rust test-rust bench-rust fmt-rust clippy-rust example-rust clean-rust
