@@ -170,6 +170,22 @@ define _clean_cpp
 		echo "[ok] clean 完成。"' 
 endef
 
+define _fmt_cpp
+	$(SHELL) -lc 'set -e; \
+		if ! command -v clang-format >/dev/null 2>&1; then echo "[error] 未找到 clang-format"; exit 1; fi; \
+		find cpp \
+		  \( -path "cpp/lib" -o -path "cpp/lib/*" -o -path "cpp/thirdparty" -o -path "cpp/thirdparty/*" \) -prune -o \
+		  -type f -regex ".*\.\(h\|hh\|hpp\|hxx\|c\|cc\|cpp\|cxx\)" -print0 | xargs -0 -n 50 clang-format -i; \
+		echo "[ok] cpp fmt 完成（已排除 cpp/lib 与 cpp/thirdparty）"'
+endef
+
+define _bench_cpp
+	$(SHELL) -lc 'set -e; \
+		if [[ ! -d "$(CPP_BUILD_DIR)" ]]; then echo "[info] 未发现 $(CPP_BUILD_DIR)，先执行: make build-cpp"; exit 1; fi; \
+		cd "$(CPP_BUILD_DIR)"; \
+		if $(CTEST) -N -L bench >/dev/null 2>&1; then $(CTEST) --output-on-failure -L bench -j $(JOBS); else $(CTEST) --output-on-failure -j $(JOBS); fi'
+endef
+
 # ---- C++ 子模块：在 cpp/lib/* 各自目录下独立构建与清理
 # 要求：每个子模块目录包含自己的 CMakeLists.txt
 define _build_cpp_submodules
@@ -295,6 +311,13 @@ define _coverage_go
 		echo "[ok] 覆盖率生成完成：$(GO_COVER_OUT) / $(GO_COVER_HTML)";'
 endef
 
+define _fmt_go
+	$(SHELL) -lc 'set -e; cd "$(GO_DIR)"; go fmt ./... >/dev/null; echo "[ok] go fmt 完成。"'
+endef
+
+define _bench_go
+	$(SHELL) -lc 'set -e; cd "$(GO_DIR)"; GOWORK=$(GOWORK) GOTOOLCHAIN=$(GOTOOLCHAIN) GOPROXY="$(GOPROXY)" GOPRIVATE="$(GOPRIVATE)" $(GO) test -bench=. -benchmem ./...'
+endef
 
 # 可选：自定义可执行安装路径
 GOBIN ?=
@@ -373,6 +396,32 @@ define _clean_rust
 		echo "[ok] rust clean 完成。"'
 endef
 
+define _install_rust
+	$(SUDO_MSG)
+	$(SHELL) -lc 'set -e; \
+		cd "$(RUST_DIR)"; \
+		cargo build --release; \
+		cargo doc --no-deps --release; \
+		libd="$(PREFIX)/lib/mental1104"; docd="$(PREFIX)/share/doc/mental1104"; \
+		$(SUDO) mkdir -p "$$libd" "$$docd"; \
+		find target/release/deps -maxdepth 1 -type f \( -name "libmental1104*.rlib" -o -name "libmental1104*.rmeta" \) -exec $(SUDO) cp -f {} "$$libd"/ \; || true; \
+		$(SUDO) rm -rf "$$docd/mental1104"; \
+		$(SUDO) cp -r target/doc/mental1104 "$$docd"/; \
+		echo "[ok] rust 安装完成：库到 $$libd，文档到 $$docd/mental1104"'
+endef
+
+define _coverage_rust
+	$(SHELL) -lc 'set -e; \
+		cd "$(RUST_DIR)"; \
+		rustup component add llvm-tools-preview >/dev/null 2>&1 || true; \
+		if ! command -v cargo-llvm-cov >/dev/null 2>&1; then cargo install cargo-llvm-cov; fi; \
+		mkdir -p coverage/html; \
+		cargo llvm-cov --all-features --ignore-filename-regex "(^|/)(tests?|benches?|examples)/" --html --output-dir coverage/html; \
+		cargo llvm-cov --all-features --ignore-filename-regex "(^|/)(tests?|benches?|examples)/" --lcov --output-path coverage/lcov.info; \
+		echo "[ok] 覆盖率生成：coverage/html/index.html 与 coverage/lcov.info"'
+endef
+
+
 .PHONY: setup-rust build-rust test-rust bench-rust fmt-rust clippy-rust example-rust clean-rust
 setup-rust:   ; $(call _setup_rust)
 build-rust:   | setup-rust ; $(call _build_rust)
@@ -382,6 +431,8 @@ fmt-rust:     ; $(call _fmt_rust)
 clippy-rust:  ; $(call _clippy_rust)
 example-rust: ; $(call _example_rust)
 clean-rust:   ; $(call _clean_rust)
+install-rust: ; $(call _install_rust)
+coverage-rust:; $(call _coverage_rust)
 
 # =================== 直达入口（Python） ===================
 .PHONY: setup-python build-python test-python install-python clean-python coverage-python
@@ -393,17 +444,19 @@ clean-python:   ; $(call _clean_python)
 coverage-python:; $(call _coverage_python)
 
 # =================== 直达入口（Go） ===================
-.PHONY: setup-go build-go test-go coverage-go install-go clean-go
+.PHONY: setup-go build-go test-go coverage-go install-go clean-go fmt-go bench-go
 setup-go:    ; $(call _setup_go)
 build-go:    | setup-go ; $(call _build_go)
 test-go:     ; $(call _test_go)
 coverage-go: | test-go  ; $(call _coverage_go) 
 install-go: ; $(call _install_go)
 clean-go:   ; $(call _clean_go)
+fmt-go:   ; $(call _fmt_go)
+bench-go: ; $(call _bench_go)
 
 
 # =================== 直达入口（C++） ===================
-.PHONY: git-submodules setup-cpp build-cpp test-cpp install-cpp clean-cpp coverage-cpp
+.PHONY: git-submodules setup-cpp build-cpp test-cpp install-cpp clean-cpp coverage-cpp fmt-cpp bench-cpp
 git-submodules:        ; $(call _git_fetch_submodules)
 
 # 关键改动：setup-cpp 会**逐个进入 cpp/lib/* 构建到各自 build/**，随后顶层做一次 cmake 配置
@@ -422,15 +475,19 @@ clean-cpp:
 	$(call _clean_cpp)
 
 coverage-cpp:   | test-cpp  ; $(call _coverage_cpp)
+fmt-cpp:  ; $(call _fmt_cpp)
+bench-cpp:; $(call _bench_cpp)
+
 
 # =================== 聚合入口（Python + C++） ===================
-.PHONY: setup build test install clean coverage help
-setup:    setup-python setup-go setup-cpp
-build:    build-python build-go build-cpp
-test:     test-python test-go test-cpp
-install:  install-python install-go install-cpp
-clean:    clean-python clean-go clean-cpp
-coverage: coverage-python coverage-go coverage-cpp
+.PHONY: setup build test install clean coverage help fmt bench
+setup:    setup-python setup-go setup-cpp setup-rust
+build:    build-python build-go build-cpp build-rust
+test:     test-python test-go test-cpp test-rust
+install:  install-python install-go install-cpp install-rust
+clean:    clean-python clean-go clean-cpp clean-rust
+coverage: coverage-python coverage-go coverage-cpp coverage-rust
+fmt:      fmt-go fmt-cpp fmt-rust
 
 help:
 	@echo "可用目标："

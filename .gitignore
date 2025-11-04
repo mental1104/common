@@ -13,7 +13,7 @@ coverage.out
 
 # --- Rust / Cargo 通用 ---
 # 编译产物
-target/
+target
 
 # 覆盖率 / 性能分析（按需）
 *.profraw
