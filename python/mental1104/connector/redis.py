@@ -7,7 +7,6 @@ import uuid
 import redis
 
 
-
 # -------------------------------
 # Redis 连接上下文管理器
 # -------------------------------
@@ -20,6 +19,7 @@ class RedisConnection:
       REDIS_PORT: Redis 端口（默认为 6379）
       REDISCLI_AUTH: Redis 密码（默认为 None）
     """
+
     def __init__(self, host=None, port=None, password=None, decode_responses=True):
         self.host = host or os.environ.get("REDIS_HOST", "localhost")
         self.port = port or int(os.environ.get("REDIS_PORT", 6379))
@@ -46,6 +46,8 @@ class RedisConnection:
 # -------------------------------
 # 分布式锁实现（API: try_lock, unlock）
 # -------------------------------
+
+
 class RedisLock:
     def __init__(self, redis_client, name, lock_expire=10):
         """

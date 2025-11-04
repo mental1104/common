@@ -8,13 +8,16 @@ PKG = "mental1104"
 BASE_PACKAGE = Path(__file__).resolve().parent / PKG
 INIT_FILE = BASE_PACKAGE / "__init__.py"
 
+
 class ModuleInfo:
     __slots__ = ("module", "file", "names", "risk")
+
     def __init__(self, module: str, file: Path, names: List[str], risk: bool):
         self.module = module
         self.file = file
         self.names = names
         self.risk = risk
+
 
 def collect_public_names(file_path: Path) -> List[str]:
     names: List[str] = []
@@ -36,6 +39,7 @@ def collect_public_names(file_path: Path) -> List[str]:
                     names.append(name)
     return sorted(set(names))
 
+
 def detect_risk_imports(file_path: Path) -> bool:
     """检测该模块是否在顶层 import 了 mental1104（或 from mental1104 import ...）。
        这类模块作为『风险模块』，避免在包初始化时直接导入，以规避循环依赖。"""
@@ -53,6 +57,7 @@ def detect_risk_imports(file_path: Path) -> bool:
             if node.module and (node.module == PKG or node.module.startswith(PKG + ".")):
                 return True
     return False
+
 
 def walk_modules(base_dir: Path) -> List[ModuleInfo]:
     out: List[ModuleInfo] = []
@@ -72,10 +77,12 @@ def walk_modules(base_dir: Path) -> List[ModuleInfo]:
     out.sort(key=lambda m: m.module)
     return out
 
+
 def choose_providers(mods: List[ModuleInfo]) -> Tuple[Dict[str, str], Dict[str, List[str]]]:
     """跨模块重名稳定决策：优先『路径更浅』的模块，其次字典序。返回 name->module 的映射。"""
     export_map: Dict[str, str] = {}
     dups: Dict[str, List[str]] = {}
+
     def rank(modname: str):
         return (modname.count("."), modname)
     for mi in mods:
@@ -92,6 +99,7 @@ def choose_providers(mods: List[ModuleInfo]) -> Tuple[Dict[str, str], Dict[str, 
                 if mi.module not in dups[n]:
                     dups[n].append(mi.module)
     return export_map, dups
+
 
 def generate_init(mods: List[ModuleInfo]) -> str:
     # 计算全局提供者（重名稳定决策）
@@ -180,6 +188,7 @@ def generate_init(mods: List[ModuleInfo]) -> str:
     ]
     return "\n".join(lines)
 
+
 def main():
     mods = walk_modules(BASE_PACKAGE)
     content = generate_init(mods)
@@ -191,6 +200,7 @@ def main():
 - total exports detected: {total}
 - direct imports: {sum(1 for mi in mods if mi.module not in {m.module for m in mods if m.risk})}
 """)
+
 
 if __name__ == "__main__":
     main()

@@ -3,6 +3,7 @@ import string
 
 from mental1104 import encrypt, decrypt, generate_salt
 
+
 class TestEncryption:
 
     def test_encrypt_decrypt(self):
@@ -56,13 +57,13 @@ class TestEncryption:
 
     def test_encrypt_with_default_parameters(self):
         plaintext = "Default test"
-        
+
         # 使用默认参数加密
         encrypted = encrypt(plaintext)
         decrypted = decrypt(encrypted)
-        
+
         assert decrypted == plaintext, "使用默认参数加密解密后应与原文一致"
-        
+
     @staticmethod
     def is_valid_salt(salt):
         """

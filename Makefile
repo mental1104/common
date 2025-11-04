@@ -78,10 +78,9 @@ endef
 define _test_python
 	$(SUDO_MSG)
 	$(SHELL) -lc 'set -e; \
-		if ! command -v pytest >/dev/null 2>&1; then \
-			echo "[warn] 未检测到 pytest；请先执行: make setup-python"; exit 1; \
-		fi; \
-		pytest python || { echo "[hint] 测试失败。请先执行: make setup-python"; exit 1; }'
+		if ! command -v pytest >/dev/null 2>&1; then echo "[warn] 未检测到 pytest；请先执行: make setup-python"; exit 1; fi; \
+		cd python; \
+		$(PYTHON) -m pytest -q -k "not bench and not benchmark"'
 endef
 
 define _install_python
@@ -105,6 +104,27 @@ define _coverage_python
 	$(SHELL) -lc 'set -e; \
 		echo "[info] 运行python单元测试覆盖率"; \
 		cd python && $(PYTHON) -m coverage run --source=. -m pytest && coverage report;'
+endef
+
+define _fmt_python
+	$(SHELL) -lc 'set -e; \
+		if ! $(PYTHON) -c "import autopep8" >/dev/null 2>&1; then $(PYTHON) -m pip install --user autopep8 $(BREAK_FLAG); fi; \
+		cd python; \
+		$(PYTHON) -m autopep8 --in-place --recursive --max-line-length=120 --ignore=E402,E226,E24,W50,W690 .; \
+		echo "[ok] python autopep8 fmt 完成。"'
+endef
+
+define _bench_python
+	$(SHELL) -lc 'set -e; \
+		if ! command -v pytest >/dev/null 2>&1; then echo "[error] 未检测到 pytest；请先执行: make setup-python"; exit 1; fi; \
+		cd python; \
+		if $(PYTHON) -m pytest -q --help 2>/dev/null | grep -qi benchmark; then \
+			echo "[pytest-benchmark] 基准用例"; \
+			$(PYTHON) -m pytest -q -k "bench or benchmark" --benchmark-only --benchmark-autosave; \
+		else \
+			echo "[warn] 未检测到 pytest-benchmark，回退到名称筛选"; \
+			$(PYTHON) -m pytest -q -k "bench or benchmark"; \
+		fi'
 endef
 
 # ---- C++ 顶层：配置/编译/测试/覆盖率/安装/清理
@@ -435,13 +455,15 @@ install-rust: ; $(call _install_rust)
 coverage-rust:; $(call _coverage_rust)
 
 # =================== 直达入口（Python） ===================
-.PHONY: setup-python build-python test-python install-python clean-python coverage-python
+.PHONY: setup-python build-python test-python install-python clean-python coverage-python fmt-python bench-python
 setup-python:   ; $(call _setup_python)
 build-python:   | setup-python
 test-python:    ; $(call _test_python)
 install-python: ; $(call _install_python)
 clean-python:   ; $(call _clean_python)
 coverage-python:; $(call _coverage_python)
+fmt-python:     ; $(call _fmt_python)
+bench-python:   ; $(call _bench_python)
 
 # =================== 直达入口（Go） ===================
 .PHONY: setup-go build-go test-go coverage-go install-go clean-go fmt-go bench-go

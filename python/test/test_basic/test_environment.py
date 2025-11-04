@@ -2,6 +2,7 @@ import pytest
 import os
 from mental1104 import check_required_env_vars, MissingEnvVarError
 
+
 class TestEnvironment:
     @pytest.fixture
     def mock_env(self, mocker):

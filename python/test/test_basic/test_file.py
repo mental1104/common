@@ -8,6 +8,8 @@ from unittest.mock import call
 from mental1104 import file_iterator
 
 # 测试用例
+
+
 class TestFileIterator:
 
     def test_file_iterator(self, mocker):

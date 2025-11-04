@@ -109,7 +109,7 @@ class TestRedisLock:
         def access_redis_resource(redis_client, key):
             """高并发访问 Redis 共享资源，确保同一时刻只有一个进程操作"""
             lock = RedisLock(redis_client, "distributed_lock", lock_expire=3)
-            
+
             max_retries = 50  # 允许尝试获取锁的最大次数
             retry_delay = 0.01  # 每次尝试失败后的重试间隔
             cnt = 0
@@ -121,9 +121,9 @@ class TestRedisLock:
                         current_value = redis_client.get(key)
                         current_value = int(current_value) if current_value else 0
                         new_value = current_value + 1
-                        
+
                         print(f"[进程 {multiprocessing.current_process().pid}] 🔄 访问资源 {key}，当前值: {current_value} -> {new_value}")
-                        
+
                         redis_client.set(key, new_value)  # 更新 Redis 资源
                         time.sleep(0.01)  # 模拟业务逻辑（减少阻塞时间）
                         cnt += 1
@@ -133,8 +133,6 @@ class TestRedisLock:
                 else:
                     print(f"[进程 {multiprocessing.current_process().pid}] ⏳ 锁被占用，重试中...")
                     time.sleep(retry_delay)  # 等待一段时间再尝试获取锁
-
-
 
         key = "shared_counter"
         redis_client.set(key, 0)  # 初始化资源

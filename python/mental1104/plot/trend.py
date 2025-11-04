@@ -5,6 +5,7 @@ from collections.abc import Iterable
 from datetime import datetime
 from mental1104.timed import parse_time
 
+
 class TrendPlotBase:
     """
     基于 matplotlib 创建趋势图的基类，支持从 CSV 文件和可迭代对象中生成趋势图。
@@ -121,7 +122,7 @@ class TimeBasedTrendPlot(TrendPlotBase):
     """
     基于时间轴的趋势图派生类。
     """
-    
+
     @staticmethod
     def plot_from_csv(input_file_path, output_file_path=None):
         """

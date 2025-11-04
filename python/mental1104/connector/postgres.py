@@ -15,11 +15,12 @@ logger = logging.getLogger(__name__)
 _Session = sessionmaker()
 Base = declarative_base()
 
+
 def get_db_config():
     """从环境变量获取PostgreSQL配置信息"""
     required_env_vars = ['PGUSER', 'PGPASSWORD', 'PGHOST', 'PGPORT', 'PGDATABASE']
     missing_vars = [var for var in required_env_vars if var not in os.environ]
-    
+
     if missing_vars:
         raise RuntimeError(f"缺少以下环境变量: {', '.join(missing_vars)}")
 
@@ -30,6 +31,7 @@ def get_db_config():
         "port": os.getenv('PGPORT'),
         "database": os.getenv('PGDATABASE'),
     }
+
 
 def ensure_database_exists(config):
     """确保数据库存在，不存在时尝试创建，失败则记录日志"""
@@ -62,6 +64,7 @@ def ensure_database_exists(config):
     except OperationalError as e:
         logger.error(f"连接到默认数据库失败，无法检查或创建目标数据库：{e}")
 
+
 def ensure_tables_exist(engine):
     """检查并按需创建数据库表"""
     inspector = inspect(engine)
@@ -74,6 +77,7 @@ def ensure_tables_exist(engine):
         else:
             logger.info(f"表 {table} 已存在，跳过创建")
     return True
+
 
 def startup():
     """初始化数据库连接并确保表和数据库存在"""
@@ -94,6 +98,7 @@ def startup():
     ensure_tables_exist(engine)
     logger.info("数据库初始化完成")
     return engine
+
 
 @contextmanager
 def open_session():
@@ -117,6 +122,7 @@ def open_session():
 import psycopg2
 from functools import wraps
 
+
 def db_connection(db_type, db_params):
     def decorator(func):
         @wraps(func)
@@ -130,10 +136,10 @@ def db_connection(db_type, db_params):
                     cursor = conn.cursor()
                 else:
                     raise ValueError("Unsupported database type.")
-                
+
                 offset = 0
                 limit = 1000
-                
+
                 while True:
                     # 执行传入的 SQL 语句
                     sql, params = kwargs.get('sql'), kwargs.get('params', {})
@@ -148,11 +154,11 @@ def db_connection(db_type, db_params):
 
                     if len(result) == 0:
                         break  # 当记录数为 0 时退出
-                        
+
                     # 针对每一条记录执行传入的处理函数
                     for item in result:
                         func(item)
-                    
+
                     offset += limit
 
             except Exception as e:
@@ -166,10 +172,11 @@ def db_connection(db_type, db_params):
                     cursor.close()
                 if conn and db_type == 'postgresql':
                     conn.close()
-    
+
         return wrapper
-    
+
     return decorator
+
 
 # 使用示例
 db_params_postgres = {
@@ -186,11 +193,13 @@ db_params_clickhouse = {
     "password": "password"
 }
 
+
 @db_connection('postgresql', db_params_postgres)
 def process_record(item):
     # 处理每条记录的逻辑
     markdown, file_name, label = item
     print(f"Processing file: {file_name}, with label: {label}, content")
+
 
 # 调用示例
 sql_query = """

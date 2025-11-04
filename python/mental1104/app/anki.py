@@ -2,6 +2,7 @@ import genanki
 import json
 import random
 
+
 class AnkiApkgGenerator:
     def __init__(self, model_name='Simple Model', deck_name='Sample Deck'):
         self.model = genanki.Model(
@@ -18,7 +19,7 @@ class AnkiApkgGenerator:
                     'afmt': '{{FrontSide}}<hr id="answer">{{Answer}}',  # 背面模板
                 },
             ])
-        
+
         self.deck = genanki.Deck(
             random.randint(1000000000, 9999999999),  # 随机的唯一ID
             deck_name)
@@ -40,7 +41,7 @@ class AnkiApkgGenerator:
         """
         with open(json_file, "r", encoding="utf-8") as f:
             data = json.load(f)
-        
+
         for key, value in data.items():
             note = genanki.Note(
                 model=self.model,
