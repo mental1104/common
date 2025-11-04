@@ -324,6 +324,27 @@ define _clean_go
 		echo "[ok] go clean 完成。"'
 endef
 
+# ----- Rust 通用目标 -----
+RUST_DIR := rust/mental1104
+
+.PHONY: rust-build rust-test rust-clippy rust-fmt rust-bench rust-example
+build-rust:
+	@cd $(RUST_DIR) && cargo build --release
+
+test-rust:
+	@cd $(RUST_DIR) && cargo test --all-features
+
+clippy-rust:
+	@cd $(RUST_DIR) && cargo clippy --all-targets --all-features -- -D warnings
+
+fmt-rust:
+	@cd $(RUST_DIR) && cargo fmt --all
+
+bench-rust:
+	@cd $(RUST_DIR) && cargo bench
+
+example-rust:
+	@cd $(RUST_DIR) && cargo run --example contains
 
 
 
