@@ -43,6 +43,15 @@ endif()
 
 # ===== gtest（用目标名链接） =====
 add_subdirectory(thirdparty/googletest)
+
+set(BENCH_THIRDPARTY_DIR "${CMAKE_SOURCE_DIR}/thirdparty/benchmark")
+if (EXISTS "${BENCH_THIRDPARTY_DIR}/CMakeLists.txt")
+  add_subdirectory(thirdparty/benchmark)
+  set(HAVE_GOOGLE_BENCHMARK TRUE)
+else()
+  set(HAVE_GOOGLE_BENCHMARK FALSE)
+endif()
+
 include_directories(${gtest_SOURCE_DIR}/include ${gmock_SOURCE_DIR}/include)
 set(GTEST_LINK gtest gtest_main)
 
@@ -483,4 +492,42 @@ if(COVERAGE)
   endif()
 endif()
 
+# ---- 基准：仅在找到 Google Benchmark 时启用；自动扫描 cpp/bench/*.cpp ----
+if (HAVE_GOOGLE_BENCHMARK)
+  set(BENCH_DIR ${CMAKE_SOURCE_DIR}/bench)
+  if (EXISTS "${BENCH_DIR}")
+    # 自动发现所有基准源（新增文件无需改 CMake）
+    file(GLOB BENCH_SRCS CONFIGURE_DEPENDS "${BENCH_DIR}/*.cpp")
+
+    if (BENCH_SRCS)
+      foreach(SRC ${BENCH_SRCS})
+        get_filename_component(BNAME "${SRC}" NAME_WE)             # e.g. bench_cache_gbench.cpp -> bench_cache_gbench
+        set(TGT "bench_${BNAME}")                                  # 可执行名：bench_<文件名>
+        add_executable(${TGT} "${SRC}")
+        target_include_directories(${TGT} PRIVATE
+          ${PROJECT_SOURCE_DIR}/include
+        )
+        target_compile_features(${TGT} PRIVATE cxx_std_20)
+        target_link_libraries(${TGT} PRIVATE benchmark::benchmark)
+        set_target_properties(${TGT} PROPERTIES
+          RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
+        )
+
+        # 以 CTest 测试的形式注册，打上 LABELS "bench"
+        add_test(
+          NAME ${TGT}
+          COMMAND ${CMAKE_BINARY_DIR}/bin/${TGT}
+                  --benchmark_min_time=0.2
+                  --benchmark_repetitions=5
+                  --benchmark_display_aggregates_only=true
+        )
+        set_tests_properties(${TGT} PROPERTIES LABELS "bench")
+      endforeach()
+    else()
+      message(STATUS "No benchmark sources under ${BENCH_DIR}")
+    endif()
+  else()
+    message(STATUS "Benchmark dir not found: ${BENCH_DIR}")
+  endif()
+endif()
 
