@@ -145,7 +145,7 @@ endef
 define _test_cpp
 	$(SHELL) -lc 'set -e; \
 		cd "$(CPP_BUILD_DIR)"; \
-		$(CTEST) --output-on-failure -j $(JOBS)'
+		$(CTEST) --output-on-failure -LE bench -j $(JOBS)'
 endef
 
 define _coverage_cpp

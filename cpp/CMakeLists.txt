@@ -44,9 +44,17 @@ endif()
 # ===== gtest（用目标名链接） =====
 add_subdirectory(thirdparty/googletest)
 
+# 仅当本地存在 benchmark 子模块时启用
 set(BENCH_THIRDPARTY_DIR "${CMAKE_SOURCE_DIR}/thirdparty/benchmark")
 if (EXISTS "${BENCH_THIRDPARTY_DIR}/CMakeLists.txt")
-  add_subdirectory(thirdparty/benchmark)
+  # 关键：彻底关闭 google/benchmark 自带测试与安装目标
+  set(BENCHMARK_ENABLE_TESTING      OFF CACHE BOOL "" FORCE)
+  set(BENCHMARK_ENABLE_GTEST_TESTS  OFF CACHE BOOL "" FORCE)
+  set(BENCHMARK_ENABLE_INSTALL      OFF CACHE BOOL "" FORCE)
+
+  # 仍然引入库，但不把它加入默认 ALL（更干净）
+  add_subdirectory(thirdparty/benchmark EXCLUDE_FROM_ALL)
+
   set(HAVE_GOOGLE_BENCHMARK TRUE)
 else()
   set(HAVE_GOOGLE_BENCHMARK FALSE)
