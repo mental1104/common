@@ -327,26 +327,61 @@ endef
 # ----- Rust 通用目标 -----
 RUST_DIR := rust/mental1104
 
-.PHONY: rust-build rust-test rust-clippy rust-fmt rust-bench rust-example
-build-rust:
-	@cd $(RUST_DIR) && cargo build --release
+define _setup_rust
+	$(SHELL) -lc 'set -e; \
+		if ! command -v cargo >/dev/null 2>&1; then echo "[error] 未找到 cargo"; exit 1; fi; \
+		cd "$(RUST_DIR)"; \
+		if [[ -f rust-toolchain.toml ]]; then rustup toolchain install stable || true; rustup override set stable || true; fi; \
+		cargo fetch; \
+		echo "[ok] rust setup 完成。"'
+endef
 
-test-rust:
-	@cd $(RUST_DIR) && cargo test --all-features
+define _build_rust
+	$(SHELL) -lc 'set -e; cd "$(RUST_DIR)"; cargo build --release; echo "[ok] rust build 完成。"'
+endef
 
-clippy-rust:
-	@cd $(RUST_DIR) && cargo clippy --all-targets --all-features -- -D warnings
+define _test_rust
+	$(SHELL) -lc 'set -e; cd "$(RUST_DIR)"; cargo test --all-features'
+endef
 
-fmt-rust:
-	@cd $(RUST_DIR) && cargo fmt --all
+define _bench_rust
+	$(SHELL) -lc 'set -e; cd "$(RUST_DIR)"; cargo bench'
+endef
 
-bench-rust:
-	@cd $(RUST_DIR) && cargo bench
+define _fmt_rust
+	$(SHELL) -lc 'set -e; cd "$(RUST_DIR)"; cargo fmt --all'
+endef
 
-example-rust:
-	@cd $(RUST_DIR) && cargo run --example contains
+define _clippy_rust
+	$(SHELL) -lc 'set -e; cd "$(RUST_DIR)"; cargo clippy --all-targets --all-features -- -D warnings'
+endef
 
+define _example_rust
+	$(SHELL) -lc 'set -e; cd "$(RUST_DIR)"; cargo run --example contains'
+endef
 
+define _clean_rust
+	$(SHELL) -lc 'set -e; \
+		cd "$(RUST_DIR)"; \
+		cargo clean; \
+		cd - >/dev/null; \
+		rm -rf "$(RUST_DIR)/coverage" \
+		       "$(RUST_DIR)/flamegraph.svg" \
+		       "$(RUST_DIR)"/perf.data* || true; \
+		find "$(RUST_DIR)" -type f -name "*.profraw" -delete || true; \
+		find "$(RUST_DIR)" -type f -name "*.profdata" -delete || true; \
+		echo "[ok] rust clean 完成。"'
+endef
+
+.PHONY: setup-rust build-rust test-rust bench-rust fmt-rust clippy-rust example-rust clean-rust
+setup-rust:   ; $(call _setup_rust)
+build-rust:   | setup-rust ; $(call _build_rust)
+test-rust:    ; $(call _test_rust)
+bench-rust:   ; $(call _bench_rust)
+fmt-rust:     ; $(call _fmt_rust)
+clippy-rust:  ; $(call _clippy_rust)
+example-rust: ; $(call _example_rust)
+clean-rust:   ; $(call _clean_rust)
 
 # =================== 直达入口（Python） ===================
 .PHONY: setup-python build-python test-python install-python clean-python coverage-python

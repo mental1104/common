@@ -17,6 +17,7 @@ pub trait HasKey<Q: ?Sized> {
 /// 切片本身不携带“是否有序”的元信息。若要在编译期选择二分搜索（`O(log n)`），
 /// 需把“已排序”提升为类型信息，由调用方显式承诺。
 #[repr(transparent)]
+#[derive(Copy, Clone)] // ✅ 允许在基准闭包中按值多次捕获（修复 E0507）
 pub struct SortedSlice<'a, T>(pub &'a [T]);
 
 /// 对外统一入口：名称就叫 `contains`。
@@ -45,7 +46,8 @@ where
 {
     #[inline]
     fn contains(&self, key: &Q) -> bool {
-        self.contains(key)
+        // 避免与本 trait 的 contains 同名而递归：使用迭代器比较
+        self.iter().any(|t| t == key)
     }
 }
 
@@ -97,7 +99,8 @@ where
 {
     #[inline]
     fn contains(&self, key: &Q) -> bool {
-        self.contains(key)
+        // 显式限定到标准库的 HashSet::contains，避免与本 trait 名称冲突。
+        HashSet::contains(self, key)
     }
 }
 
@@ -109,7 +112,8 @@ where
 {
     #[inline]
     fn contains(&self, key: &Q) -> bool {
-        self.contains(key)
+        // 显式限定到标准库的 BTreeSet::contains，避免与本 trait 名称冲突。
+        BTreeSet::contains(self, key)
     }
 }
 
