@@ -3,7 +3,6 @@ from Crypto.Cipher import AES
 from Crypto.Util.Padding import pad, unpad
 
 
-
 def encrypt(plaintext, key="0ePThPnLaJcWFcRc", salt=None):
     """        
     使用 AES CBC 模式加密明文。
@@ -23,6 +22,7 @@ def encrypt(plaintext, key="0ePThPnLaJcWFcRc", salt=None):
     encrypted = aes.encrypt(padded_plaintext)
 
     return base64.b64encode(encrypted)
+
 
 def decrypt(ciphertext, key="0ePThPnLaJcWFcRc", salt=None):
     """

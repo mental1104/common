@@ -1,6 +1,7 @@
 import json
 from dataclasses import asdict
 
+
 class JsonSerializable:
     def __str__(self):
         # JSON 格式化输出，面向用户

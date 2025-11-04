@@ -45,7 +45,7 @@ class PulsarConnector:
             PulsarEnvironment.PULSAR_ADMIN_PORT.value
         ])
         return f"http://{os.environ[PulsarEnvironment.PULSAR_HOST.value]}:{os.environ[PulsarEnvironment.PULSAR_ADMIN_PORT.value]}"
-    
+
     @staticmethod
     def get_header(content_type=""):
         """
@@ -59,7 +59,6 @@ class PulsarConnector:
             headers["Content-Type"] = content_type
 
         return headers if len(headers) else None
-
 
 
 class Consumer:
@@ -363,7 +362,8 @@ class PulsarAdminHelper:
         # 检查响应状态码
         if response.status_code in [200, 204, 409]:
             # 200 和 204 表示创建成功，409 表示主题已存在
-            logging.info(f"Partitioned topic {topic} with {partitions} partitions handled successfully (status: {response.status_code}).")
+            logging.info(
+                f"Partitioned topic {topic} with {partitions} partitions handled successfully (status: {response.status_code}).")
         else:
             # 其他状态码为错误
             raise RuntimeError(f"Failed to create partitioned topic {topic}: {response.status_code} {response.text}")
@@ -515,7 +515,10 @@ class PulsarAdminHelper:
         stat = PulsarAdminHelper.get_subscription_stat(topic, subscription)
         return stat.get("msgBacklog", 0)
 
+
 import aiohttp
+
+
 class AsyncPulsarAdminHelper:
     """
     异步获取pulsar信息的api，适用于大批量查询场景

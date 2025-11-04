@@ -4,6 +4,7 @@ build
 a.out
 .env
 __pycache__
+.benchmarks
 .coverage
 .pytest_cache
 dist

@@ -2,6 +2,7 @@ from functools import wraps
 import json
 from mental1104.utils.parse_json import load_json
 
+
 def iterator_json(func):
     """
     装饰器，用于处理 JSON 文件，将其内容解析为 Python 对象，并传递给被装饰函数。
@@ -19,9 +20,9 @@ def iterator_json(func):
         @iterator_json
         def process_json(data):
             print(data)
-        
+
         process_json('data.json')
-        
+
         # 或者处理目录下的所有 JSON 文件
         process_json('path/to/directory')
     """

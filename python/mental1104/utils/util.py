@@ -40,5 +40,3 @@ async def async_delay(delay_seconds: int) -> int:
     await asyncio.sleep(delay_seconds)
     print(f'finished sleeping for {delay_seconds} second(s)')
     return delay_seconds
-
-

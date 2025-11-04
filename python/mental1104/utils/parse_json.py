@@ -70,18 +70,22 @@ class JsonUtil:
 def _parse_dispatch(value: object, parser: str) -> Any:
     raise TypeError(f"不支持的入参类型: {type(value)!r}（期望 str 或文件流）")
 
+
 @_parse_dispatch.register(str)
 def _(s: str, parser: str) -> Any:
     parsers = JsonUtil.get_parsers()
     return parsers[parser](s)
 
+
 @_parse_dispatch.register(io.TextIOBase)
 def _(fp: io.TextIOBase, parser: str) -> Any:
     return JsonUtil._parse_from_file(fp, parser)
 
+
 @_parse_dispatch.register(io.BufferedIOBase)
 def _(fp: io.BufferedIOBase, parser: str) -> Any:
     return JsonUtil._parse_from_file(fp, parser)
+
 
 @_parse_dispatch.register(io.RawIOBase)
 def _(fp: io.RawIOBase, parser: str) -> Any:

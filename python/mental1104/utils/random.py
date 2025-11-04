@@ -6,6 +6,7 @@ from functools import singledispatch
 def random_pick(data):
     raise NotImplementedError(f"random_pick not implemented for type {type(data).__name__}")
 
+
 @random_pick.register
 def _(data: list):
     """

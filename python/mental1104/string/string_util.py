@@ -1,5 +1,6 @@
 import re
 
+
 def replace_space_with(input_string, seperator='|'):
     """
     分割函数

@@ -6,10 +6,10 @@ from functools import wraps
 def iterator_csv(has_header=True):
     """
     装饰器，用于处理 CSV 文件，将其内容解析为字典数组或元组数组，并传递给被装饰函数。
-    
+
     Args:
         has_header (bool): 是否包含表头。如果为 True，返回字典数组；否则返回元组数组。
-    
+
     Returns:
         function: 包装后的函数，接受一个文件路径参数。
     Raises:

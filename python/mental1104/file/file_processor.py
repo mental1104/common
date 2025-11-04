@@ -16,7 +16,7 @@ def file_iterator(process_function):
         @file_iterator
         def process_file(file_path):
             print(f"Processing file: {file_path}")
-        
+
         process_file('path/to/directory')  # 处理目录下的所有文件
         process_file('path/to/file.txt')    # 直接处理单个文件
     """
@@ -43,6 +43,3 @@ def file_iterator(process_function):
                 process_function(full_path)
 
     return wrapper
-
-
-

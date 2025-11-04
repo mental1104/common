@@ -10,4 +10,6 @@ genanki
 pytest
 pytest-asyncio
 pytest-mock
+pytest-benchmark
+autopep8
 coverage

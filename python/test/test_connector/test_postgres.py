@@ -4,6 +4,7 @@ from sqlalchemy import create_engine, text, inspect, Column, Integer, String
 from contextlib import contextmanager
 from mental1104.connector.postgres import startup, Base, get_db_config, open_session
 
+
 @contextmanager
 def connect_to_postgres():
     """连接到默认的postgres数据库"""
@@ -15,6 +16,7 @@ def connect_to_postgres():
         yield conn
     finally:
         conn.close()
+
 
 def delete_test_database(config):
     """删除测试数据库（跳过postgres数据库）"""
@@ -35,7 +37,7 @@ def delete_test_database(config):
                 WHERE pg_stat_activity.datname = '{db_name}'
                   AND pid <> pg_backend_pid();
             """))
-            
+
             # 删除数据库
             conn.execute(text(f"DROP DATABASE IF EXISTS {db_name}"))
             print(f"测试数据库 {db_name} 删除完成")
@@ -51,7 +53,8 @@ class TempTable(Base):
 
 
 @pytest.mark.skipif(
-    not all([os.getenv('PGUSER'), os.getenv('PGPASSWORD'), os.getenv('PGHOST'), os.getenv('PGPORT'), os.getenv('PGDATABASE')]),
+    not all([os.getenv('PGUSER'), os.getenv('PGPASSWORD'), os.getenv(
+        'PGHOST'), os.getenv('PGPORT'), os.getenv('PGDATABASE')]),
     reason="环境变量未配置完整，跳过测试"
 )
 class TestDatabase:

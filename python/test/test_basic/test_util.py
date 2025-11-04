@@ -2,6 +2,7 @@ import pytest
 from unittest.mock import patch, AsyncMock
 from mental1104 import delay, async_delay
 
+
 class TestDelayFunction:
     def test_delay_positive(self):
         """

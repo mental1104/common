@@ -1,5 +1,6 @@
 import os
 
+
 class MissingEnvVarError(Exception):
     pass
 
@@ -14,6 +15,6 @@ def check_required_env_vars(required_env_vars):
     for var in required_env_vars:
         if var not in os.environ:
             missing_vars.append(var)
-    
+
     if missing_vars:
         raise MissingEnvVarError(f"Missing required environment variables: {', '.join(missing_vars)}")
