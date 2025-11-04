@@ -93,7 +93,7 @@ endef
 define _clean_python
 	$(SHELL) -lc 'set -e; \
 		echo "[info] 清理 Python 缓存与构建产物…"; \
-		rm -rf python/build python/dist python/*.egg-info .pytest_cache .mypy_cache .coverage htmlcov; \
+		rm -rf python/build python/dist python/*.egg-info .pytest_cache .mypy_cache python/.coverage htmlcov python/.ruff_cache python/.pytest_cache python/.benchmarks python/memray.bin; \
 		find python -type d -name "__pycache__" -exec rm -rf {} +; \
 		find python -type f -name "*.py[co]" -delete; \
 		find python -type d -name ".pytest_cache" -exec rm -rf {} +; \
