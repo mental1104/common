@@ -35,3 +35,5 @@ infer-out/
 
 # 如果本项目是“纯库 crate”，建议忽略 Cargo.lock；若包含可执行程序，请改为跟踪
 rust/mental1104/Cargo.lock
+memray.bin
+build-asan
