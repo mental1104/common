@@ -1,0 +1,28 @@
+[package]
+name = "mental1104"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "Common utilities for Espeon (Rust). Mirrors python/golang/cpp layout."
+repository = "https://github.com/mental1104/common"   # 如无可留空
+
+[lib]
+name = "mental1104"
+path = "src/lib.rs"
+
+[features]
+# 可选：加速 Hash（默认关，跨平台更稳）
+fast-hash = ["dep:ahash"]
+
+[dependencies]
+thiserror = "1"
+
+# 可选加速哈希：在你需要 hash 容器极致性能时启用
+ahash = { version = "0.8", optional = true }
+
+[dev-dependencies]
+criterion = "0.5"
+
+[[bench]]
+name = "contains_bench"
+harness = false

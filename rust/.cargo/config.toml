@@ -1,0 +1,7 @@
+# rust/.cargo/config.toml
+[build]
+# 通用优化；如需可改为 "native"（便于你在 13600KF 上出性能），但这会降低二进制的通用性
+rustflags = ["-C", "target-cpu=x86-64-v3"]
+
+[term]
+verbose = false
