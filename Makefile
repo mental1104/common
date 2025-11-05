@@ -83,12 +83,38 @@ define _test_python
 		$(PYTHON) -m pytest -q -k "not bench and not benchmark"'
 endef
 
+# 固定镜像配置（写死在 Makefile 内；不走命令行）
+USE_PIP_MIRROR := 1
+
+# 主索引（HTTPS 无需 trusted-host）
+PIP_INDEX_URL := https://pypi.tuna.tsinghua.edu.cn/simple
+
+# 备用索引（可选，留空则不加）
+PIP_EXTRA_INDEX_URL :=
+
+# 如果你用内网 http 源，写主机名；否则留空
+PIP_TRUSTED_HOST :=
+
+PIP_MIRROR_OPTS :=
+ifeq ($(USE_PIP_MIRROR),1)
+  ifneq ($(strip $(PIP_INDEX_URL)),)
+    PIP_MIRROR_OPTS += --index-url $(PIP_INDEX_URL)
+  endif
+  ifneq ($(strip $(PIP_EXTRA_INDEX_URL)),)
+    PIP_MIRROR_OPTS += --extra-index-url $(PIP_EXTRA_INDEX_URL)
+  endif
+  ifneq ($(strip $(PIP_TRUSTED_HOST)),)
+    PIP_MIRROR_OPTS += --trusted-host $(PIP_TRUSTED_HOST)
+  endif
+endif
+
 define _install_python
 	$(SHELL) -lc 'set -e; \
-		echo "[info] $(PIP3) install python/ --upgrade $(BREAK_FLAG)"; \
-		$(SUDO) $(PIP3) install python/ --upgrade $(BREAK_FLAG); \
-		echo "[ok] 安装完成。"' 
+		echo "[info] $(PIP3) install python/ --upgrade $(BREAK_FLAG) $(PIP_MIRROR_OPTS)"; \
+		$(SUDO) $(PIP3) install python/ --upgrade $(BREAK_FLAG) $(PIP_MIRROR_OPTS); \
+		echo "[ok] 安装完成。"'
 endef
+
 
 define _clean_python
 	$(SHELL) -lc 'set -e; \
