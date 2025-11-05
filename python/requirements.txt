@@ -15,3 +15,4 @@ pytest-leaks
 memray
 autopep8
 coverage
+ruamel.yaml
