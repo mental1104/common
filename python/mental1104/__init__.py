@@ -3,7 +3,6 @@
 
 # ---- Direct imports (safe modules; no mental1104 top-level imports) ----
 from mental1104.app.anki import AnkiApkgGenerator
-from mental1104.app.convert import json_to_yaml, yaml_to_json
 from mental1104.connector.postgres import Base, db_connection, db_params_clickhouse, db_params_postgres, ensure_database_exists, ensure_tables_exist, get_db_config, logger, open_session, params, process_record, sql_query, startup
 from mental1104.connector.redis import RedisConnection, RedisLock
 from mental1104.debug.deciprobe import ELLIPSIS_CHAR, FUNC_FIELD_WIDTH, HEAD_PREFIX, ID_FIELD_WIDTH, SITE_FIELD_WIDTH, TRACE_IF_ENABLED, TYPE_FIELD_WIDTH, deciprobe, trace_if
@@ -35,6 +34,8 @@ _EXPORT_MAP = {
     'TrendPlotBase': 'mental1104.plot.trend',
     'fetch_status': 'mental1104.network.http_package',
     'iterator_json': 'mental1104.iterator.iterator_json',
+    'json_to_yaml': 'mental1104.app.convert',
+    'yaml_to_json': 'mental1104.app.convert',
 }
 
 __all__ = [

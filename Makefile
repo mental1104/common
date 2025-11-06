@@ -27,6 +27,16 @@ CPP_BUILD_DIR  := $(CPP_SRC_DIR)/build
 CPP_BUILD_TYPE ?= Debug
 PREFIX         ?= /usr/local
 
+# ===== 通用测试 verbose 开关 =====
+VERBOSE ?= 0
+TEST_VERBOSE ?= $(VERBOSE)
+
+CTEST_V      := $(if $(filter 1,$(TEST_VERBOSE)),-V,)
+PYTEST_V     := $(if $(filter 1,$(TEST_VERBOSE)),-vv,-q)
+GO_TEST_V    := $(if $(filter 1,$(TEST_VERBOSE)),-v,)
+CARGO_TEST_V := $(if $(filter 1,$(TEST_VERBOSE)),-v,)
+
+
 # =================== 公共逻辑宏（函数化） ===================
 # ---- 子模块：尝试拉取；如遇锁/脏元数据，自动“deinit+清理+重拉”
 define _git_fetch_submodules
@@ -80,8 +90,9 @@ define _test_python
 	$(SHELL) -lc 'set -e; \
 		if ! command -v pytest >/dev/null 2>&1; then echo "[warn] 未检测到 pytest；请先执行: make setup-python"; exit 1; fi; \
 		cd python; \
-		$(PYTHON) -m pytest -q -k "not bench and not benchmark"'
+		$(PYTHON) -m pytest $(PYTEST_V) -k "not bench and not benchmark"'
 endef
+
 
 # 固定镜像配置（写死在 Makefile 内；不走命令行）
 USE_PIP_MIRROR := 1
@@ -171,8 +182,9 @@ endef
 define _test_cpp
 	$(SHELL) -lc 'set -e; \
 		cd "$(CPP_BUILD_DIR)"; \
-		$(CTEST) --output-on-failure -LE bench -j $(JOBS)'
+		$(CTEST) --output-on-failure -LE bench -j $(JOBS) $(CTEST_V)'
 endef
+
 
 define _coverage_cpp
 	$(SHELL) -lc 'set -e; \
@@ -336,10 +348,12 @@ endef
 define _test_go
 	$(SHELL) -lc 'set -e; \
 		cd "$(GO_DIR)"; \
-		echo "[go] test -count=1 -v ./..."; \
-		GOWORK=$(GOWORK) GOTOOLCHAIN=$(GOTOOLCHAIN) GOPROXY="$(GOPROXY)" GOPRIVATE="$(GOPRIVATE)" $(GO) test -count=1 -v ./...; \
+		echo "[go] test -count=1 $(GO_TEST_V) ./..."; \
+		GOWORK=$(GOWORK) GOTOOLCHAIN=$(GOTOOLCHAIN) GOPROXY="$(GOPROXY)" GOPRIVATE="$(GOPRIVATE)" \
+		$(GO) test -count=1 $(GO_TEST_V) ./...; \
 		echo "[ok] go test 通过。"'
 endef
+
 
 define _coverage_go
 	$(SHELL) -lc 'set -e; \
@@ -410,7 +424,7 @@ define _build_rust
 endef
 
 define _test_rust
-	$(SHELL) -lc 'set -e; cd "$(RUST_DIR)"; cargo test --all-features'
+	$(SHELL) -lc 'set -e; cd "$(RUST_DIR)"; cargo test --all-features $(CARGO_TEST_V)'
 endef
 
 define _bench_rust
@@ -759,6 +773,15 @@ install:  install-python install-go install-cpp install-rust
 clean:    clean-python clean-go clean-cpp clean-rust
 coverage: coverage-python coverage-go coverage-cpp coverage-rust
 fmt:      fmt-go fmt-cpp fmt-rust
+
+
+.PHONY: test-v test-cpp-v test-python-v test-go-v test-rust-v
+test-v:        ; $(MAKE) --no-print-directory test        VERBOSE=1
+test-cpp-v:    ; $(MAKE) --no-print-directory test-cpp    VERBOSE=1
+test-python-v: ; $(MAKE) --no-print-directory test-python VERBOSE=1
+test-go-v:     ; $(MAKE) --no-print-directory test-go     VERBOSE=1
+test-rust-v:   ; $(MAKE) --no-print-directory test-rust   VERBOSE=1
+
 
 help:
 	@echo "可用目标："
