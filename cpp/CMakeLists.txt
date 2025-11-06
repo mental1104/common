@@ -114,6 +114,7 @@ endif()
 
 include(CMakeParseArguments)
 set_property(GLOBAL PROPERTY COMPONENT_RPATH_DIRS "")
+set_property(GLOBAL PROPERTY REGISTERED_COMPONENTS "")
 
 function(register_component NAME SUBPATH)
     set(options)
@@ -182,6 +183,8 @@ function(register_component NAME SUBPATH)
     else()
         set(HAVE_LIB_${NAME} FALSE PARENT_SCOPE)
     endif()
+
+    set_property(GLOBAL APPEND PROPERTY REGISTERED_COMPONENTS "${NAME}")
 endfunction()
 
 function(_rpp_propagate_inc tgt incs)
@@ -225,7 +228,6 @@ using OptionalStringPair  = Optional<std::pair<std::string, std::string>>;
 }} // namespace sw::redis
 #endif
 ]=])
-    message(STATUS "[RPP SHIM] generated: ${_cxx_utils}")
 
     set(_tls "${_overlay_inc}/sw/redis++/tls.h")
     file(WRITE "${_tls}" [=[
@@ -244,7 +246,6 @@ using TlsContextUPtr = std::unique_ptr<void, NullDeleter>;
 }}} // namespace sw::redis::tls
 #endif
 ]=])
-    message(STATUS "[RPP SHIM] generated: ${_tls}")
 
     set(_want_includes
         "${_overlay_inc}"
@@ -254,11 +255,25 @@ using TlsContextUPtr = std::unique_ptr<void, NullDeleter>;
     foreach(_dir IN LISTS _want_includes)
         if (EXISTS "${_dir}")
             include_directories(BEFORE "${_dir}")
-            message(STATUS "[RPP SHIM] include (BEFORE): ${_dir}")
         endif()
     endforeach()
 
     set(RPP_OVERLAY_INCLUDE_DIR "${_overlay_inc}" PARENT_SCOPE)
+endfunction()
+
+function(target_use_all_components tgt)
+  get_property(_all GLOBAL PROPERTY REGISTERED_COMPONENTS)
+  if(NOT _all)
+    return()
+  endif()
+  foreach(_c IN LISTS _all)
+    if(TARGET ${_c}::headers)
+      target_link_libraries(${tgt} PRIVATE ${_c}::headers)
+    endif()
+    if(TARGET ${_c}::lib)
+      target_link_libraries(${tgt} PRIVATE ${_c}::lib)
+    endif()
+  endforeach()
 endfunction()
 
 register_component(HIREDIS "lib/hiredis"
@@ -271,7 +286,6 @@ register_component(REDISPP "lib/redis-plus-plus"
     INC_REL src
 )
 
-# ===== 新增：注册 cJSON，沿用已有 register_component 机制 =====
 register_component(CJSON "lib/cJSON"
     LIB_GLOBS "libcjson*.so*" "libcjson*.a" "libcjson*.dylib"
     INC_REL .
@@ -299,11 +313,8 @@ message(STATUS "Collected ${_TEST_COUNT} test files under ${TEST_DIR}")
 
 set(TEST_DEPS_test_redis_lock "HIREDIS;REDISPP")
 set(TEST_REQUIRE_LIBS_test_redis_lock "HIREDIS;REDISPP")
-
-# ===== 新增：让 test_json 链接到已构建的 cJSON 库 =====
 set(TEST_DEPS_test_json         "CJSON")
 set(TEST_REQUIRE_LIBS_test_json "CJSON")
-
 
 function(add_optional_test SRC)
 	get_filename_component(TEST_NAME "${SRC}" NAME_WE)
@@ -374,6 +385,8 @@ function(add_optional_test SRC)
 		mpfr gmp
 		pthread
 	)
+
+	target_use_all_components(${TEST_NAME})
 
 	add_test(NAME ${TEST_NAME} COMMAND ${TEST_NAME})
 	message(STATUS "Added test ${TEST_NAME}")
@@ -458,6 +471,7 @@ if (HAVE_GOOGLE_BENCHMARK)
         )
         target_compile_features(${TGT} PRIVATE cxx_std_20)
         target_link_libraries(${TGT} PRIVATE benchmark::benchmark)
+        target_use_all_components(${TGT})
         set_target_properties(${TGT} PROPERTIES
           RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
         )
@@ -473,7 +487,7 @@ if (HAVE_GOOGLE_BENCHMARK)
     else()
       message(STATUS "No benchmark sources under ${BENCH_DIR}")
     endif()
-  else() 
-    message(STATUS "Benchmark dir not found: ${BENCH_DIR}") 
-  endif() 
+  else()
+    message(STATUS "Benchmark dir not found: ${BENCH_DIR}")
+  endif()
 endif()
