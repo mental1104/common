@@ -157,13 +157,12 @@ define _bench_python
 		cd python; \
 		if $(PYTHON) -m pytest -q --help 2>/dev/null | grep -qi benchmark; then \
 			echo "[pytest-benchmark] 基准用例"; \
-			$(PYTHON) -m pytest -q -k "bench or benchmark" --benchmark-only --benchmark-autosave; \
+			$(PYTHON) -m pytest $(PYTEST_V) -k "bench or benchmark" --benchmark-only --benchmark-autosave; \
 		else \
 			echo "[warn] 未检测到 pytest-benchmark，回退到名称筛选"; \
-			$(PYTHON) -m pytest -q -k "bench or benchmark"; \
+			$(PYTHON) -m pytest $(PYTEST_V) -k "bench or benchmark"; \
 		fi'
 endef
-
 # ---- C++ 顶层：配置/编译/测试/覆盖率/安装/清理
 define _configure_cpp
 	$(SHELL) -lc 'set -e; \
@@ -241,7 +240,7 @@ define _bench_cpp
 	$(SHELL) -lc 'set -e; \
 		if [[ ! -d "$(CPP_BUILD_DIR)" ]]; then echo "[info] 未发现 $(CPP_BUILD_DIR)，先执行: make build-cpp"; exit 1; fi; \
 		cd "$(CPP_BUILD_DIR)"; \
-		if $(CTEST) -N -L bench >/dev/null 2>&1; then $(CTEST) --output-on-failure -L bench -j $(JOBS); else $(CTEST) --output-on-failure -j $(JOBS); fi'
+		if $(CTEST) -N -L bench >/dev/null 2>&1; then $(CTEST) --output-on-failure -L bench -j $(JOBS) $(CTEST_V); else $(CTEST) --output-on-failure -j $(JOBS) $(CTEST_V); fi'
 endef
 
 # ---- C++ 子模块：在 cpp/lib/* 各自目录下独立构建与清理
@@ -376,7 +375,8 @@ define _fmt_go
 endef
 
 define _bench_go
-	$(SHELL) -lc 'set -e; cd "$(GO_DIR)"; GOWORK=$(GOWORK) GOTOOLCHAIN=$(GOTOOLCHAIN) GOPROXY="$(GOPROXY)" GOPRIVATE="$(GOPRIVATE)" $(GO) test -bench=. -benchmem ./...'
+	$(SHELL) -lc 'set -e; cd "$(GO_DIR)"; GOWORK=$(GOWORK) GOTOOLCHAIN=$(GOTOOLCHAIN) GOPROXY="$(GOPROXY)" GOPRIVATE="$(GOPRIVATE)" \
+	$(GO) test $(GO_TEST_V) -bench=. -benchmem ./...'
 endef
 
 # 可选：自定义可执行安装路径
@@ -428,7 +428,7 @@ define _test_rust
 endef
 
 define _bench_rust
-	$(SHELL) -lc 'set -e; cd "$(RUST_DIR)"; cargo bench'
+	$(SHELL) -lc 'set -e; cd "$(RUST_DIR)"; cargo bench $(CARGO_TEST_V)'
 endef
 
 define _fmt_rust
@@ -773,6 +773,7 @@ install:  install-python install-go install-cpp install-rust
 clean:    clean-python clean-go clean-cpp clean-rust
 coverage: coverage-python coverage-go coverage-cpp coverage-rust
 fmt:      fmt-go fmt-cpp fmt-rust
+bench: bench-python bench-go bench-cpp bench-rust
 
 
 .PHONY: test-v test-cpp-v test-python-v test-go-v test-rust-v
@@ -781,6 +782,13 @@ test-cpp-v:    ; $(MAKE) --no-print-directory test-cpp    VERBOSE=1
 test-python-v: ; $(MAKE) --no-print-directory test-python VERBOSE=1
 test-go-v:     ; $(MAKE) --no-print-directory test-go     VERBOSE=1
 test-rust-v:   ; $(MAKE) --no-print-directory test-rust   VERBOSE=1
+
+.PHONY: bench-v bench-cpp-v bench-python-v bench-go-v bench-rust-v
+bench-v:        ; $(MAKE) --no-print-directory bench        VERBOSE=1
+bench-cpp-v:    ; $(MAKE) --no-print-directory bench-cpp    VERBOSE=1
+bench-python-v: ; $(MAKE) --no-print-directory bench-python VERBOSE=1
+bench-go-v:     ; $(MAKE) --no-print-directory bench-go     VERBOSE=1
+bench-rust-v:   ; $(MAKE) --no-print-directory bench-rust   VERBOSE=1
 
 
 help:
