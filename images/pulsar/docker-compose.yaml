@@ -1,0 +1,21 @@
+version: '3.3'
+
+services:
+  pulsar:
+    image: apachepulsar/pulsar-standalone:latest
+    container_name: pulsar
+    networks:
+      - shared_network
+    ports:
+      - "6650"
+      - "8080"
+    volumes: 
+      - pulsar-data:/pulsar/data
+
+volumes:
+  pulsar-data:
+    driver: local
+
+networks:
+  shared_network:
+    external: true
