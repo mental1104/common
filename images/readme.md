@@ -133,3 +133,56 @@ docker compose up -d
 
 > **若你的引擎是 Docker Desktop（可用 `docker context ls` 看当前是否 `desktop-linux`）：**
 > 在 *Docker Desktop → Settings → Resources → Proxies* 填入 `http://127.0.0.1:7890`（HTTP/HTTPS），然后 *Apply & Restart*；再执行上面的第 4、6 步即可。
+
+
+## 将当前用户加入docker命令可访问列表
+
+# 让普通用户也能用 `docker`（免 `sudo`）
+
+## 操作
+
+1. **确保有 `docker` 组**
+
+```bash
+getent group docker || sudo groupadd docker
+```
+
+2. **把当前用户加入 `docker` 组**
+
+```bash
+sudo usermod -aG docker $USER
+```
+
+3. **让新组立刻生效**（二选一）
+
+```bash
+# 当前 shell 立刻生效
+newgrp docker
+# 或者：退出并重新登录；WSL2 用 PowerShell 执行：
+# wsl --shutdown
+```
+
+4. **验证**
+
+```bash
+id -nG | tr ' ' '\n' | grep -Fx docker   # 应能看到“docker”
+ls -l /var/run/docker.sock               # 期望是 root docker 以及 rw-rw----
+docker ps                                # 不报权限错误
+# 再跑个最小容器：
+docker run --rm hello-world
+```
+
+5. **（可选）确保 Docker 服务已启动并开机自启**（常规 Linux，非 WSL2）
+
+```bash
+sudo systemctl enable --now docker
+```
+
+---
+
+## 原理
+
+* `docker` CLI 通过 **Unix Socket**：`/var/run/docker.sock` 与守护进程通信。该 socket 默认属于 **用户：root**、**用户组：docker**，权限 **660**；把用户加入 `docker` 组即可获得读写权限，从而免 `sudo`。
+* `newgrp docker` 只影响当前 shell 会话；重新登录/重启（或 WSL2 的 `wsl --shutdown`）能让所有会话生效。
+* 只要能读写 `docker.sock`，`docker compose`（新插件）和旧版 `docker-compose` 一样都能用。
+* **安全提醒**：加入 `docker` 组基本等同获得 **root 等级能力**（能挂载主机目录、提权参数等）。单机开发很方便；多用户/高安全环境应谨慎。需要更强隔离时，再考虑 **rootless Docker**（代价是部分功能限制）。
