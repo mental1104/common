@@ -5,8 +5,8 @@ services:
     networks:
       - shared_network
     ports:
-      - "6650"
-      - "8080"
+      - "6650:6650"
+      - "8080:8080"
     volumes: 
       - pulsar-data:/pulsar/data
 

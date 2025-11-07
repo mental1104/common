@@ -3,12 +3,14 @@ services:
     image: postgres:latest
     container_name: postgres
     restart: always
+    environment:
+      POSTGRES_USER:     "${PGUSER:?PGUSER 未设置}"
+      POSTGRES_PASSWORD: "${PGPASSWORD:?PGPASSWORD 未设置}"
+      POSTGRES_DB:       "${PGDATABASE:-postgres}"
     networks:
       - shared_network
-    env_file:
-      - .env
     volumes:
-      - postgresql-data:/var/lib/postgresql/data
+      - postgresql-data:/var/lib/postgresql
     ports:
       - "5432:5432"
 
