@@ -6,6 +6,46 @@ SHELL := /bin/bash
 .ONESHELL:
 .SILENT:
 
+# === 自动加载 .env 到 Make 环境（全局生效） =================
+REPO_ROOT := $(abspath $(dir $(firstword $(MAKEFILE_LIST))))
+ENV_SRC   ?= $(REPO_ROOT)/.env
+ENV_MK    := $(abspath $(ENV_SRC)).mk
+ENV_REQ   ?= PGUSER PGPASSWORD PGHOST PGPORT PGDATABASE   # 需要可改
+
+$(ENV_MK):
+	@set -e
+	if [ -f "$(ENV_SRC)" ]; then
+		awk '\
+		  /^[[:space:]]*#/ || /^[[:space:]]*$$/ { next } \
+		  { line=$$0; sub(/^[[:space:]]*export[[:space:]]+/, "", line); \
+		    i=index(line,"="); if(i==0) next; \
+		    key=substr(line,1,i-1); val=substr(line,i+1); \
+		    sub(/^[[:space:]]+|[[:space:]]+$$/,"",key); \
+		    sub(/^[[:space:]]+/,"",val); sub(/[[:space:]]+#.*/, "", val); \
+		    if(val ~ /^".*"$$/){sub(/^"/,"",val); sub(/"$$/,"",val)} \
+		    else if(val ~ /^'\''.*'\''$$/){sub(/^'\''/,"",val); sub(/'\''$$/,"",val)} \
+		    print "export " key " = " val; }' \
+		  "$(ENV_SRC)" > "$(ENV_MK)"
+		echo "[ok] .env -> $(ENV_MK)"
+	else
+		: > "$(ENV_MK)"; echo "[warn] 未找到 $(ENV_SRC)，以空环境继续"
+	fi
+
+-include $(ENV_MK)
+export
+
+.PHONY: env-guard env-print env-expose
+env-guard:
+	@missing=""; \
+	for k in $(ENV_REQ); do eval 'v=$${'$$k':-}'; [ -n "$$v" ] || missing="$$missing $$k"; done; \
+	if [ -n "$$missing" ]; then echo "[err] 缺少必需环境变量:$$missing （来源 $(ENV_SRC)）"; exit 2; fi
+env-print:
+	@env | grep -E '^(PG|POSTGRES|DATABASE_URL|REDIS|PULSAR)=' | sort || true
+env-expose:   # 可让当前交互式 shell 生效： eval "$$(make env-expose)"
+	@sed -E 's/^export[[:space:]]+([^=[:space:]]+)[[:space:]]*=[[:space:]]*(.*)$/export \1=\2/' "$(ENV_MK)"
+# ============================================================
+
+
 # 变量: .DEFAULT_GOAL —— 默认入口目标
 .DEFAULT_GOAL := setup
 
@@ -222,6 +262,8 @@ endef
 define _test_python
 	$(SUDO_MSG)
 	$(SHELL) -lc 'set -e; \
+		unset HTTP_PROXY HTTPS_PROXY NO_PROXY ALL_PROXY http_proxy https_proxy no_proxy all_proxy; \
+		echo "[proxy] disabled for pytest (HTTP_PROXY/HTTPS_PROXY/NO_PROXY/ALL_PROXY 皆已清空)"; \
 		if ! command -v pytest >/dev/null 2>&1; then echo "[warn] 未检测到 pytest；请先执行: make setup-python"; exit 1; fi; \
 		cd python; \
 		$(PYTHON) -m pytest $(PYTEST_V) -k "not bench and not benchmark"'
@@ -295,6 +337,8 @@ endef
 # 函数: _test_cpp —— 顶层 C++ 测试（排除 bench）
 define _test_cpp
 	$(SHELL) -lc 'set -e; \
+		unset HTTP_PROXY HTTPS_PROXY NO_PROXY ALL_PROXY http_proxy https_proxy no_proxy all_proxy; \
+		echo "[proxy] disabled for pytest (HTTP_PROXY/HTTPS_PROXY/NO_PROXY/ALL_PROXY 皆已清空)"; \
 		cd "$(CPP_BUILD_DIR)"; \
 		$(CTEST) --output-on-failure -LE bench -j $(JOBS) $(CTEST_V)'
 endef
@@ -452,6 +496,8 @@ endef
 # 函数: _test_go —— 运行 Go 测试
 define _test_go
 	$(SHELL) -lc 'set -e; \
+		unset HTTP_PROXY HTTPS_PROXY NO_PROXY ALL_PROXY http_proxy https_proxy no_proxy all_proxy; \
+		echo "[proxy] disabled for pytest (HTTP_PROXY/HTTPS_PROXY/NO_PROXY/ALL_PROXY 皆已清空)"; \
 		cd "$(GO_DIR)"; \
 		echo "[go] test -count=1 $(GO_TEST_V) ./..."; \
 		GOWORK=$(GOWORK) GOTOOLCHAIN=$(GOTOOLCHAIN) GOPROXY="$(GOPROXY)" GOPRIVATE="$(GOPRIVATE)" \
@@ -531,7 +577,9 @@ endef
 
 # 函数: _test_rust —— Rust 测试
 define _test_rust
-	$(SHELL) -lc 'set -e; cd "$(RUST_DIR)"; cargo test --all-features $(CARGO_TEST_V)'
+	$(SHELL) -lc 'set -e; unset HTTP_PROXY HTTPS_PROXY NO_PROXY ALL_PROXY http_proxy https_proxy no_proxy all_proxy; \
+		echo "[proxy] disabled for pytest (HTTP_PROXY/HTTPS_PROXY/NO_PROXY/ALL_PROXY 皆已清空)"; \
+		cd "$(RUST_DIR)"; cargo test --all-features $(CARGO_TEST_V)'
 endef
 
 # 函数: _bench_rust —— Rust 基准
@@ -906,7 +954,6 @@ bench-rust-v:   ; $(MAKE) --no-print-directory bench-rust   VERBOSE=1
 .ONESHELL:
 .SILENT:
 MAKEFLAGS += --no-builtin-rules
-.DEFAULT_GOAL := docker-help
 
 # 可调参数
 COMPOSE_BIN        ?= docker compose

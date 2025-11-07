@@ -275,7 +275,7 @@ class PulsarAdminHelper:
 
         # 检查租户是否存在
         tenant_url = f"{pulsar_admin_url}/admin/v2/tenants/{tenant}"
-        tenant_response = requests.get(tenant_url, header=PulsarConnector.get_header())
+        tenant_response = requests.get(tenant_url, headers=PulsarConnector.get_header())
         if tenant_response.status_code != 200:
             logging.info(f"Tenant {tenant} does not exist. Creating it.")
             PulsarAdminHelper.create_tenant(tenant)
@@ -284,7 +284,7 @@ class PulsarAdminHelper:
         if not namespace:
             return
         namespace_url = f"{pulsar_admin_url}/admin/v2/namespaces/{tenant}/{namespace}"
-        namespace_response = requests.get(namespace_url, header=PulsarConnector.get_header())
+        namespace_response = requests.get(namespace_url, headers=PulsarConnector.get_header())
         if namespace_response.status_code != 200:
             logging.info(f"Namespace {tenant}/{namespace} does not exist. Creating it.")
             PulsarAdminHelper.create_namespace(f"{tenant}/{namespace}")
@@ -294,7 +294,7 @@ class PulsarAdminHelper:
             return
 
         topic_url = f"{pulsar_admin_url}/admin/v2/persistent/{tenant}/{namespace}/{topic}"
-        topic_response = requests.get(topic_url, header=PulsarConnector.get_header())
+        topic_response = requests.get(topic_url, headers=PulsarConnector.get_header())
         if topic_response.status_code == 200:
             logging.info(f"Topic {tenant}/{namespace}/{topic} already exists. Skipping creation.")
             return
@@ -316,7 +316,7 @@ class PulsarAdminHelper:
         url = f"{pulsar_admin_url}/admin/v2/tenants/{tenant}"
         response = requests.put(url, json={
             "allowedClusters": ["standalone"]
-        }, header=PulsarConnector.get_header())
+        }, headers=PulsarConnector.get_header())
         if response.status_code not in [200, 204, 409]:
             raise RuntimeError(
                 f"Failed to create tenant {tenant}: {response.status_code}: {response.status_code} {response.text}")
@@ -326,7 +326,7 @@ class PulsarAdminHelper:
         """创建命名空间"""
         pulsar_admin_url = PulsarConnector.get_admin_url()
         url = f"{pulsar_admin_url}/admin/v2/namespaces/{namespace}"
-        response = requests.put(url, header=PulsarConnector.get_header())
+        response = requests.put(url, headers=PulsarConnector.get_header())
         if response.status_code not in [200, 204, 409]:
             raise RuntimeError(f"Failed to create namespace {namespace}: {response.status_code} {response.text}")
 
@@ -335,7 +335,7 @@ class PulsarAdminHelper:
         """创建主题"""
         pulsar_admin_url = PulsarConnector.get_admin_url()
         url = f"{pulsar_admin_url}/admin/v2/persistent/{topic}"
-        response = requests.put(url, header=PulsarConnector.get_header())
+        response = requests.put(url, headers=PulsarConnector.get_header())
         if response.status_code not in [200, 204, 409]:
             raise RuntimeError(f"Failed to create topic {topic}: {response.status_code} {response.text}")
 
@@ -357,7 +357,7 @@ class PulsarAdminHelper:
         pulsar_admin_url = PulsarConnector.get_admin_url()
         url = f"{pulsar_admin_url}/admin/v2/persistent/{topic}/partitions"
 
-        response = requests.put(url, header=PulsarConnector.get_header("text/plain"), data=str(partitions))
+        response = requests.put(url, headers=PulsarConnector.get_header("text/plain"), data=str(partitions))
 
         # 检查响应状态码
         if response.status_code in [200, 204, 409]:
@@ -376,7 +376,7 @@ class PulsarAdminHelper:
         """获取租户的所有命名空间"""
         pulsar_admin_url = PulsarConnector.get_admin_url()
         url = f"{pulsar_admin_url}/admin/v2/namespaces/{tenant}"
-        response = requests.get(url, header=PulsarConnector.get_header("text/plain"))
+        response = requests.get(url, headers=PulsarConnector.get_header())
         if response.status_code != 200:
             raise RuntimeError(f"Failed to list namespaces for tenant {tenant}: {response.status_code} {response.text}")
         return response.json()
@@ -386,7 +386,7 @@ class PulsarAdminHelper:
         """获取命名空间的所有主题"""
         pulsar_admin_url = PulsarConnector.get_admin_url()
         url = f"{pulsar_admin_url}/admin/v2/persistent/{namespace}"
-        response = requests.get(url, header=PulsarConnector.get_header("text/plain"))
+        response = requests.get(url, headers=PulsarConnector.get_header())
         if response.status_code != 200:
             raise RuntimeError(
                 f"Failed to list topics for namespace {namespace}: {response.status_code} {response.text}")
@@ -423,7 +423,7 @@ class PulsarAdminHelper:
         if topic_to_delete.startswith(prefix):
             topic_to_delete = topic_to_delete[len(prefix):]  # 去除前缀
         url = f"{pulsar_admin_url}/admin/v2/persistent/{topic_to_delete}"
-        response = requests.delete(url, header=PulsarConnector.get_header("text/plain"))
+        response = requests.delete(url, headers=PulsarConnector.get_header())
         if response.status_code not in [200, 204, 404]:
             raise RuntimeError(f"Failed to delete topic {topic_to_delete}: {response.status_code} {response.text}")
 
@@ -432,7 +432,7 @@ class PulsarAdminHelper:
         """删除命名空间"""
         pulsar_admin_url = PulsarConnector.get_admin_url()
         url = f"{pulsar_admin_url}/admin/v2/namespaces/{namespace}"
-        response = requests.delete(url, header=PulsarConnector.get_header("text/plain"))
+        response = requests.delete(url, headers=PulsarConnector.get_header())
         if response.status_code not in [200, 204, 404]:
             raise RuntimeError(f"Failed to delete namespace {namespace}: {response.status_code} {response.text}")
 
@@ -441,7 +441,7 @@ class PulsarAdminHelper:
         """删除租户"""
         pulsar_admin_url = PulsarConnector.get_admin_url()
         url = f"{pulsar_admin_url}/admin/v2/tenants/{tenant}"
-        response = requests.delete(url, header=PulsarConnector.get_header("text/plain"))
+        response = requests.delete(url, headers=PulsarConnector.get_header())
         if response.status_code not in [200, 204, 404]:
             raise RuntimeError(f"Failed to delete tenant {tenant}: {response.status_code} {response.text}")
 
@@ -453,7 +453,7 @@ class PulsarAdminHelper:
         """检查租户是否存在"""
         pulsar_admin_url = PulsarConnector.get_admin_url()
         url = f"{pulsar_admin_url}/admin/v2/tenants"
-        response = requests.get(url, header=PulsarConnector.get_header("text/plain"))
+        response = requests.get(url, headers=PulsarConnector.get_header())
 
         if response.status_code != 200:
             raise RuntimeError(f"Failed to fetch tenants: {response.status_code} {response.text}")
@@ -466,7 +466,7 @@ class PulsarAdminHelper:
         """检查租户下的命名空间是否存在"""
         pulsar_admin_url = PulsarConnector.get_admin_url()
         url = f"{pulsar_admin_url}/admin/v2/namespaces/{tenant}"
-        response = requests.get(url, header=PulsarConnector.get_header("text/plain"))
+        response = requests.get(url, headers=PulsarConnector.get_header())
 
         if response.status_code != 200:
             raise RuntimeError(
@@ -486,7 +486,7 @@ class PulsarAdminHelper:
         """
         pulsar_admin_url = PulsarConnector.get_admin_url()
         url = f"{pulsar_admin_url}/admin/v2/{topic_type}/{tenant}/{namespace}"
-        response = requests.get(url, header=PulsarConnector.get_header("text/plain"))
+        response = requests.get(url, headers=PulsarConnector.get_header())
 
         if response.status_code != 200:
             raise RuntimeError(
@@ -503,7 +503,7 @@ class PulsarAdminHelper:
         """获取指定 topic 的某个订阅的 stat 信息"""
         pulsar_admin_url = PulsarConnector.get_admin_url()
         url = f"{pulsar_admin_url}/admin/v2/persistent/{topic}/subscription/{subscription}"
-        response = requests.get(url, header=PulsarConnector.get_header("text/plain"))
+        response = requests.get(url, headers=PulsarConnector.get_header())
         if response.status_code != 200:
             raise RuntimeError(
                 f"Failed to get subscription stats for topic {topic}, subscription {subscription}: {response.status_code} {response.text}")

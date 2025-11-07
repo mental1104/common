@@ -4,6 +4,7 @@ sqlalchemy
 requests 
 redis>=5.0 
 pulsar-client>=2.10 
+pulsar-client[avro]
 pycryptodome 
 aiohttp 
 genanki
