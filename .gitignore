@@ -37,3 +37,5 @@ infer-out/
 rust/mental1104/Cargo.lock
 memray.bin
 build-asan
+
+.env.mk
