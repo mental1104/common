@@ -31,6 +31,7 @@ def test_json_to_yaml_roundtrip_string(jin, yout):
     back = parse_yaml(y, parser=yout)
     assert back == obj_simple
 
+
 @pytest.mark.parametrize("yin", YAML_PARSERS)
 @pytest.mark.parametrize("jout", JSON_PARSERS)
 def test_yaml_to_json_roundtrip_string(yin, jout):
@@ -48,6 +49,7 @@ def test_json_to_yaml_text_in_text_out(jin, yout):
     assert isinstance(ret, str)
     assert parse_yaml(ret, parser=yout) == obj_simple
 
+
 @pytest.mark.parametrize("jin", JSON_PARSERS)
 @pytest.mark.parametrize("yout", YAML_PARSERS)
 def test_json_to_yaml_bin_in_bin_out(jin, yout):
@@ -57,6 +59,7 @@ def test_json_to_yaml_bin_in_bin_out(jin, yout):
     text = out.getvalue().decode("utf-8")
     assert parse_yaml(text, parser=yout) == obj_simple
 
+
 @pytest.mark.parametrize("yin", YAML_PARSERS)
 @pytest.mark.parametrize("jout", JSON_PARSERS)
 def test_yaml_to_json_text_in_text_out(yin, jout):
@@ -64,11 +67,13 @@ def test_yaml_to_json_text_in_text_out(yin, jout):
     assert isinstance(ret, str)
     assert load_json(ret, parser=jout) == obj_simple
 
+
 @pytest.mark.parametrize("yin", YAML_PARSERS)
 @pytest.mark.parametrize("jout", JSON_PARSERS)
 def test_yaml_to_json_bin_in_bin_out(yin, jout):
     out = BytesIO()
-    ret = yaml_to_json(BytesIO(valid_yaml.encode("utf-8")), in_parser=yin, out_parser=jout, ensure_ascii=False, indent=2, fp=out)
+    ret = yaml_to_json(BytesIO(valid_yaml.encode("utf-8")), in_parser=yin,
+                       out_parser=jout, ensure_ascii=False, indent=2, fp=out)
     assert ret is None
     s = out.getvalue().decode("utf-8")
     assert load_json(s, parser=jout) == obj_simple
@@ -82,6 +87,7 @@ def test_json_to_yaml_invalid_input_returns_none(jin):
         y = json_to_yaml(invalid_json, in_parser=jin)
     assert y is None
     assert "[解析失败]" in buf.getvalue() or "[转换失败]" in buf.getvalue()
+
 
 @pytest.mark.parametrize("yin", YAML_PARSERS)
 def test_yaml_to_json_invalid_input_returns_none(yin):
@@ -99,17 +105,20 @@ def test_json_to_yaml_unknown_in_parser_returns_none():
         ret = json_to_yaml(valid_json, in_parser="__bad__")
     assert ret is None
 
+
 def test_json_to_yaml_unknown_out_parser_returns_none():
     buf = StringIO()
     with redirect_stdout(buf):
         ret = json_to_yaml(valid_json, out_parser="__bad__")
     assert ret is None
 
+
 def test_yaml_to_json_unknown_in_parser_returns_none():
     buf = StringIO()
     with redirect_stdout(buf):
         ret = yaml_to_json(valid_yaml, in_parser="__bad__")
     assert ret is None
+
 
 def test_yaml_to_json_unknown_out_parser_returns_none():
     buf = StringIO()
@@ -125,6 +134,7 @@ def test_json_to_yaml_non_mapping_sequence_root_returns_none():
         ret = json_to_yaml("123")
     assert ret is None
 
+
 def test_yaml_to_json_non_mapping_sequence_root_returns_none():
     buf = StringIO()
     with redirect_stdout(buf):
@@ -136,11 +146,13 @@ def test_yaml_to_json_non_mapping_sequence_root_returns_none():
 class Dummy:
     pass
 
+
 def test_json_to_yaml_invalid_fp_returns_none():
     buf = StringIO()
     with redirect_stdout(buf):
         ret = json_to_yaml(valid_json, fp=Dummy())
     assert ret is None
+
 
 def test_yaml_to_json_invalid_fp_returns_none():
     buf = StringIO()
