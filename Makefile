@@ -556,10 +556,17 @@ endef
 
 define _vet_python
 	$(SHELL) -lc 'set -e; cd python; \
-		if ! $(PYTHON) -c "import importlib,sys; sys.exit(0 if importlib.util.find_spec(\"ruff\") else 1)"; then \
-			echo "[error] 未找到 ruff；请先执行: $(PYTHON) -m pip install --user ruff"; exit 1; \
-		fi; \
-		$(PYTHON) -m ruff check --select F,B,UP,PERF mental1104'
+		if command -v ruff >/dev/null 2>&1; then \
+			echo "[ruff] using CLI: $$(command -v ruff)"; \
+			ruff check --select F,B,UP,PERF mental1104; \
+		else \
+			echo "[ruff] CLI not found, try module via $(PYTHON)"; \
+			if ! $(PYTHON) -c "import pkgutil, sys; sys.exit(0 if pkgutil.find_loader(\"ruff\") else 1)"; then \
+				echo "[error] 未找到 ruff；macOS 可执行: brew install ruff；或: $(PYTHON) -m pip install --user ruff --break-system-packages"; \
+				exit 1; \
+			fi; \
+			$(PYTHON) -m ruff check --select F,B,UP,PERF mental1104; \
+		fi'
 endef
 
 define _vet_cpp
