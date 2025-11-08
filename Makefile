@@ -1,3 +1,7 @@
+SHELL := /bin/bash
+.ONESHELL:
+.SHELLFLAGS := -eu -o pipefail -c
+
 # === 自动加载 .env 到 Make 环境（全局生效） =================
 REPO_ROOT := $(abspath $(dir $(firstword $(MAKEFILE_LIST))))
 ENV_SRC   ?= $(REPO_ROOT)/.env
@@ -146,24 +150,40 @@ define _git_fetch_submodules
 endef
 
 define _setup_python
-	$(SHELL) -lc "set -e; \
-		echo \"[info] 平台: $(UNAME_S)$(if $(IS_UBUNTU), (ubuntu),)\"; \
+	$(SHELL) -lc 'set -e; \
+		echo "[info] 平台: $(UNAME_S)$(if $(IS_UBUNTU), (ubuntu),)"; \
 		if [[ -f python/requirements.txt ]]; then \
-			echo \"[pip] 安装依赖到用户目录: python/requirements.txt\"; \
+			echo "[pip] 安装依赖到用户目录: python/requirements.txt"; \
 			$(PYTHON) -m pip install --user -r python/requirements.txt $(BREAK_FLAG); \
 		else \
-			echo \"[info] 未找到 python/requirements.txt，跳过依赖安装。\"; \
+			echo "[info] 未找到 python/requirements.txt，跳过依赖安装。"; \
 		fi; \
 		if [[ -f python/generate_init.py ]]; then \
-			echo \"[info] 执行 python/generate_init.py …\"; \
+			echo "[info] 执行 python/generate_init.py …"; \
 			$(PYTHON) python/generate_init.py; \
 		else \
-			echo \"[info] 未找到 python/generate_init.py，跳过。\"; \
+			echo "[info] 未找到 python/generate_init.py，跳过。"; \
 		fi; \
-		echo \"[info] 构建本地 wheel（不安装本体）…\"; \
+		echo "[compat] 扫描并修复使用 | 联合类型注解的源码（兼容 Py3.9）…"; \
+		files=$$(grep -R -l -E ":\s*[^#]*\|[^=]*" python || true); \
+		inserted=0; \
+		for f in $$files; do \
+		  [ -f "$$f" ] || continue; \
+		  if grep -q "^from __future__ import annotations$$" "$$f"; then continue; fi; \
+		  tmp="$$f.tmp.$$RANDOM"; \
+		  awk "BEGIN{in_doc=0;doc_done=0;ins=0} \
+NR==1 && substr(\$$0,1,2)==\"#!\" {ins=NR+1} \
+NR<=2 && match(\$$0,/(coding[:=])/){if(NR>=ins) ins=NR+1} \
+doc_done==0{line=\$$0;gsub(/^[[:space:]]+/ ,\"\", line); if(in_doc==0){ if(line ~ /^([rRuUbBfF]{0,2})?\"\"\"/){ in_doc=1; if(gsub(/\"\"\"/ ,\"&\")>=2){ in_doc=0; doc_done=1; if(NR>=ins) ins=NR } } else if (line!=\"\" && substr(line,1,1)!=\"#\"){ doc_done=1 } } else { if(index(\$$0, \"\\\"\\\"\\\"\")>0){ in_doc=0; doc_done=1; if(NR>=ins) ins=NR } }} \
+{ lines[NR]=\$$0 } \
+END{ if(ins==0) ins=0; for(i=1;i<=NR;i++){ print lines[i]; if(i==ins) print \"from __future__ import annotations\" } if(NR==0) print \"from __future__ import annotations\" }" "$$f" > "$$tmp" && mv "$$tmp" "$$f" && inserted=$$((inserted+1)); \
+		done; \
+		cnt=$$(printf "%s\n" $$files | sed "/^$$/d" | wc -l | tr -d " "); \
+		echo "[compat] files_found=$$cnt, inserted=$$inserted"; \
+		echo "[info] 构建本地 wheel（不安装本体）…"; \
 		mkdir -p python/dist; \
 		$(PYTHON) -m pip wheel --no-deps -w python/dist python/; \
-		echo \"[ok] setup 完成（依赖 --user 安装 + 构建 wheel，不安装本体）。\""
+		echo "[ok] setup 完成（依赖 --user 安装 + 构建 wheel，不安装本体）。"'
 endef
 
 define _test_python

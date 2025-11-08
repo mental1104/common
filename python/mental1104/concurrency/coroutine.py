@@ -2,77 +2,66 @@
 Date: 2025-01-24 13:55:33
 Author: mental1104 mental1104@gmail.com
 LastEditors: mental1104 mental1104@gmail.com
-LastEditTime: 2025-01-24 22:51:17
+LastEditTime: 2025-11-09 00:26:39
 '''
+from __future__ import annotations
+
 import functools
 import asyncio
-from asyncio import Future
 from abc import ABC, abstractmethod
-from typing import List, Callable
+from typing import List, Callable, Awaitable, TypeVar
 from mental1104 import async_timed
 
+T = TypeVar("T")
+
 # 策略基类
-
-
 class TaskExecutionStrategy(ABC):
-    """协程策略-抽象基类
-
-    这种场景下，会并发执行所有协程，并保证所有协程执行完后一并返回
-    """
+    """协程策略-抽象基类：并发执行并在全部完成后一并返回"""
     @abstractmethod
-    def execute(self, loop, tasks: List[Callable[[], Future]]):
-        raise NotImplementedError("Each strategy must implement the 'execute' method.")
+    async def execute(self, loop, tasks: List[Awaitable[T]]) -> List[T]:
+        """为兼容旧签名保留 loop 参数，实现内不依赖外部 loop。"""
+        raise NotImplementedError
 
 # 策略1：所有任务一起执行，等待所有完成
-
-
 class GatherStrategy(TaskExecutionStrategy):
-    """协程策略-并发执行
-
-    这种场景下，会并发执行所有协程，并保证所有协程执行完后一并返回
-    """
-
-    async def execute(self, loop, tasks: List[Callable[[], Future]]) -> List:
-        return await asyncio.gather(*tasks, return_exceptions=True)
-
+    async def execute(self, loop, tasks: List[Awaitable[T]]) -> List[T]:
+        # 直接 gather 协程对象；在当前 running loop 中调度
+        return await asyncio.gather(*tasks, return_exceptions=False)
 
 class CoroutinePool:
-    """协程池类
+    """协程池
 
-    loop是传入的事件循环
-    max_concurrent_task是最大并发任务数，默认为5。
-    使用async_timed装饰器来记录任务执行时间。
-    run_task_batch方法接收一个函数对象列表，依次执行。
-    run方法接收一个函数对象列表和一个执行策略，默认使用GatherStrategy。
+    loop: 传入的事件循环（保持签名兼容）
+    max_concurrent_task: 最大并发
     """
 
-    def __init__(self, loop, max_concurrent_task=5):
+    def __init__(self, loop, max_concurrent_task: int = 5):
         self.loop = loop
-        self.semaphore = asyncio.Semaphore(max_concurrent_task)
+        self.max_concurrent_task = max_concurrent_task
+        self._semaphore: asyncio.Semaphore | None = None  # 懒创建，避免在无 current loop 的线程里初始化
 
-    async def worker(self, coro):
-        try:
-            async with self.semaphore:
-                result = await coro()
-                return result
-        except Exception as e:
-            # 处理任务内的异常
-            return f"Task failed with exception: {str(e)}"
+    async def _ensure_sem(self) -> asyncio.Semaphore:
+        if self._semaphore is None:
+            # 在协程上下文中创建，自动绑定当前 running loop
+            self._semaphore = asyncio.Semaphore(self.max_concurrent_task)
+        return self._semaphore
+
+    async def worker(self, coro_factory: Callable[[], Awaitable[T]]) -> T:
+        sem = await self._ensure_sem()
+        async with sem:
+            return await coro_factory()
 
     @async_timed
-    async def run_task_batch(self, partial_funcs: List[functools.partial], strategy: TaskExecutionStrategy):
-        """
-        接收 partial 函数对象列表，依次执行。
-        """
-        tasks = [self.worker(partial_func) for partial_func in partial_funcs]
-        # 使用策略来执行任务
+    async def run_task_batch(self, partial_funcs: List[functools.partial], strategy: TaskExecutionStrategy) -> List[T]:
+        tasks: List[Awaitable[T]] = [self.worker(partial_func) for partial_func in partial_funcs]
         return await strategy.execute(self.loop, tasks)
 
-    def run(self, coros: List[functools.partial], strategy: TaskExecutionStrategy = GatherStrategy()):
-        """
-        运行协程任务，支持选择策略来执行。
-        :param coros: 函数对象列表
-        :param strategy: 执行策略，决定任务如何执行
-        :return: 根据策略返回的结果
-        """
+    def run(self, coros: List[functools.partial], strategy: TaskExecutionStrategy = GatherStrategy()) -> List[T]:
+        # 优先使用传入的 loop，保持与测试夹具一致；必要时临时设置为当前 loop
+        if self.loop is None:
+            return asyncio.run(self.run_task_batch(coros, strategy))
+        try:
+            asyncio.set_event_loop(self.loop)
+        except RuntimeError:
+            pass
         return self.loop.run_until_complete(self.run_task_batch(coros, strategy))
