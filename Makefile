@@ -1,38 +1,32 @@
-# Makefile — 单文件、无 heredoc；公共逻辑用 define 宏封装，目标直接调用
-
-# =================== 变量（Variables） ===================
-
-SHELL := /bin/bash
-.ONESHELL:
-.SILENT:
-MAKEFLAGS += --no-builtin-rules
-
 # === 自动加载 .env 到 Make 环境（全局生效） =================
 REPO_ROOT := $(abspath $(dir $(firstword $(MAKEFILE_LIST))))
 ENV_SRC   ?= $(REPO_ROOT)/.env
-ENV_MK    := $(abspath $(ENV_SRC)).mk
-ENV_REQ   ?= PGUSER PGPASSWORD PGHOST PGPORT PGDATABASE   # 需要可改
+ENV_HAVE  := $(wildcard $(ENV_SRC))
 
-$(ENV_MK):
+# 仅当 .env 存在时才定义导入目标与包含；否则将 ENV_MK 设为 /dev/null 以免触发任何配方
+ifeq ($(strip $(ENV_HAVE)),)
+  ENV_MK := /dev/null
+else
+  ENV_MK := $(abspath $(ENV_SRC)).mk
+
+  $(ENV_MK):
 	@set -e
-	if [ -f "$(ENV_SRC)" ]; then
-		awk '\
-		  /^[[:space:]]*#/ || /^[[:space:]]*$$/ { next } \
-		  { line=$$0; sub(/^[[:space:]]*export[[:space:]]+/, "", line); \
-		    i=index(line,"="); if(i==0) next; \
-		    key=substr(line,1,i-1); val=substr(line,i+1); \
-		    sub(/^[[:space:]]+|[[:space:]]+$$/,"",key); \
-		    sub(/^[[:space:]]+/,"",val); sub(/[[:space:]]+#.*/, "", val); \
-		    if(val ~ /^".*"$$/){sub(/^"/,"",val); sub(/"$$/,"",val)} \
-		    else if(val ~ /^'\''.*'\''$$/){sub(/^'\''/,"",val); sub(/'\''$$/,"",val)} \
-		    print "export " key " = " val; }' \
-		  "$(ENV_SRC)" > "$(ENV_MK)"
-		echo "[ok] .env -> $(ENV_MK)"
-	else
-		: > "$(ENV_MK)"; echo "[warn] 未找到 $(ENV_SRC)，以空环境继续"
-	fi
+	awk '\
+	  /^[[:space:]]*#/ || /^[[:space:]]*$$/ { next } \
+	  { line=$$0; sub(/^[[:space:]]*export[[:space:]]+/, "", line); \
+	    i=index(line,"="); if(i==0) next; \
+	    key=substr(line,1,i-1); val=substr(line,i+1); \
+	    sub(/^[[:space:]]+|[[:space:]]+$$/,"",key); \
+	    sub(/^[[:space:]]+/,"",val); sub(/[[:space:]]+#.*/, "", val); \
+	    if(val ~ /^".*"$$/){sub(/^"/,"",val); sub(/"$$/,"",val)} \
+	    else if(val ~ /^'\''.*'\''$$/){sub(/^'\''/,"",val); sub(/'\''$$/,"",val)} \
+	    print "export " key " = " val; }' \
+	  "$(ENV_SRC)" > "$(ENV_MK)"
+	echo "[ok] .env -> $(ENV_MK)"
 
--include $(ENV_MK)
+  -include $(ENV_MK)
+endif
+
 export
 
 .PHONY: env-guard env-print env-expose env-clean
@@ -42,10 +36,10 @@ env-guard:
 	if [ -n "$$missing" ]; then echo "[err] 缺少必需环境变量:$$missing （来源 $(ENV_SRC)）"; exit 2; fi
 env-print:
 	@env | grep -E '^(PG|POSTGRES|DATABASE_URL|REDIS|PULSAR)=' | sort || true
-env-expose:   # 可让当前交互式 shell 生效： eval "$$(make env-expose)"
-	@sed -E 's/^export[[:space:]]+([^=[:space:]]+)[[:space:]]*=[[:space:]]*(.*)$/export \1=\2/' "$(ENV_MK)"
+env-expose:
+	@[ -f "$(ENV_MK)" ] && sed -E 's/^export[[:space:]]+([^=[:space:]]+)[[:space:]]*=[[:space:]]*(.*)$/export \1=\2/' "$(ENV_MK)" || true
 env-clean:
-	@rm -f "$(ENV_MK)"; echo "[ok] 已移除导入文件：$(ENV_MK)"
+	@[ "$(ENV_MK)" != "/dev/null" ] && rm -f "$(ENV_MK)" || true; echo "[ok] 已移除导入文件：$(ENV_MK)"
 # ============================================================
 
 .DEFAULT_GOAL := setup
@@ -746,46 +740,48 @@ ENV_EXAMPLE  ?= .env.example
 
 .PHONY: env-example
 env-example:
-	@[ -f $(ENV_SRC) ] || { echo "[err] $(ENV_SRC) 不存在"; exit 1; }
-	@awk '\
-		/^[[:space:]]*#/ { print; next } \
-		/^[[:space:]]*$$/ { print; next } \
-		{ \
-			line = $$0; \
-			sub(/^[[:space:]]*export[[:space:]]+/, "", line); \
-			if (index(line, "=") == 0) { print "#" $$0; next } \
-			key = line; \
-			sub(/=.*/, "", key); \
-			sub(/^[[:space:]]+|[[:space:]]+$$/, "", key); \
-			print key "="; \
-		} \
-	' $(ENV_SRC) > $(ENV_EXAMPLE)
-	@echo "[ok] 生成 $(ENV_EXAMPLE)"
+	@if [ -f $(ENV_SRC) ]; then \
+		awk '\
+			/^[[:space:]]*#/ { print; next } \
+			/^[[:space:]]*$$/ { print; next } \
+			{ \
+				line = $$0; \
+				sub(/^[[:space:]]*export[[:space:]]+/, "", line); \
+				if (index(line, "=") == 0) { print "#" $$0; next } \
+				key = line; \
+				sub(/=.*/, "", key); \
+				sub(/^[[:space:]]+|[[:space:]]+$$/, "", key); \
+				print key "="; \
+			} \
+		' $(ENV_SRC) > $(ENV_EXAMPLE); \
+		echo "[ok] 生成 $(ENV_EXAMPLE)"; \
+	else \
+		echo "[warn] $(ENV_SRC) 不存在，跳过 env-example"; \
+	fi
 
 # =================== Docker（仅扫描 images/） ===================
 COMPOSE_BIN        ?= docker compose
 COMPOSE_FILE_NAME  ?= docker-compose.yaml
 COMPOSE_DIRS := $(shell find $(REPO_ROOT)/images -type f -name $(COMPOSE_FILE_NAME) -exec dirname {} \; | sort -u)
+ENV_FILE_OPT := $(shell [ -f "$(ENV_SRC)" ] && printf -- '--env-file %s' "$(ENV_SRC)")
 
 .PHONY: docker-help docker-list docker-up-all docker-down-all docker-up docker-down docker-config docker-ps docker-logs docker-pull docker-net
-docker-help: ## 显示可用命令
+docker-help:
 	@echo "Targets:"
 	@awk 'BEGIN{FS":.*## "}/^docker-[a-zA-Z0-9_.-]+:.*## /{printf "  %-18s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 
-docker-list: ## 列出 images/ 下所有 compose 目录
+docker-list:
 	@[ -n "$(COMPOSE_DIRS)" ] || { echo "[warn] images/ 未找到 $(COMPOSE_FILE_NAME)"; exit 0; }
 	@printf "%s\n" $(COMPOSE_DIRS)
 
-# 关键：与 env 导入绑定
 docker-up-all: $(ENV_MK)
-	@# 如果未安装 docker，直接跳过且不报错
 	@if ! command -v docker >/dev/null 2>&1; then echo "[warn] 未检测到 docker，跳过 docker-up-all"; exit 0; fi
 	@[ -n "$(COMPOSE_DIRS)" ] || { echo "[warn] images/ 未找到 $(COMPOSE_FILE_NAME)"; exit 0; }
 	@for d in $(COMPOSE_DIRS); do \
 		echo ">> UP $$d"; \
 		$(COMPOSE_BIN) \
 		  --project-directory "$(REPO_ROOT)" \
-		  --env-file "$(ENV_SRC)" \
+		  $(ENV_FILE_OPT) \
 		  -f "$$d/$(COMPOSE_FILE_NAME)" up -d \
 		|| { echo "[warn] $$d 启动失败（已忽略）"; continue; }; \
 	done
@@ -798,7 +794,7 @@ docker-down-all: $(ENV_MK)
 		echo ">> DOWN $$d"; \
 		$(COMPOSE_BIN) \
 		  --project-directory "$(REPO_ROOT)" \
-		  --env-file "$(ENV_SRC)" \
+		  $(ENV_FILE_OPT) \
 		  -f "$$d/$(COMPOSE_FILE_NAME)" down --remove-orphans \
 		|| { echo "[warn] $$d 关闭失败（已忽略）"; continue; }; \
 	done
@@ -821,7 +817,7 @@ docker-up:
 		echo ">> UP $$d"
 		$(COMPOSE_BIN) \
 		  --project-directory "$(REPO_ROOT)" \
-		  --env-file "$(ENV_SRC)" \
+		  $(ENV_FILE_OPT) \
 		  -f "$$f" up -d || { echo "[warn] $$d 启动失败（已忽略）"; continue; }
 	done
 
@@ -842,7 +838,7 @@ docker-down:
 		echo ">> DOWN $$d"
 		$(COMPOSE_BIN) \
 		  --project-directory "$(REPO_ROOT)" \
-		  --env-file "$(ENV_SRC)" \
+		  $(ENV_FILE_OPT) \
 		  -f "$$f" down --remove-orphans || { echo "[warn] $$d 关闭失败（已忽略）"; continue; }
 	done
 
@@ -850,16 +846,16 @@ docker-config:
 	@[ -n "$(DIR)" ] || { echo "[err] 需指定 DIR=..."; exit 2; }
 	@$(COMPOSE_BIN) \
 	  --project-directory "$(REPO_ROOT)" \
-	  --env-file "$(ENV_SRC)" \
+	  $(ENV_FILE_OPT) \
 	  -f "$(DIR)/$(COMPOSE_FILE_NAME)" config
 
-docker-ps: ## 汇总查看状态（逐目录 docker compose ps）
+docker-ps:
 	@set -e
 	for d in $(COMPOSE_DIRS); do
 		echo "== $$d"; (cd "$$d" && $(COMPOSE_BIN) ps); echo
 	done
 
-docker-logs: ## 查看日志：NAME=目录名 或 DIR=路径（ARGS 透传给 logs）
+docker-logs:
 	@set -e
 	if [ -n "$(DIR)" ]; then sel="$(DIR)"; \
 	elif [ -n "$(NAME)" ]; then \
@@ -869,7 +865,7 @@ docker-logs: ## 查看日志：NAME=目录名 或 DIR=路径（ARGS 透传给 lo
 		echo "== $$d"; (cd "$$d" && $(COMPOSE_BIN) logs $(ARGS)); echo
 	done
 
-docker-pull: ## 全量拉取镜像
+docker-pull:
 	@set -e
 	for d in $(COMPOSE_DIRS); do
 		echo ">> PULL $$d"
@@ -877,7 +873,7 @@ docker-pull: ## 全量拉取镜像
 	done
 	@echo "[ok] 全部镜像尝试拉取完毕（出错已忽略）"
 
-docker-net: ## 创建 Docker 网络：NET=名称（默认 shared_network）
+docker-net:
 	@set -e
 	NET_NAME="$(NET)"; [ -n "$$NET_NAME" ] || NET_NAME="shared_network"
 	if docker network inspect "$$NET_NAME" >/dev/null 2>&1; then
@@ -887,7 +883,7 @@ docker-net: ## 创建 Docker 网络：NET=名称（默认 shared_network）
 		echo "[ok] 已创建网络：$$NET_NAME"
 	fi
 
-# ---- Docker registry mirrors（原逻辑保留） ----
+# ---- Docker registry mirrors ----
 MIRRORS ?= https://mirror.gcr.io
 DOCKER_DAEMON_JSON ?= /etc/docker/daemon.json
 .PHONY: docker-mirror-help docker-mirror-apply docker-mirror-show
@@ -939,7 +935,6 @@ JSON
 # =================== 聚合入口（Python + Go + C++ + Rust + Docker） ===================
 
 .PHONY: setup build test install clean coverage help fmt bench
-# 初始化：导出 env -> 尝试起容器 -> 原有各语言 setup
 setup:
 	$(MAKE) env-example
 	-$(MAKE) --no-print-directory _docker-up-all-if-needed
@@ -952,7 +947,6 @@ build:    build-python build-go build-cpp build-rust
 test:     test-python test-go test-cpp test-rust
 install:  install-python install-go install-cpp install-rust
 
-# 反初始化：尝试关容器 -> 清理构建 -> 移除导入文件
 clean:
 	-$(MAKE) --no-print-directory _docker-down-all-if-needed
 	$(MAKE) clean-python
