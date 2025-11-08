@@ -17,3 +17,4 @@ memray
 autopep8
 coverage
 ruamel.yaml
+ruff
