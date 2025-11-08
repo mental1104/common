@@ -1,0 +1,33 @@
+services:
+  flink-jobmanager:
+    image: flink:latest
+    container_name: flink-jobmanager
+    networks:
+      - shared_network
+    command: jobmanager
+    ports:
+      - "8081:8081"    # Flink Web UI
+    environment:
+      - |
+        FLINK_PROPERTIES=
+        jobmanager.rpc.address: flink-jobmanager
+    restart: unless-stopped
+
+  flink-taskmanager:
+    image: flink:latest
+    container_name: flink-taskmanager
+    networks:
+      - shared_network
+    depends_on:
+      - flink-jobmanager
+    command: taskmanager
+    environment:
+      - |
+        FLINK_PROPERTIES=
+        jobmanager.rpc.address: flink-jobmanager
+        taskmanager.numberOfTaskSlots: 2
+    restart: unless-stopped
+
+networks:
+  shared_network:
+    external: true

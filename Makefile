@@ -58,6 +58,9 @@ UNAME_S := $(shell uname -s)
 IS_UBUNTU := $(shell sh -lc 'u=$$(uname -s); if [ "$$u" = Linux ] && [ -r /etc/os-release ]; then . /etc/os-release; [ "$$ID" = ubuntu ] && echo 1; fi')
 BREAK_FLAG := $(if $(IS_UBUNTU),--break-system-packages,)
 JOBS ?= $(shell sh -lc 'command -v nproc >/dev/null 2>&1 && nproc || sysctl -n hw.ncpu 2>/dev/null || echo 4')
+IS_DARWIN := $(if $(filter Darwin,$(UNAME_S)),1,)
+SKIP_DOCKER_ON_DARWIN ?= 1
+DOCKER_DISABLED := $(if $(and $(SKIP_DOCKER_ON_DARWIN),$(IS_DARWIN)),1,)
 
 # ---------- 工具/路径/参数 ----------
 PYTHON ?= python3
@@ -88,7 +91,7 @@ ifeq ($(USE_PIP_MIRROR),1)
     PIP_MIRROR_OPTS += --index-url $(PIP_INDEX_URL)
   endif
   ifneq ($(strip $(PIP_EXTRA_INDEX_URL)),)
-    PIP_MIRROR_OPTS += --extra-index-url $(PIP_EXTRA_INDEX_URL)
+    PIP_MIRROR_OPTS += --extra-index_url $(PIP_EXTRA_INDEX_URL)
   endif
   ifneq ($(strip $(PIP_TRUSTED_HOST)),)
     PIP_MIRROR_OPTS += --trusted-host $(PIP_TRUSTED_HOST)
@@ -646,6 +649,21 @@ define _guard_rust
 		done'
 endef
 
+.PHONY: _docker-up-all-if-needed _docker-down-all-if-needed
+_docker-up-all-if-needed:
+	@if [ -n "$(DOCKER_DISABLED)" ]; then \
+		echo "[skip] macOS 检测到，跳过 docker-up-all"; \
+	else \
+		$(MAKE) --no-print-directory docker-up-all; \
+	fi
+
+_docker-down-all-if-needed:
+	@if [ -n "$(DOCKER_DISABLED)" ]; then \
+		echo "[skip] macOS 检测到，跳过 docker-down-all"; \
+	else \
+		$(MAKE) --no-print-directory docker-down-all; \
+	fi
+
 # =================== 入口/目标（Targets） ===================
 
 .PHONY: vet vet-rust vet-go vet-python vet-cpp
@@ -924,7 +942,7 @@ JSON
 # 初始化：导出 env -> 尝试起容器 -> 原有各语言 setup
 setup:
 	$(MAKE) env-example
-	-$(MAKE) --no-print-directory docker-up-all
+	-$(MAKE) --no-print-directory _docker-up-all-if-needed
 	$(MAKE) setup-python
 	$(MAKE) setup-go
 	$(MAKE) setup-cpp
@@ -936,7 +954,7 @@ install:  install-python install-go install-cpp install-rust
 
 # 反初始化：尝试关容器 -> 清理构建 -> 移除导入文件
 clean:
-	-$(MAKE) --no-print-directory docker-down-all
+	-$(MAKE) --no-print-directory _docker-down-all-if-needed
 	$(MAKE) clean-python
 	$(MAKE) clean-go
 	$(MAKE) clean-cpp
