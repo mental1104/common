@@ -15,6 +15,8 @@ from mental1104 import async_timed
 T = TypeVar("T")
 
 # 策略基类
+
+
 class TaskExecutionStrategy(ABC):
     """协程策略-抽象基类：并发执行并在全部完成后一并返回"""
     @abstractmethod
@@ -23,10 +25,13 @@ class TaskExecutionStrategy(ABC):
         raise NotImplementedError
 
 # 策略1：所有任务一起执行，等待所有完成
+
+
 class GatherStrategy(TaskExecutionStrategy):
     async def execute(self, loop, tasks: List[Awaitable[T]]) -> List[T]:
         # 直接 gather 协程对象；在当前 running loop 中调度
         return await asyncio.gather(*tasks, return_exceptions=False)
+
 
 class CoroutinePool:
     """协程池
