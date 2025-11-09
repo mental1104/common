@@ -304,6 +304,31 @@ endif()
 
 install(DIRECTORY include/mental1104 DESTINATION include)
 
+# ====================== 新增：自动聚合 src -> 共享库 ======================
+file(GLOB_RECURSE M1104_CORE_SOURCES CONFIGURE_DEPENDS
+  "${PROJECT_SOURCE_DIR}/src/*.cpp"
+  "${PROJECT_SOURCE_DIR}/src/*.c"
+)
+if (M1104_CORE_SOURCES)
+  add_library(mental1104 SHARED ${M1104_CORE_SOURCES})
+else()
+  add_library(mental1104 SHARED EXCLUDE_FROM_ALL)
+endif()
+target_include_directories(mental1104 PUBLIC
+  ${PROJECT_SOURCE_DIR}/include
+)
+target_compile_features(mental1104 PUBLIC cxx_std_20)
+set_target_properties(mental1104 PROPERTIES
+  POSITION_INDEPENDENT_CODE ON
+  OUTPUT_NAME "mental1104"
+)
+install(TARGETS mental1104
+  ARCHIVE DESTINATION lib
+  LIBRARY DESTINATION lib
+  RUNTIME DESTINATION bin
+)
+# ========================================================================
+
 enable_testing()
 
 set(TEST_DIR ${CMAKE_CURRENT_SOURCE_DIR}/test)
@@ -379,6 +404,11 @@ function(add_optional_test SRC)
 			target_link_libraries(${TEST_NAME} PRIVATE ${dep}::lib)
 		endif()
 	endforeach()
+
+	# 关键：所有测试默认链接到 libmental1104
+	if (TARGET mental1104)
+		target_link_libraries(${TEST_NAME} PRIVATE mental1104)
+	endif()
 
 	target_link_libraries(${TEST_NAME} PRIVATE
 		${GTEST_LINK}
@@ -470,6 +500,8 @@ if (HAVE_GOOGLE_BENCHMARK)
           ${PROJECT_SOURCE_DIR}/include
         )
         target_compile_features(${TGT} PRIVATE cxx_std_20)
+        # 关键：bench 也默认链接 libmental1104
+        target_link_libraries(${TGT} PRIVATE mental1104)
         target_link_libraries(${TGT} PRIVATE benchmark::benchmark)
         target_use_all_components(${TGT})
         set_target_properties(${TGT} PROPERTIES
