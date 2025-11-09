@@ -3,8 +3,11 @@
 #include <functional>
 #include <unordered_map>
 
-#if !defined(__linux__)
-/* 非 Linux 平台占位常量，便于统一 API（macOS 由实现层映射到 kqueue） */
+#if defined(__linux__)
+// Linux: 给使用方（比如 bench/test）提供 EPOLL* 宏
+#  include <sys/epoll.h>
+#else
+// 非 Linux：提供占位常量，kqueue 实现层会映射
 #ifndef EPOLLIN
 #define EPOLLIN   0x001u
 #endif
