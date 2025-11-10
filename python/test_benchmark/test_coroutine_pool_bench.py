@@ -166,16 +166,16 @@ POOL_VARIANTS = [
 ]
 
 
+def _run_coro_partial_sync(coro_factory: functools.partial) -> int:
+    return asyncio.run(coro_factory())
+
+
 @pytest.mark.parametrize("pool_variant", POOL_VARIANTS)
 @pytest.mark.parametrize(
     "scenario,case_no,n_tasks,max_concurrency,delay_ms,payload_len",
     SCENARIO_CASES,
     ids=IDS,
 )
-def _run_coro_partial_sync(coro_factory: functools.partial) -> int:
-    return asyncio.run(coro_factory())
-
-
 def test_coroutine_pool_bench(
     pool_variant,
     benchmark,
