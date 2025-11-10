@@ -1,6 +1,8 @@
 # rust/.cargo/config.toml
-[build]
-# 通用优化；如需可改为 "native"（便于你在 13600KF 上出性能），但这会降低二进制的通用性
+
+# 仅在 x86_64 主机上启用 x86-64-v3 优化；其余架构保持默认以避免
+# 在 arm64 (Apple Silicon 等) 上出现 “not a recognized processor” 的警告。
+[target.'cfg(target_arch = "x86_64")']
 rustflags = ["-C", "target-cpu=x86-64-v3"]
 
 [term]

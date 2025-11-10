@@ -6,6 +6,8 @@
 #include <fcntl.h>
 #include <poll.h>
 #include <cstring>
+#include <sys/resource.h>
+#include <iostream>
 
 // ---- 小工具 ----
 static inline void set_nonblocking(int fd) {
@@ -121,6 +123,29 @@ BENCHMARK(BM_CallbackOnly);
 #include <vector>
 #include <random>
 
+static bool ensure_fd_limit(size_t desired_fds) {
+    struct rlimit rl{};
+    if (::getrlimit(RLIMIT_NOFILE, &rl) != 0) return false;
+    if (rl.rlim_cur >= desired_fds) return true;
+
+    rlim_t target = static_cast<rlim_t>(desired_fds);
+    if (rl.rlim_max != RLIM_INFINITY && rl.rlim_max < target) target = rl.rlim_max;
+    if (target <= rl.rlim_cur) return false;
+
+    struct rlimit req{target, rl.rlim_max};
+    if (::setrlimit(RLIMIT_NOFILE, &req) != 0) return false;
+    return target >= static_cast<rlim_t>(desired_fds);
+}
+
+static bool ensure_fd_budget_or_skip(benchmark::State& state, size_t pipe_count) {
+    constexpr size_t EXTRA = 128; // kqueue/epoll + benchmark overhead
+    size_t desired = pipe_count * 2 + EXTRA;
+    if (ensure_fd_limit(desired)) return true;
+    std::cerr << "[bench] insufficient RLIMIT_NOFILE (need >= " << desired << " fds)\n";
+    state.SkipWithError("insufficient RLIMIT_NOFILE");
+    return false;
+}
+
 // 创建 N 个非阻塞 pipe，返回 {rfd[], wfd[]}
 static bool make_pipes(size_t N, std::vector<int>& rfds, std::vector<int>& wfds) {
     rfds.resize(N); wfds.resize(N);
@@ -145,6 +170,7 @@ static void close_pipes(std::vector<int>& rfds, std::vector<int>& wfds) {
 static void BM_Epoll_ManyFds_Sparse(benchmark::State& state) {
     const size_t N = static_cast<size_t>(state.range(0)); // fd 总数
     const size_t H = static_cast<size_t>(state.range(1)); // 每轮热 fd 数
+    if (!ensure_fd_budget_or_skip(state, N)) return;
     std::vector<int> rfds, wfds;
     if (!make_pipes(N, rfds, wfds)) { state.SkipWithError("pipe() failed"); return; }
 
@@ -193,6 +219,7 @@ BENCHMARK(BM_Epoll_ManyFds_Sparse)->Args({1024, 8})->Args({4096, 8})->Args({8192
 static void BM_Poll_ManyFds_Sparse(benchmark::State& state) {
     const size_t N = static_cast<size_t>(state.range(0));
     const size_t H = static_cast<size_t>(state.range(1));
+    if (!ensure_fd_budget_or_skip(state, N)) return;
     std::vector<int> rfds, wfds;
     if (!make_pipes(N, rfds, wfds)) { state.SkipWithError("pipe() failed"); return; }
 
