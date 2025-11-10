@@ -28,10 +28,11 @@ else
 	  "$(ENV_SRC)" > "$(ENV_MK)"
 	echo "[ok] .env -> $(ENV_MK)"
 
-  -include $(ENV_MK)
+  ifneq ($(filter docker-up-all,$(MAKECMDGOALS)),)
+    -include $(ENV_MK)
+    export
+  endif
 endif
-
-export
 
 .PHONY: env-guard env-print env-expose env-clean
 env-guard:
@@ -75,6 +76,7 @@ VERBOSE ?= 0
 TEST_VERBOSE ?= $(VERBOSE)
 CTEST_V := $(if $(filter 1,$(TEST_VERBOSE)),-V,)
 PYTEST_V := $(if $(filter 1,$(TEST_VERBOSE)),-vv,-q)
+PYTEST_BENCH_K ?= bench or benchmark
 GO_TEST_V := $(if $(filter 1,$(TEST_VERBOSE)),-v,)
 CARGO_TEST_V := $(if $(filter 1,$(TEST_VERBOSE)),-v,)
 
@@ -233,10 +235,10 @@ define _bench_python
 		cd python; \
 		if $(PYTHON) -m pytest -q --help 2>/dev/null | grep -qi benchmark; then \
 			echo "[pytest-benchmark] 基准用例"; \
-			$(PYTHON) -m pytest $(PYTEST_V) -k "bench or benchmark" --benchmark-only --benchmark-autosave; \
+			$(PYTHON) -m pytest $(PYTEST_V) -k "$(PYTEST_BENCH_K)" --benchmark-only --benchmark-autosave; \
 		else \
 			echo "[warn] 未检测到 pytest-benchmark，回退到名称筛选"; \
-			$(PYTHON) -m pytest $(PYTEST_V) -k "bench or benchmark"; \
+			$(PYTHON) -m pytest $(PYTEST_V) -k "$(PYTEST_BENCH_K)"; \
 		fi'
 endef
 
@@ -316,8 +318,16 @@ define _bench_cpp
 	$(SHELL) -lc 'set -e; \
 		if [[ ! -d "$(CPP_BUILD_DIR)" ]]; then echo "[info] 未发现 $(CPP_BUILD_DIR)，先执行: make build-cpp"; exit 1; fi; \
 		cd "$(CPP_BUILD_DIR)"; \
-		if $(CTEST) -N -L bench >/dev/null 2>&1; then $(CTEST) --output-on-failure -L bench -j $(JOBS) $(CTEST_V); else $(CTEST) --output-on-failure -j $(JOBS) $(CTEST_V); fi'
+		if [[ -n "$$VERBOSE" && "$$VERBOSE" != "0" ]]; then CTEST_FLAGS="-VV"; else CTEST_FLAGS="--output-on-failure"; fi; \
+		CTEST_JOBS="$(JOBS)"; \
+		if [[ -n "$$SEQ" && "$$SEQ" != "0" ]]; then CTEST_JOBS=1; fi; \
+		if $(CTEST) -N -L bench >/dev/null 2>&1; then \
+			$(CTEST) $$CTEST_FLAGS -L bench -j $$CTEST_JOBS; \
+		else \
+			$(CTEST) $$CTEST_FLAGS -j $$CTEST_JOBS; \
+		fi'
 endef
+
 
 define _build_cpp_submodules
 	$(SHELL) -lc 'set -e; \
@@ -509,6 +519,21 @@ define _clean_rust
 		find "$(RUST_DIR)" -type f -name "*.profraw" -delete || true; \
 		find "$(RUST_DIR)" -type f -name "*.profdata" -delete || true; \
 		echo "[ok] rust clean 完成。"'
+endef
+
+define _install_rust
+	$(SHELL) -lc 'set -e; \
+		if ! command -v cargo >/dev/null 2>&1; then echo "[error] 未找到 cargo"; exit 1; fi; \
+		cd "$(RUST_DIR)"; \
+		if grep -q "\[\[bin\]\]" Cargo.toml || [ -f src/main.rs ]; then \
+			echo "[rust] cargo install --path . --locked --force"; \
+			cargo install --path . --locked --force; \
+			echo "[ok] rust install 完成（可执行文件路径见 cargo install 输出）。"; \
+		else \
+			echo "[warn] 当前 crate 未声明二进制入口，执行 cargo build --release 代替 install"; \
+			cargo build --release; \
+			echo "[ok] rust 库 crate 构建完成（无可执行文件可安装）。"; \
+		fi'
 endef
 
 define _coverage_rust
@@ -814,16 +839,17 @@ docker-up-all: $(ENV_MK)
 	done
 	@echo "[ok] docker-up-all 完成（出错已忽略）"
 
-docker-down-all: $(ENV_MK)
+docker-down-all:
+	@$(MAKE) --no-print-directory env-clean
 	@if ! command -v docker >/dev/null 2>&1; then echo "[warn] 未检测到 docker，跳过 docker-down-all"; exit 0; fi
 	@[ -n "$(COMPOSE_DIRS)" ] || { echo "[warn] images/ 未找到 $(COMPOSE_FILE_NAME)"; exit 0; }
 	@for d in $(COMPOSE_DIRS); do \
 		echo ">> DOWN $$d"; \
 		$(COMPOSE_BIN) \
-		  --project-directory "$(REPO_ROOT)" \
-		  $(ENV_FILE_OPT) \
-		  -f "$$d/$(COMPOSE_FILE_NAME)" down --remove-orphans \
-		|| { echo "[warn] $$d 关闭失败（已忽略）"; continue; }; \
+			--project-directory "$(REPO_ROOT)" \
+			$(ENV_FILE_OPT) \
+			-f "$$d/$(COMPOSE_FILE_NAME)" down --remove-orphans \
+			|| { echo "[warn] $$d 关闭失败（已忽略）"; continue; }; \
 	done
 	@echo "[ok] docker-down-all 完成（出错已忽略）"
 
@@ -995,7 +1021,7 @@ test-rust-v:   ; $(MAKE) --no-print-directory test-rust   VERBOSE=1
 
 .PHONY: bench-v bench-cpp-v bench-python-v bench-go-v bench-rust-v
 bench-v:        ; $(MAKE) --no-print-directory bench        VERBOSE=1
-bench-cpp-v:    ; $(MAKE) --no-print-directory bench-cpp    VERBOSE=1
+bench-cpp-v:    ; $(MAKE) --no-print-directory bench-cpp    VERBOSE=1 SEQ=1
 bench-python-v: ; $(MAKE) --no-print-directory bench-python VERBOSE=1
 bench-go-v:     ; $(MAKE) --no-print-directory bench-go     VERBOSE=1
 bench-rust-v:   ; $(MAKE) --no-print-directory bench-rust   VERBOSE=1

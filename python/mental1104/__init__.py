@@ -3,6 +3,7 @@
 
 # ---- Direct imports (safe modules; no mental1104 top-level imports) ----
 from mental1104.app.anki import AnkiApkgGenerator
+from mental1104.concurrency.types import MPStartMethod
 from mental1104.connector.postgres import Base, db_connection, db_params_clickhouse, db_params_postgres, ensure_database_exists, ensure_tables_exist, get_db_config, logger, open_session, params, process_record, sql_query, startup
 from mental1104.connector.redis import RedisConnection, RedisLock
 from mental1104.debug.deciprobe import ELLIPSIS_CHAR, FUNC_FIELD_WIDTH, HEAD_PREFIX, ID_FIELD_WIDTH, SITE_FIELD_WIDTH, TRACE_IF_ENABLED, TYPE_FIELD_WIDTH, deciprobe, trace_if
@@ -25,12 +26,15 @@ _EXPORT_MAP = {
     'Consumer': 'mental1104.connector.pulsar',
     'CoroutinePool': 'mental1104.concurrency.coroutine',
     'GatherStrategy': 'mental1104.concurrency.coroutine',
+    'ProcessExecutorCoroutinePool': 'mental1104.concurrency.coroutine',
+    'ProcessWorkerPool': 'mental1104.concurrency.sync_worker',
     'Producer': 'mental1104.connector.pulsar',
     'PulsarAdminHelper': 'mental1104.connector.pulsar',
     'PulsarConnector': 'mental1104.connector.pulsar',
     'PulsarEnvironment': 'mental1104.connector.pulsar',
-    'T': 'mental1104.concurrency.coroutine',
     'TaskExecutionStrategy': 'mental1104.concurrency.coroutine',
+    'ThreadExecutorCoroutinePool': 'mental1104.concurrency.coroutine',
+    'ThreadWorkerPool': 'mental1104.concurrency.sync_worker',
     'TimeBasedTrendPlot': 'mental1104.plot.trend',
     'TrendPlotBase': 'mental1104.plot.trend',
     'fetch_status': 'mental1104.network.http_package',
@@ -52,7 +56,10 @@ __all__ = [
     'ID_FIELD_WIDTH',
     'JsonSerializable',
     'JsonUtil',
+    'MPStartMethod',
     'MissingEnvVarError',
+    'ProcessExecutorCoroutinePool',
+    'ProcessWorkerPool',
     'Producer',
     'PulsarAdminHelper',
     'PulsarConnector',
@@ -60,10 +67,11 @@ __all__ = [
     'RedisConnection',
     'RedisLock',
     'SITE_FIELD_WIDTH',
-    'T',
     'TRACE_IF_ENABLED',
     'TYPE_FIELD_WIDTH',
     'TaskExecutionStrategy',
+    'ThreadExecutorCoroutinePool',
+    'ThreadWorkerPool',
     'TimeBasedTrendPlot',
     'TrendPlotBase',
     'YamlUtil',

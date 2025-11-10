@@ -56,8 +56,6 @@ void EpollServer::remove_fd(int fd) {
         } else {
             std::cerr << "epoll del fail, fd=" << fd << ", err=" << std::strerror(errno) << "\n";
         }
-    } else {
-        std::cout << "epoll del ok, fd=" << fd << "\n";
     }
     callbacks_.erase(fd);
 }
