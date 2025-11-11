@@ -24,6 +24,10 @@ namespace mental1104 {
 class EpollServer {
 public:
     using EventCallback = std::function<void(int)>;
+    struct Entry {
+        uint32_t events;
+        EventCallback cb;
+    };
 
     EpollServer();
     ~EpollServer();
@@ -40,7 +44,7 @@ public:
 
 private:
     int epoll_fd_;  // Linux: epoll fd; macOS: kqueue fd
-    std::unordered_map<int, EventCallback> callbacks_;
+    std::unordered_map<int, Entry> entries_;
 };
 
 } // namespace mental1104

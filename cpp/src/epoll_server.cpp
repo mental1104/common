@@ -34,19 +34,23 @@ void EpollServer::add_fd(int fd, uint32_t events, EventCallback cb) {
     ev.events  = events;
     if (::epoll_ctl(epoll_fd_, EPOLL_CTL_ADD, fd, &ev) == -1)
         throw std::runtime_error("Failed to add fd to epoll");
-    callbacks_[fd] = std::move(cb);
+    entries_[fd] = Entry{events, std::move(cb)};
 }
 
 void EpollServer::modify_fd(int fd, uint32_t events) {
+    auto it = entries_.find(fd);
+    if (it == entries_.end()) throw std::runtime_error("modify_fd on unknown fd");
     epoll_event ev{};
     ev.data.fd = fd;
     ev.events  = events;
     if (::epoll_ctl(epoll_fd_, EPOLL_CTL_MOD, fd, &ev) == -1)
         throw std::runtime_error("Failed to modify fd in epoll");
+    it->second.events = events;
 }
 
 void EpollServer::remove_fd(int fd) {
-    if (!callbacks_.count(fd)) {
+    auto it = entries_.find(fd);
+    if (it == entries_.end()) {
         std::cerr << "fd " << fd << " not registered, skip removal\n";
         return;
     }
@@ -57,7 +61,7 @@ void EpollServer::remove_fd(int fd) {
             std::cerr << "epoll del fail, fd=" << fd << ", err=" << std::strerror(errno) << "\n";
         }
     }
-    callbacks_.erase(fd);
+    entries_.erase(it);
 }
 
 int EpollServer::dispatch_once(int timeout_ms) {
@@ -70,8 +74,8 @@ int EpollServer::dispatch_once(int timeout_ms) {
     }
     for (int i = 0; i < n; ++i) {
         int fd = events[i].data.fd;
-        auto it = callbacks_.find(fd);
-        if (it != callbacks_.end()) it->second(fd);
+        auto it = entries_.find(fd);
+        if (it != entries_.end()) it->second.cb(fd);
     }
     return n;
 }
@@ -110,15 +114,20 @@ void EpollServer::add_fd(int fd, uint32_t events, EventCallback cb) {
     if (n == 0) throw std::runtime_error("No events to add");
     if (::kevent(epoll_fd_, changes, n, nullptr, 0, nullptr) == -1)
         throw std::runtime_error("Failed to add fd to kqueue");
-    callbacks_[fd] = std::move(cb);
+    entries_[fd] = Entry{events, std::move(cb)};
 }
 
 void EpollServer::modify_fd(int fd, uint32_t events) {
+    auto it = entries_.find(fd);
+    if (it == entries_.end()) throw std::runtime_error("modify_fd on unknown fd");
+    uint32_t old_events = it->second.events;
     struct kevent changes[4];
     int n = 0;
 
-    EV_SET(&changes[n++], fd, EVFILT_READ,  EV_DELETE, 0, 0, nullptr);
-    EV_SET(&changes[n++], fd, EVFILT_WRITE, EV_DELETE, 0, 0, nullptr);
+    if (old_events & EPOLLIN)
+        EV_SET(&changes[n++], fd, EVFILT_READ,  EV_DELETE, 0, 0, nullptr);
+    if (old_events & EPOLLOUT)
+        EV_SET(&changes[n++], fd, EVFILT_WRITE, EV_DELETE, 0, 0, nullptr);
 
     uint16_t flags = EV_ADD | EV_ENABLE;
     if (events & EPOLLET) flags |= EV_CLEAR;
@@ -128,28 +137,31 @@ void EpollServer::modify_fd(int fd, uint32_t events) {
 
     if (::kevent(epoll_fd_, changes, n, nullptr, 0, nullptr) == -1)
         throw std::runtime_error("Failed to modify fd in kqueue");
+    it->second.events = events;
 }
 
 void EpollServer::remove_fd(int fd) {
-    if (!callbacks_.count(fd)) {
+    auto it = entries_.find(fd);
+    if (it == entries_.end()) {
         std::cerr << "fd " << fd << " not registered, skip removal\n";
         return;
     }
     struct kevent changes[2];
     int n = 0;
-    EV_SET(&changes[n++], fd, EVFILT_READ,  EV_DELETE, 0, 0, nullptr);
-    EV_SET(&changes[n++], fd, EVFILT_WRITE, EV_DELETE, 0, 0, nullptr);
+    uint32_t events = it->second.events;
+    if (events & EPOLLIN)
+        EV_SET(&changes[n++], fd, EVFILT_READ,  EV_DELETE, 0, 0, nullptr);
+    if (events & EPOLLOUT)
+        EV_SET(&changes[n++], fd, EVFILT_WRITE, EV_DELETE, 0, 0, nullptr);
 
-    if (::kevent(epoll_fd_, changes, n, nullptr, 0, nullptr) == -1) {
+    if (n > 0 && ::kevent(epoll_fd_, changes, n, nullptr, 0, nullptr) == -1) {
         if (errno == EBADF || errno == ENOENT) {
-            std::cerr << "fd " << fd << " invalid or not in kqueue, skip removal\n";
+            // 常见：文件描述符已关闭或从未注册写事件；无需高噪声日志
         } else {
             std::cerr << "kqueue del fail, fd=" << fd << ", err=" << std::strerror(errno) << "\n";
         }
-    } else {
-        std::cout << "kqueue del ok, fd=" << fd << "\n";
     }
-    callbacks_.erase(fd);
+    entries_.erase(it);
 }
 
 int EpollServer::dispatch_once(int timeout_ms) {
@@ -165,8 +177,8 @@ int EpollServer::dispatch_once(int timeout_ms) {
     }
     for (int i = 0; i < n; ++i) {
         int fd = static_cast<int>(evlist[i].ident);
-        auto it = callbacks_.find(fd);
-        if (it != callbacks_.end()) it->second(fd);
+        auto it = entries_.find(fd);
+        if (it != entries_.end()) it->second.cb(fd);
     }
     return n;
 }

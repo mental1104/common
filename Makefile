@@ -68,7 +68,7 @@ CMAKE ?= cmake
 CTEST ?= ctest
 CPP_SRC_DIR := cpp
 CPP_BUILD_DIR := $(CPP_SRC_DIR)/build
-CPP_BUILD_TYPE ?= Debug
+CPP_BUILD_TYPE ?= Release
 PREFIX ?= /usr/local
 
 # ---------- 通用测试 verbose 开关 ----------
@@ -129,6 +129,17 @@ MODE ?= all
 
 define _git_fetch_submodules
 	$(SHELL) -lc 'set -e; \
+		cleanup_path(){ \
+			local target="$$1"; \
+			[ -z "$$target" ] && return 0; \
+			if [[ -e "$$target" ]]; then \
+				if command -v chflags >/dev/null 2>&1; then \
+					chflags -R nouchg "$$target" >/dev/null 2>&1 || true; \
+				fi; \
+				chmod -R u+w "$$target" >/dev/null 2>&1 || true; \
+				rm -rf "$$target" || true; \
+			fi; \
+		}; \
 		if [[ -d .git && -f .gitmodules ]]; then \
 			echo "[git] 拉取 .gitmodules 中的所有子模块 …"; \
 			git submodule sync --recursive >/dev/null 2>&1 || true; \
@@ -139,11 +150,14 @@ define _git_fetch_submodules
 					[[ -z "$$p" ]] && continue; \
 					echo "  - fix: $$p"; \
 					git submodule deinit -f -- "$$p" || true; \
-					rm -rf ".git/modules/$$p"        || true; \
-					rm -rf "$$p"                      || true; \
+					cleanup_path ".git/modules/$$p"; \
+					cleanup_path "$$p"; \
 				done </tmp/submods.list; \
 				git submodule sync --recursive; \
-				git submodule update --init --recursive --depth=1; \
+				if ! git submodule update --init --recursive --depth=1; then \
+					echo "[git] 子模块仍无法自动恢复，请手动执行: git submodule update --init --recursive"; \
+					exit 1; \
+				fi; \
 			fi; \
 			echo "[git] 子模块就绪。"; \
 		else \
@@ -766,7 +780,7 @@ fmt-go:      ; $(call _fmt_go)
 bench-go:    ; $(call _bench_go)
 
 # =================== 直达入口（C++） ===================
-.PHONY: git-submodules setup-cpp build-cpp test-cpp install-cpp clean-cpp coverage-cpp fmt-cpp bench-cpp
+.PHONY: git-submodules setup-cpp build-cpp build-cpp-release build-cpp-debug build-cpp-core test-cpp install-cpp clean-cpp coverage-cpp fmt-cpp bench-cpp
 git-submodules:        ; $(call _git_fetch_submodules)
 
 setup-cpp:
@@ -774,7 +788,16 @@ setup-cpp:
 	$(call _build_cpp_submodules)
 	$(call _configure_cpp)
 
-build-cpp:      | setup-cpp ; $(call _build_cpp)
+build-cpp-core: | setup-cpp ; $(call _build_cpp)
+
+build-cpp-release:
+	$(MAKE) --no-print-directory build-cpp-core CPP_BUILD_TYPE=Release
+
+build-cpp-debug:
+	$(MAKE) --no-print-directory build-cpp-core CPP_BUILD_TYPE=Debug
+
+build-cpp: build-cpp-release
+
 test-cpp:       ; $(call _test_cpp)
 install-cpp:    ; $(call _install_cpp)
 
