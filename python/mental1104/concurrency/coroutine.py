@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import functools
 import math
+import inspect
 from abc import ABC, abstractmethod
 from typing import List, Callable, Awaitable, TypeVar, Optional
 from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor, Executor
@@ -32,6 +33,76 @@ class TaskExecutionStrategy(ABC):
 class GatherStrategy(TaskExecutionStrategy):
     async def execute(self, loop, tasks: List[Awaitable[_T]]) -> List[_T]:
         return await asyncio.gather(*tasks, return_exceptions=False)
+
+
+class AsCompletedStrategy(TaskExecutionStrategy):
+    """按完成顺序收集结果，可选回调供『流式消费』。"""
+
+    def __init__(
+        self,
+        *,
+        on_result: Optional[Callable[[int, _T], Awaitable[None] | None]] = None,
+    ) -> None:
+        self._on_result = on_result
+
+    async def _maybe_call_callback(self, idx: int, value: _T) -> None:
+        if self._on_result is None:
+            return
+        rv = self._on_result(idx, value)
+        if inspect.isawaitable(rv):
+            await rv
+
+    async def execute(self, loop, tasks: List[Awaitable[_T]]) -> List[_T]:
+        if not tasks:
+            return []
+        async def _wrap(index: int, aw: Awaitable[_T]) -> tuple[int, _T]:
+            return index, await aw
+
+        wrapped = [asyncio.ensure_future(_wrap(idx, task)) for idx, task in enumerate(tasks)]
+        results: List[_T] = []
+        for fut in asyncio.as_completed(wrapped):
+            idx, value = await fut
+            await self._maybe_call_callback(idx, value)
+            results.append(value)
+        return results
+
+
+class FirstSuccessfulStrategy(TaskExecutionStrategy):
+    """返回第一个成功结果，可配置是否取消剩余任务。"""
+
+    def __init__(
+        self,
+        *,
+        cancel_pending: bool = True,
+        raise_if_all_fail: bool = True,
+    ) -> None:
+        self.cancel_pending = cancel_pending
+        self.raise_if_all_fail = raise_if_all_fail
+
+    async def execute(self, loop, tasks: List[Awaitable[_T]]) -> List[_T]:
+        if not tasks:
+            return []
+        pending: set[asyncio.Task[_T]] = {asyncio.ensure_future(t) for t in tasks}
+        failures: List[BaseException] = []
+        try:
+            while pending:
+                done, pending = await asyncio.wait(pending, return_when=asyncio.FIRST_COMPLETED)
+                for fut in done:
+                    exc = fut.exception()
+                    if exc is None:
+                        result = fut.result()
+                        if self.cancel_pending and pending:
+                            for p in pending:
+                                p.cancel()
+                            await asyncio.gather(*pending, return_exceptions=True)
+                        return [result]
+                    failures.append(exc)
+            if self.raise_if_all_fail and failures:
+                raise ExceptionGroup("All tasks failed", failures)
+            return []
+        finally:
+            if pending:
+                await asyncio.gather(*pending, return_exceptions=True)
 
 
 # ================= 默认实现：单进程/单线程 asyncio 协程池 =================
