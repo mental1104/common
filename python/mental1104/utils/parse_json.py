@@ -2,9 +2,26 @@ from __future__ import annotations
 import json
 import io
 import importlib
+from enum import Enum
 from functools import singledispatch
 from types import MappingProxyType
 from typing import Any, Callable, Mapping
+
+__all__ = ["JsonParserType", "JsonUtil", "load_json", "dump_json"]
+
+
+class JsonParserType(str, Enum):
+    """人类可读的 JSON 解析器类型（按功能支持列出）。"""
+
+    JSON = "json"
+    UJSON = "ujson"
+    ORJSON = "orjson"
+
+    @classmethod
+    def available(cls) -> tuple["JsonParserType", ...]:
+        """返回当前环境可用的解析器枚举成员。"""
+        parsers = JsonUtil.get_parser_names()
+        return tuple(member for member in cls if member.value in parsers)
 
 
 class JsonUtil:
@@ -66,6 +83,14 @@ class JsonUtil:
         return loads(str(data))
 
 
+def _coerce_parser_name(parser: JsonParserType | str) -> str:
+    if isinstance(parser, JsonParserType):
+        return parser.value
+    if isinstance(parser, str):
+        return parser
+    raise TypeError("parser 必须是 JsonParserType 或 str")
+
+
 # ========= 使用 singledispatch 作为内部分发器 =========
 @singledispatch
 def _parse_dispatch(value: object, parser: str) -> Any:
@@ -93,26 +118,27 @@ def _(fp: io.RawIOBase, parser: str) -> Any:
     return JsonUtil._parse_from_file(fp, parser)
 
 
-def load_json(s: str, parser: str = "json"):
+def load_json(s: str | io.IOBase, parser: JsonParserType | str = JsonParserType.JSON):
     """
     通用 JSON 解析器。
 
     参数:
         s (str|IO): 待解析的 JSON 字符串或文件流（文本/二进制）。
-        parser (str): 使用的解析库，默认 "json"。支持已注册解析器的所有名称。
+        parser (JsonParserType|str): 使用的解析库，默认 JsonParserType.JSON。
 
     返回:
         dict | list | None: 解析成功返回对象，失败返回 None。
     """
+    parser_name = _coerce_parser_name(parser)
     parsers = JsonUtil.get_parsers()
     names = JsonUtil.get_parser_names()
 
-    if parser not in parsers:
-        raise ValueError(f"未知解析器 '{parser}'，可选: {list(names)}")
+    if parser_name not in parsers:
+        raise ValueError(f"未知解析器 '{parser_name}'，可选: {list(names)}")
 
     try:
         # 交给 singledispatch 分发
-        return _parse_dispatch(s, parser)
+        return _parse_dispatch(s, parser_name)
     except Exception as e:
         print(f"[解析失败] 错误信息：{e}")
 
@@ -142,7 +168,7 @@ def dump_json(
     obj: Any,
     fp: io.IOBase | None = None,
     *,
-    parser: str = "json",
+    parser: JsonParserType | str = JsonParserType.JSON,
     ensure_ascii: bool = True,
     indent: int | None = None,
 ) -> str | None:
@@ -161,10 +187,11 @@ def dump_json(
         raise TypeError("fp 必须是文本或二进制文件对象")
 
     # 2) 解析器合法性（与 load_json 保持一致）
+    parser_name = _coerce_parser_name(parser)
     parsers = JsonUtil.get_parsers()
     names = JsonUtil.get_parser_names()
-    if parser not in parsers:
-        raise ValueError(f"未知解析器 '{parser}'，可选: {list(names)}")
+    if parser_name not in parsers:
+        raise ValueError(f"未知解析器 '{parser_name}'，可选: {list(names)}")
 
     # 3) 工具函数：统一写入
     def _write_to_fp(text: str) -> None:
@@ -175,7 +202,7 @@ def dump_json(
             fp.write(text.encode("utf-8"))
 
     # 4) orjson 特殊适配（含能力探测与回退）
-    if parser == "orjson":
+    if parser_name == "orjson":
         try:
             import orjson
             has_escape = hasattr(orjson, "OPT_ESCAPE_UNICODE")
@@ -223,7 +250,7 @@ def dump_json(
 
     # 5) 标准库 json / ujson：优先调用其自身 API，不兼容时回退标准库
     try:
-        mod = importlib.import_module(parser)  # "json" 或 "ujson"
+        mod = importlib.import_module(parser_name)  # "json" 或 "ujson"
     except Exception:
         mod = json  # 理论上不会到达
 
