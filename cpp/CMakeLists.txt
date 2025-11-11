@@ -513,6 +513,7 @@ if (HAVE_GOOGLE_BENCHMARK)
                   --benchmark_min_time=0.2
                   --benchmark_repetitions=5
                   --benchmark_display_aggregates_only=true
+                  --benchmark_time_unit=ms
         )
         set_tests_properties(${TGT} PROPERTIES LABELS "bench")
       endforeach()

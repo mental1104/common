@@ -13,6 +13,7 @@ from mental1104.file.file_processor import file_iterator
 from mental1104.iterator.iterator_csv import iterator_csv
 from mental1104.schema.common_schema import JsonSerializable
 from mental1104.string.string_util import replace_space_with
+from mental1104.utils.bench_tasks import CpuBoundTask, DatasetFactory, IoBoundTask
 from mental1104.utils.encryption import decrypt, encrypt, generate_salt
 from mental1104.utils.parse_json import JsonParserType, JsonUtil, dump_json, load_json
 from mental1104.utils.parse_yaml import YamlUtil, dump_yaml, parse_yaml
@@ -49,11 +50,14 @@ __all__ = [
     'Base',
     'Consumer',
     'CoroutinePool',
+    'CpuBoundTask',
+    'DatasetFactory',
     'ELLIPSIS_CHAR',
     'FUNC_FIELD_WIDTH',
     'GatherStrategy',
     'HEAD_PREFIX',
     'ID_FIELD_WIDTH',
+    'IoBoundTask',
     'JsonParserType',
     'JsonSerializable',
     'JsonUtil',
@@ -116,15 +120,13 @@ __all__ = [
     'yaml_to_json',
 ]
 
-
 def __getattr__(name):
     # PEP 562: lazy attribute access for risky modules & fallback
     try:
         modname = _EXPORT_MAP[name]
     except KeyError:
         raise AttributeError(f'module {__name__} has no attribute {name!r}') from None
-    import importlib
-    import types
+    import importlib, types
     mod = importlib.import_module(modname)
     obj = getattr(mod, name, None)
     if obj is None or isinstance(obj, types.ModuleType):
@@ -138,7 +140,6 @@ def __getattr__(name):
             raise AttributeError(f'{modname}.{name} has no attribute {name!r}') from None
     globals()[name] = obj  # cache
     return obj
-
 
 def __dir__():
     return sorted(list(globals().keys()) + list(__all__))

@@ -18,3 +18,5 @@ autopep8
 coverage
 ruamel.yaml
 ruff
+ujson
+orjson
