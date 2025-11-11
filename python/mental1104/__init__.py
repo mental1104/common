@@ -14,7 +14,7 @@ from mental1104.iterator.iterator_csv import iterator_csv
 from mental1104.schema.common_schema import JsonSerializable
 from mental1104.string.string_util import replace_space_with
 from mental1104.utils.encryption import decrypt, encrypt, generate_salt
-from mental1104.utils.parse_json import JsonUtil, dump_json, load_json
+from mental1104.utils.parse_json import JsonParserType, JsonUtil, dump_json, load_json
 from mental1104.utils.parse_yaml import YamlUtil, dump_yaml, parse_yaml
 from mental1104.utils.random import random_pick
 from mental1104.utils.timed import async_timed, get_current_time, parse_time, timed
@@ -54,6 +54,7 @@ __all__ = [
     'GatherStrategy',
     'HEAD_PREFIX',
     'ID_FIELD_WIDTH',
+    'JsonParserType',
     'JsonSerializable',
     'JsonUtil',
     'MPStartMethod',
@@ -115,13 +116,15 @@ __all__ = [
     'yaml_to_json',
 ]
 
+
 def __getattr__(name):
     # PEP 562: lazy attribute access for risky modules & fallback
     try:
         modname = _EXPORT_MAP[name]
     except KeyError:
         raise AttributeError(f'module {__name__} has no attribute {name!r}') from None
-    import importlib, types
+    import importlib
+    import types
     mod = importlib.import_module(modname)
     obj = getattr(mod, name, None)
     if obj is None or isinstance(obj, types.ModuleType):
@@ -135,6 +138,7 @@ def __getattr__(name):
             raise AttributeError(f'{modname}.{name} has no attribute {name!r}') from None
     globals()[name] = obj  # cache
     return obj
+
 
 def __dir__():
     return sorted(list(globals().keys()) + list(__all__))
