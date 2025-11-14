@@ -77,8 +77,15 @@ TEST_VERBOSE ?= $(VERBOSE)
 CTEST_V := $(if $(filter 1,$(TEST_VERBOSE)),-V,)
 PYTEST_V := $(if $(filter 1,$(TEST_VERBOSE)),-vv,-q)
 PYTEST_BENCH_K ?= bench or benchmark
+PY_BENCHMARK_OPTS ?= --benchmark-name=short --benchmark-sort=name
+PY_BENCHMARK_CONCURRENCY_OPTS ?= --benchmark-max-time=0.25 --benchmark-min-rounds=3
 GO_TEST_V := $(if $(filter 1,$(TEST_VERBOSE)),-v,)
 CARGO_TEST_V := $(if $(filter 1,$(TEST_VERBOSE)),-v,)
+
+BENCH_ARTIFACT_ROOT ?= $(REPO_ROOT)/artifacts/bench
+PY_BENCH_ARTIFACT_DIR := $(BENCH_ARTIFACT_ROOT)/python
+CPP_BENCH_ARTIFACT_DIR := $(BENCH_ARTIFACT_ROOT)/cpp
+BENCH_GALLERY := $(BENCH_ARTIFACT_ROOT)/index.html
 
 # ---------- PIP 镜像配置 ----------
 USE_PIP_MIRROR := 1
@@ -247,13 +254,37 @@ define _bench_python
 	$(SHELL) -lc 'set -e; \
 		if ! command -v pytest >/dev/null 2>&1; then echo "[error] 未检测到 pytest；请先执行: make setup-python"; exit 1; fi; \
 		cd python; \
-		if $(PYTHON) -m pytest -q --help 2>/dev/null | grep -qi benchmark; then \
-			echo "[pytest-benchmark] 基准用例"; \
-			$(PYTHON) -m pytest $(PYTEST_V) -k "$(PYTEST_BENCH_K)" --benchmark-only --benchmark-autosave; \
-		else \
-			echo "[warn] 未检测到 pytest-benchmark，回退到名称筛选"; \
+		if ! $(PYTHON) -m pytest -q --help 2>/dev/null | grep -qi benchmark; then \
+			echo "[warn] 未检测到 pytest-benchmark 插件，回退到名称筛选"; \
 			$(PYTHON) -m pytest $(PYTEST_V) -k "$(PYTEST_BENCH_K)"; \
-		fi'
+			exit 0; \
+		fi; \
+		bench_files=$$(find test_benchmark -type f -name "test_*.py" | sort); \
+		if [ -z "$$bench_files" ]; then \
+			echo "[warn] 未找到 test_benchmark/* 基准文件，回退到名称筛选"; \
+			$(PYTHON) -m pytest $(PYTEST_V) -k "$(PYTEST_BENCH_K)" --benchmark-only; \
+			exit 0; \
+		fi; \
+		rm -rf "$(PY_BENCH_ARTIFACT_DIR)"; \
+		mkdir -p "$(PY_BENCH_ARTIFACT_DIR)/plots"; \
+		for file in $$bench_files; do \
+			slug=$$(echo "$$file" | sed "s@/@__@g" | sed "s/\\.py$$//"); \
+			json="$(PY_BENCH_ARTIFACT_DIR)/$${slug}.json"; \
+			title="Python $$file"; \
+			case "$$file" in \
+				test_benchmark/test_concurrency/*) extra_opts="$(PY_BENCHMARK_CONCURRENCY_OPTS)";; \
+				*) extra_opts="";; \
+			esac; \
+			echo "[bench-python] $$file -> $$json"; \
+			$(PYTHON) -m pytest $(PYTEST_V) "$$file" --benchmark-only --benchmark-json "$$json" $(PY_BENCHMARK_OPTS) $$extra_opts; \
+			$(PYTHON) tools/render_bench_plots.py \
+				--input "$$json" \
+				--test-type pytest-benchmark \
+				--chart case-matrix \
+				--output "$(PY_BENCH_ARTIFACT_DIR)/plots/$${slug}.png" \
+				--title "$$title"; \
+		done; \
+		echo "[bench-python] 图表输出目录：$(PY_BENCH_ARTIFACT_DIR)/plots"'
 endef
 
 define _configure_cpp
@@ -330,16 +361,45 @@ endef
 
 define _bench_cpp
 	$(SHELL) -lc 'set -e; \
-		if [[ ! -d "$(CPP_BUILD_DIR)" ]]; then echo "[info] 未发现 $(CPP_BUILD_DIR)，先执行: make build-cpp"; exit 1; fi; \
-		cd "$(CPP_BUILD_DIR)"; \
-		if [[ -n "$$VERBOSE" && "$$VERBOSE" != "0" ]]; then CTEST_FLAGS="-VV"; else CTEST_FLAGS="--output-on-failure"; fi; \
-		CTEST_JOBS="$(JOBS)"; \
-		if [[ -n "$$SEQ" && "$$SEQ" != "0" ]]; then CTEST_JOBS=1; fi; \
-		if $(CTEST) -N -L bench >/dev/null 2>&1; then \
-			$(CTEST) $$CTEST_FLAGS -L bench -j $$CTEST_JOBS; \
-		else \
-			$(CTEST) $$CTEST_FLAGS -j $$CTEST_JOBS; \
-		fi'
+		if [[ ! -d "$(CPP_BUILD_DIR)" ]]; then echo "[info] 未发现 $(CPP_BUILD_DIR)，请先执行: make build-cpp"; exit 1; fi; \
+		shopt -s nullglob; \
+		binaries=($(CPP_BUILD_DIR)/bin/bench_*); \
+		shopt -u nullglob; \
+		if [[ $${#binaries[@]} -eq 0 ]]; then \
+			echo "[warn] 未找到 bench_* 可执行文件，回退到 ctest"; \
+			cd "$(CPP_BUILD_DIR)"; \
+			$(CTEST) --output-on-failure -L bench -j $(JOBS); \
+			exit 0; \
+		fi; \
+		rm -rf "$(CPP_BENCH_ARTIFACT_DIR)"; \
+		mkdir -p "$(CPP_BENCH_ARTIFACT_DIR)/plots"; \
+		for exe in "$${binaries[@]}"; do \
+			name=$$(basename "$$exe"); \
+			json="$(CPP_BENCH_ARTIFACT_DIR)/$${name}.json"; \
+			echo "[bench-cpp] $$name -> $$json"; \
+			"$$exe" \
+				--benchmark_out="$$json" \
+				--benchmark_out_format=json \
+				--benchmark_min_time=0.2 \
+				--benchmark_repetitions=5 \
+				--benchmark_display_aggregates_only=true \
+				--benchmark_time_unit=ms; \
+			$(PYTHON) python/tools/render_bench_plots.py \
+				--input "$$json" \
+				--test-type google-benchmark \
+				--chart case-matrix \
+				--output "$(CPP_BENCH_ARTIFACT_DIR)/plots/$${name}.png" \
+				--title "C++ $$name"; \
+		done; \
+		echo "[bench-cpp] 图表输出目录：$(CPP_BENCH_ARTIFACT_DIR)/plots"'
+endef
+
+define _bench_report
+	$(SHELL) -lc 'set -e; \
+		$(PYTHON) python/tools/assemble_bench_gallery.py \
+			--root "$(BENCH_ARTIFACT_ROOT)" \
+			--output "$(BENCH_GALLERY)"; \
+		echo "[bench] 图库：$(BENCH_GALLERY)"'
 endef
 
 
@@ -749,7 +809,9 @@ guard:        guard-cpp guard-go guard-rust guard-python
 setup-rust:   ; $(call _setup_rust)
 build-rust:   | setup-rust ; $(call _build_rust)
 test-rust:    ; $(call _test_rust)
-bench-rust:   ; $(call _bench_rust)
+bench-rust:
+	$(call _bench_rust)
+	@$(MAKE) --no-print-directory bench-report
 fmt-rust:     ; $(call _fmt_rust)
 clippy-rust:  ; $(call _clippy_rust)
 example-rust: ; $(call _example_rust)
@@ -766,7 +828,9 @@ install-python: ; $(call _install_python)
 clean-python:   ; $(call _clean_python)
 coverage-python:; $(call _coverage_python)
 fmt-python:     ; $(call _fmt_python)
-bench-python:   ; $(call _bench_python)
+bench-python:
+	$(call _bench_python)
+	@$(MAKE) --no-print-directory bench-report
 
 # =================== 直达入口（Go） ===================
 .PHONY: setup-go build-go test-go coverage-go install-go clean-go fmt-go bench-go
@@ -777,7 +841,9 @@ coverage-go: | test-go  ; $(call _coverage_go)
 install-go:  ; $(call _install_go)
 clean-go:    ; $(call _clean_go)
 fmt-go:      ; $(call _fmt_go)
-bench-go:    ; $(call _bench_go)
+bench-go:
+	$(call _bench_go)
+	@$(MAKE) --no-print-directory bench-report
 
 # =================== 直达入口（C++） ===================
 .PHONY: git-submodules setup-cpp build-cpp build-cpp-release build-cpp-debug build-cpp-core test-cpp install-cpp clean-cpp coverage-cpp fmt-cpp bench-cpp
@@ -807,7 +873,9 @@ clean-cpp:
 
 coverage-cpp:   | test-cpp  ; $(call _coverage_cpp)
 fmt-cpp:        ; $(call _fmt_cpp)
-bench-cpp:      ; $(call _bench_cpp)
+bench-cpp:
+	$(call _bench_cpp)
+	@$(MAKE) --no-print-directory bench-report
 
 # ============ env 模板生成 ============
 ENV_SRC      ?= .env
@@ -1034,6 +1102,7 @@ clean:
 coverage: coverage-python coverage-go coverage-cpp coverage-rust
 fmt:      fmt-go fmt-cpp fmt-rust
 bench:    bench-python bench-go bench-cpp bench-rust
+	@$(MAKE) --no-print-directory bench-report
 
 .PHONY: test-v test-cpp-v test-python-v test-go-v test-rust-v
 test-v:        ; $(MAKE) --no-print-directory test        VERBOSE=1
@@ -1048,6 +1117,8 @@ bench-cpp-v:    ; $(MAKE) --no-print-directory bench-cpp    VERBOSE=1 SEQ=1
 bench-python-v: ; $(MAKE) --no-print-directory bench-python VERBOSE=1
 bench-go-v:     ; $(MAKE) --no-print-directory bench-go     VERBOSE=1
 bench-rust-v:   ; $(MAKE) --no-print-directory bench-rust   VERBOSE=1
+
+.NOTPARALLEL: bench bench-python bench-go bench-cpp bench-rust bench-report
 
 help:
 	@echo "用法：make <target> [VERBOSE=1] [JOBS=N] [MODE=mem|race|miri|all]"
@@ -1071,3 +1142,5 @@ help:
 	@echo "—— Python / Go / C++ / Rust ——（略，保持与原文一致）"
 	@echo ""
 	@echo "提示：仅扫描 images/ 下的 docker-compose.yaml；docker 缺失或单服务失败均不阻塞。"
+.PHONY: bench-report
+bench-report: ; $(call _bench_report)
