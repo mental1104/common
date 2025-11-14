@@ -39,3 +39,4 @@ memray.bin
 build-asan
 
 .env.mk
+artifacts/

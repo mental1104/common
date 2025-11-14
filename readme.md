@@ -87,6 +87,14 @@ make coverage
 * `make clean-cpp`：删除 `cpp/build` 与 `cpp/lib/*/build`
 * `make coverage-cpp`：执行测试并输出覆盖率（如已安装 `gcovr/lcov`）
 
+### 性能基准与可视化
+
+* `make bench`：逐语言执行性能基准（Python/Go/C++/Rust）。Python 端按文件逐个执行 `python/test_benchmark/**/*.py`，C++ 端运行 `cpp/build/bin/bench_*`，并收集 `pytest-benchmark`/`google-benchmark` 的 JSON 结果到 `artifacts/bench/<lang>/`。
+* 基准结束后自动调用 `mental1104.plot.BenchmarkPlotter` 生成只关注 `real_time_ms` 的“纵轴 = 各用例”图表（默认纵向堆叠），位于 `artifacts/bench/<lang>/plots/`。
+* 同步生成 `artifacts/bench/index.html` 图库，可直接在浏览器中一站式查看全部图表。如需局域网分享，可运行 `python -m http.server -d artifacts/bench 8080`。
+* 若只需要部分语言，可运行 `make bench-python` 或 `make bench-cpp`；图表仍会被纳入 gallery。
+* 更细粒度的对比可用 `python/tools/render_bench_plots.py`：例如 `python/tools/render_bench_plots.py --input artifacts/bench/cpp/bench_bench_json_gbench.json --test-type google-benchmark --chart comparison --metric real_time_ms --group-field arg --variant-field variant --filter stat=mean` 可直接比较同一数据规模下 cJSON 与 RapidJSON 的 real_time_ms。
+
 ---
 
 ## 可配置参数（按需在命令行覆盖）
