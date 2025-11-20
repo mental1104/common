@@ -1,11 +1,14 @@
-import os
 import logging
-from sqlalchemy import create_engine, inspect
-from sqlalchemy.orm import sessionmaker, declarative_base
+import os
 from contextlib import contextmanager
+from contextvars import ContextVar
+from functools import wraps
+
 import psycopg2
+from psycopg2 import DatabaseError, OperationalError
 from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
-from psycopg2 import OperationalError, DatabaseError
+from sqlalchemy import create_engine, inspect
+from sqlalchemy.orm import declarative_base, sessionmaker
 
 # 配置日志
 logging.basicConfig(level=logging.INFO)
@@ -14,6 +17,9 @@ logger = logging.getLogger(__name__)
 # 全局Session和Base定义
 _Session = sessionmaker()
 Base = declarative_base()
+_session_ctx: ContextVar = ContextVar("mental1104_postgres_session", default=None)
+_SESSION_TOKEN_KEY = "_session_token"
+_CREATE_TABLES_ON_STARTUP = True
 
 
 def get_db_config():
@@ -31,6 +37,21 @@ def get_db_config():
         "port": os.getenv('PGPORT'),
         "database": os.getenv('PGDATABASE'),
     }
+
+
+def get_db_url(config=None):
+    """
+    将配置转换为SQLAlchemy连接URL。允许传入配置以简化调用和测试。
+    """
+    if config is None:
+        config = get_db_config()
+    return "postgresql://{}:{}@{}:{}/{}".format(
+        config.get("username", ""),
+        config.get("password", ""),
+        config.get("host", ""),
+        config.get("port", 5432),
+        config.get("database", ""),
+    )
 
 
 def ensure_database_exists(config):
@@ -79,12 +100,19 @@ def ensure_tables_exist(engine):
     return True
 
 
+def init_database(create_table, func, engine):
+    """兼容 PokemonBattleInference 版本的初始化行为。"""
+    if create_table:
+        func(bind=engine)
+    return True
+
+
 def startup():
     """初始化数据库连接并确保表和数据库存在"""
     config = get_db_config()
     ensure_database_exists(config)
 
-    sqlalchemy_url = f"postgresql://{config['username']}:{config['password']}@{config['host']}:{config['port']}/{config['database']}"
+    sqlalchemy_url = get_db_url(config)
     logger.info(f"数据库URL: {sqlalchemy_url}")
 
     engine = create_engine(
@@ -95,15 +123,36 @@ def startup():
     )
     _Session.configure(bind=engine)
 
-    ensure_tables_exist(engine)
+    should_create_tables = _CREATE_TABLES_ON_STARTUP
+    init_database(should_create_tables, Base.metadata.create_all, engine)
+    if should_create_tables:
+        ensure_tables_exist(engine)
+    else:
+        logger.info("跳过建表步骤（配置禁用）")
     logger.info("数据库初始化完成")
     return engine
 
 
+def setup(create_tables: bool = False):
+    """
+    兼容 PokemonBattleInference 的 setup 行为，允许临时控制建表。
+    """
+    global _CREATE_TABLES_ON_STARTUP
+    previous = _CREATE_TABLES_ON_STARTUP
+    _CREATE_TABLES_ON_STARTUP = create_tables
+    try:
+        return startup()
+    finally:
+        _CREATE_TABLES_ON_STARTUP = previous
+
+
 @contextmanager
 def open_session():
-    """数据库会话的上下文管理器"""
+    """
+    数据库会话的上下文管理器，向调用栈提供共享Session。
+    """
     session = _Session()
+    token = _session_ctx.set(session)
     try:
         yield session
         session.commit()
@@ -113,16 +162,54 @@ def open_session():
         raise
     finally:
         session.close()
+        _session_ctx.reset(token)
+
+
+def get_session():
+    """
+    获取当前上下文中的会话，若不存在则懒加载并缓存。
+    """
+    session = _session_ctx.get()
+    if session is None:
+        session = _Session()
+        token = _session_ctx.set(session)
+        session.info[_SESSION_TOKEN_KEY] = token
+    return session
+
+
+def close_session():
+    """
+    关闭 get_session() 创建的会话，不影响 open_session() 管理的会话。
+    """
+    session = _session_ctx.get()
+    if session is None:
+        return
+    token = session.info.pop(_SESSION_TOKEN_KEY, None)
+    if token is None:
+        return
+    try:
+        session.close()
+    finally:
+        _session_ctx.reset(token)
+
+
+def with_session(func):
+    """
+    装饰器：为缺失 session 参数的函数自动注入当前会话。
+    """
+
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        if kwargs.get("session") is None:
+            kwargs["session"] = get_session()
+        return func(*args, **kwargs)
+
+    return wrapper
 
 
 """
 从数据库中获取markdown文件
 """
-
-import psycopg2
-from functools import wraps
-
-
 def db_connection(db_type, db_params):
     def decorator(func):
         @wraps(func)
