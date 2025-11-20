@@ -10,6 +10,11 @@ class TestEnvironment:
         return mocker.patch.dict(os.environ, clear=True)
 
     def test_check_required_env_vars_all_present(self, mock_env):
+        """
+        【场景背景】当所有必需环境变量都存在时，校验函数不应抛错。
+        【步骤输入】mock os.environ，并设置 ENV_VAR_1/2。
+        【期望输出】check_required_env_vars 返回正常；若抛错则测试失败。
+        """
         # 准备测试数据：所有环境变量存在
         required_env_vars = ["ENV_VAR_1", "ENV_VAR_2"]
         mock_env.update({var: "value" for var in required_env_vars})
@@ -21,6 +26,11 @@ class TestEnvironment:
             pytest.fail("MissingEnvVarError raised unexpectedly")
 
     def test_check_required_env_vars_missing_var(self, mock_env):
+        """
+        【场景背景】缺少任何一个环境变量时应抛 MissingEnvVarError。
+        【步骤输入】只设置 ENV_VAR_1，漏掉 ENV_VAR_2。
+        【期望输出】with pytest.raises 捕获 MissingEnvVarError 且匹配缺失变量名。
+        """
         # 准备测试数据：部分环境变量缺失
         required_env_vars = ["ENV_VAR_1", "ENV_VAR_2"]
         mock_env.update({"ENV_VAR_1": "value"})  # 只设置了一个变量

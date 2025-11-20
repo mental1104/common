@@ -75,7 +75,14 @@ class TestDatabase:
         delete_test_database(self.config)
 
     def test_orm_table_creation_and_verification(self):
-        """验证根据 ORM 类构建表并校验表是否存在的逻辑"""
+        """
+        【场景背景】验证 Base 映射 + startup() 初始化后，ORM 元数据能够正确建表、
+        对表进行 CRUD，并最终清理干净。
+        【步骤输入】先调用 startup() 和 Base.metadata.create_all() 建表，再借助
+        inspector/SQL 查询校验表存在与否，随后通过 open_session() 插入一行数据。
+        【期望输出】test_table 在建表后可见、能插入并查询到“Test Entry”，最后
+        使用 DROP TABLE 和 pg_tables 视图确认数据和表均被删除。
+        """
         # 1. 启动数据库并创建表
         startup()  # 初始化数据库引擎和会话
         Base.metadata.create_all(bind=startup().engine)

@@ -13,6 +13,11 @@ from mental1104 import file_iterator
 class TestFileIterator:
 
     def test_file_iterator(self, mocker):
+        """
+        【场景背景】file_iterator 装饰器应递归遍历目录并调用被装饰函数处理所有文件。
+        【步骤输入】mock os.listdir/isdir/isfile，构造两级目录结构，并用 spy 函数记录调用。
+        【期望输出】listdir 在根目录及子目录被依次调用，process_function 仅对文件路径调用三次。
+        """
         # 模拟输入路径
         input_path = "/mock/path"
 
