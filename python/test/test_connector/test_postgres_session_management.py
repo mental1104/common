@@ -1,5 +1,6 @@
 import logging
 import os
+import threading
 import time
 import uuid
 
@@ -8,7 +9,9 @@ from functools import lru_cache
 import psycopg2
 from psycopg2 import errorcodes
 import pytest
-from sqlalchemy import Column, Integer, String, select, text
+from sqlalchemy import Column, Integer, String, select, text, create_engine
+from sqlalchemy.exc import TimeoutError
+import mental1104.connector.postgres as connector_pg
 
 from mental1104.connector.postgres import (
     Base,
@@ -24,6 +27,7 @@ from mental1104.connector.postgres import (
 
 logging.basicConfig()
 logging.getLogger("sqlalchemy.pool").setLevel(logging.DEBUG)
+logger = logging.getLogger(__name__)
 
 REQUIRED_ENV_VARS = ["PGUSER", "PGPASSWORD", "PGHOST", "PGPORT", "PGDATABASE"]
 MISSING_ENV = [var for var in REQUIRED_ENV_VARS if not os.getenv(var)]
@@ -291,6 +295,7 @@ def test_pool_pre_ping_recovers_after_backend_killed(engine, db_config):
     with open_session():
         session = get_session()
         pid = session.execute(text("select pg_backend_pid()")).scalar_one()
+        logger.info("[pre-ping] captured backend pid=%s before termination", pid)
 
     _kill_backend(db_config, pid)
 
@@ -298,6 +303,7 @@ def test_pool_pre_ping_recovers_after_backend_killed(engine, db_config):
         session = get_session()
         new_pid = session.execute(text("select pg_backend_pid()")).scalar_one()
         assert new_pid != pid
+        logger.info("[pre-ping] new backend pid=%s (old=%s)", new_pid, pid)
 
         inserted_name = f"probe-{uuid.uuid4()}"
         insert_probe(inserted_name)
@@ -320,6 +326,7 @@ def test_lazy_session_requires_manual_close(engine, db_config):
 
     lazy_session = get_session()
     lazy_session.execute(text("select 1"))
+    logger.info("[lazy-session] acquired ad-hoc session id=%s", id(lazy_session))
 
     _wait_for(lambda: engine.pool.checkedout(), 1)
     _wait_for(lambda: _count_active_app_connections(db_config), 1)
@@ -327,6 +334,7 @@ def test_lazy_session_requires_manual_close(engine, db_config):
     pending_name = f"lazy-{uuid.uuid4()}"
     lazy_session.add(SessionProbe(name=pending_name))
     lazy_session.flush()
+    logger.info("[lazy-session] pending row name=%s (uncommitted)", pending_name)
 
     with open_session():
         isolated_session = get_session()
@@ -357,9 +365,131 @@ def test_session_aware_mixin_auto_wrap(engine, db_config):
     with open_session():
         for name in created:
             AutoSessionEntity.create(name)
+            logger.info("[auto-session] inserted row name=%s", name)
 
         assert AutoSessionEntity.list_names() == created
         assert AutoSessionEntity.count_rows() == len(created)
+        logger.info("[auto-session] list_names=%s count=%s", created, len(created))
+
+    _wait_for(lambda: engine.pool.checkedout(), 0)
+    _wait_for(lambda: _count_active_app_connections(db_config), 0)
+
+
+def test_concurrent_sessions_are_isolated_and_pool_reused(engine, db_config):
+    """
+    【场景背景】多线程/协程并发获取 open_session() 时，连接池应该
+    为每个上下文分配独立 Session/连接，但仍然复用池内连接而不是频繁创建。
+    【步骤输入】启动多个线程并行调用 open_session()，各自插入一条 SessionProbe
+    记录并读取 pg_backend_pid()。
+    【期望输出】每个线程观察到不同的 Session 对象，pid 可能复用但数量不会无限增长；
+    所有数据都成功插入，证明 Session 隔离且连接池可复用。
+    """
+    _reset_pool(engine, db_config)
+
+    worker_count = 4
+    seen_sessions = []
+    seen_pids = []
+    errors = []
+    lock = threading.Lock()
+
+    def worker(index: int):
+        try:
+            with open_session():
+                session = get_session()
+                pid = session.execute(text("select pg_backend_pid()")).scalar_one()
+                name = f"concurrent-{index}-{uuid.uuid4()}"
+                insert_probe(name)
+                rv = load_probe_by_name(name)
+                assert rv is not None
+                with lock:
+                    seen_sessions.append(id(session))
+                    seen_pids.append(pid)
+                logger.info("[concurrent] worker=%s pid=%s session_id=%s", index, pid, id(session))
+        except Exception as exc:
+            with lock:
+                errors.append(exc)
+
+    threads = [threading.Thread(target=worker, args=(i,)) for i in range(worker_count)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    assert not errors, f"并发线程抛出异常: {errors}"
+    assert len(seen_sessions) == worker_count
+    assert len(set(seen_sessions)) == worker_count, "每个 open_session 应获得独立 Session"
+    assert len(set(seen_pids)) <= worker_count, "pid 可复用但数量不应无限增长"
+
+    _wait_for(lambda: engine.pool.checkedout(), 0)
+    _wait_for(lambda: _count_active_app_connections(db_config), 0)
+
+
+def test_pool_timeout_when_concurrency_exceeds_capacity(engine, db_config):
+    """
+    【场景背景】连接池默认 pool_size=20、max_overflow=10，当并发请求超过 30 条
+    时，SQLAlchemy 会在等待 pool_timeout（默认 30s）后抛出 QueuePoolLimitError。
+    【步骤输入】同时启动大量线程（例如 40 个）竞争连接，故意让部分线程持有连接
+    较长时间，从而触发池容量上限。
+    【期望输出】有线程抛出 QueuePoolLimitError，证明池在资源耗尽时会阻塞/超时；
+    并在测试结束后归还连接。
+    """
+    _reset_pool(engine, db_config)
+
+    original_engine = engine
+    # 使用一个独立的 engine，限制 pool_size=1, max_overflow=0, timeout=0.1s
+    limited_engine = create_engine(
+        original_engine.url.render_as_string(hide_password=False),
+        pool_pre_ping=True,
+        pool_size=1,
+        max_overflow=0,
+        pool_timeout=0.1,
+    )
+    connector_pg._Session.configure(bind=limited_engine)
+    engine = limited_engine
+    _reset_pool(engine, db_config)
+
+    total_threads = 6
+    long_hold_threads = 3
+    errors = []
+    lock = threading.Lock()
+    start_event = threading.Event()
+    release_event = threading.Event()
+
+    def limited_worker(index: int):
+        try:
+            start_event.wait()
+            with open_session():
+                session = get_session()
+                pid = session.execute(text("select pg_backend_pid()")).scalar_one()
+                logger.info("[timeout-test] worker=%s pid=%s", index, pid)
+                if index < long_hold_threads:
+                    release_event.wait()
+        except Exception as exc:
+            with lock:
+                errors.append(exc)
+
+    threads = [threading.Thread(target=limited_worker, args=(i,)) for i in range(total_threads)]
+
+    try:
+        for t in threads:
+            t.start()
+
+        start_event.set()
+
+        # 等待一段时间让其它线程超时
+        time.sleep(0.4)
+        release_event.set()
+
+        for t in threads:
+            t.join()
+    finally:
+        connector_pg._Session.configure(bind=original_engine)
+        limited_engine.dispose()
+        _reset_pool(original_engine, db_config)
+
+    assert any(isinstance(e, TimeoutError) or "QueuePool limit" in str(e) for e in errors), (
+        "预期QueuePoolLimitError未触发，可能需要调整线程数或等待时间"
+    )
 
     _wait_for(lambda: engine.pool.checkedout(), 0)
     _wait_for(lambda: _count_active_app_connections(db_config), 0)
