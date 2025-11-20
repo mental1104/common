@@ -10,6 +10,7 @@ import psycopg2
 from psycopg2 import DatabaseError, OperationalError
 from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
 from sqlalchemy import create_engine, inspect as sa_inspect
+from sqlalchemy.exc import TimeoutError as SQLAlchemyTimeoutError
 from sqlalchemy.orm import declarative_base, sessionmaker
 
 # 配置日志
@@ -165,7 +166,8 @@ def open_session():
         session.commit()
     except Exception as e:
         session.rollback()
-        logger.error(f"数据库会话发生异常: {e}")
+        log_fn = logger.warning if isinstance(e, SQLAlchemyTimeoutError) else logger.error
+        log_fn(f"数据库会话发生异常: {e}")
         raise
     finally:
         session.close()
