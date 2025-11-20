@@ -1,13 +1,15 @@
+import inspect as pyinspect
 import logging
 import os
 from contextlib import contextmanager
 from contextvars import ContextVar
 from functools import wraps
+from types import FunctionType
 
 import psycopg2
 from psycopg2 import DatabaseError, OperationalError
 from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
-from sqlalchemy import create_engine, inspect
+from sqlalchemy import create_engine, inspect as sa_inspect
 from sqlalchemy.orm import declarative_base, sessionmaker
 
 # 配置日志
@@ -36,6 +38,7 @@ def get_db_config():
         "host": os.getenv('PGHOST'),
         "port": os.getenv('PGPORT'),
         "database": os.getenv('PGDATABASE'),
+        "application_name": os.getenv('PGAPPNAME', 'mental1104-connector'),
     }
 
 
@@ -88,7 +91,7 @@ def ensure_database_exists(config):
 
 def ensure_tables_exist(engine):
     """检查并按需创建数据库表"""
-    inspector = inspect(engine)
+    inspector = sa_inspect(engine)
     existing_tables = inspector.get_table_names()
     for table in Base.metadata.tables.keys():
         if table not in existing_tables:
@@ -115,12 +118,16 @@ def startup():
     sqlalchemy_url = get_db_url(config)
     logger.info(f"数据库URL: {sqlalchemy_url}")
 
-    engine = create_engine(
-        sqlalchemy_url,
+    engine_kwargs = dict(
         pool_pre_ping=True,
         pool_size=20,
-        pool_recycle=3600
+        pool_recycle=3600,
     )
+    app_name = config.get("application_name")
+    if app_name:
+        engine_kwargs["connect_args"] = {"application_name": app_name}
+
+    engine = create_engine(sqlalchemy_url, **engine_kwargs)
     _Session.configure(bind=engine)
 
     should_create_tables = _CREATE_TABLES_ON_STARTUP
@@ -207,6 +214,72 @@ def with_session(func):
     return wrapper
 
 
+_SESSION_WRAP_FLAG = "_mental1104_session_wrapped"
+
+
+def _needs_session_injection(func):
+    """
+    检查函数签名中是否声明了 session 参数。
+    只有显式声明 session 的 DAO 方法才需要自动注入。
+    """
+    try:
+        sig = pyinspect.signature(func)
+    except (TypeError, ValueError):
+        return False
+    return "session" in sig.parameters
+
+
+def _wrap_session_callable(func):
+    """
+    为目标函数应用 with_session 装饰器，并打标避免重复包装。
+    """
+    if getattr(func, _SESSION_WRAP_FLAG, False):
+        return func
+    wrapped = with_session(func)
+    setattr(wrapped, _SESSION_WRAP_FLAG, True)
+    return wrapped
+
+
+def _auto_wrap_session_methods(cls):
+    """
+    自动为声明了 session 参数的方法注入 with_session 装饰器。
+    """
+    for name, attr in list(vars(cls).items()):
+        target = None
+        descriptor = None
+        if isinstance(attr, classmethod):
+            target = attr.__func__
+            descriptor = classmethod
+        elif isinstance(attr, staticmethod):
+            target = attr.__func__
+            descriptor = staticmethod
+        elif isinstance(attr, FunctionType):
+            target = attr
+
+        if target is None or not _needs_session_injection(target):
+            continue
+
+        wrapped = _wrap_session_callable(target)
+        if descriptor is classmethod:
+            setattr(cls, name, classmethod(wrapped))
+        elif descriptor is staticmethod:
+            setattr(cls, name, staticmethod(wrapped))
+        else:
+            setattr(cls, name, wrapped)
+
+
+class SessionAwareMixin:
+    """
+    为 ORM 模型提供自动 session 注入能力的 Mixin。
+    子类只需在需要的 DAO 方法上声明 session 参数即可。
+    """
+
+    @classmethod
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        _auto_wrap_session_methods(cls)
+
+
 """
 从数据库中获取markdown文件
 """
@@ -263,42 +336,3 @@ def db_connection(db_type, db_params):
         return wrapper
 
     return decorator
-
-
-# 使用示例
-db_params_postgres = {
-    "database": "xdlp",
-    "user": "xdlp",
-    "password": "xdlpllm2024",
-    "host": "10.74.113.42",
-    "port": "5432"
-}
-
-db_params_clickhouse = {
-    "host": "clickhouse_host",
-    "user": "default",
-    "password": "password"
-}
-
-
-@db_connection('postgresql', db_params_postgres)
-def process_record(item):
-    # 处理每条记录的逻辑
-    markdown, file_name, label = item
-    print(f"Processing file: {file_name}, with label: {label}, content")
-
-
-# 调用示例
-sql_query = """
-SELECT markdown, file_name, label FROM dataset
-WHERE markdown != '' AND markdown != 'XDLP ERROR'
-ORDER BY sha_256 ASC
-LIMIT %(limit)s OFFSET %(offset)s
-"""
-
-params = {
-    "version": "yzf-v00"
-}
-
-# 调用装饰器时传入 SQL 和参数
-# process_record(sql=sql_query, params=params)

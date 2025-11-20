@@ -67,6 +67,14 @@ class TestPulsarConnector:
         assert requests.get(tenant_url).status_code == 404
 
     def test_make_client(self, tenant_namespace_topic):
+        """
+        【场景背景】验证 PulsarConnector.make_client() 创建的 client 能完成
+        生产与消费的闭环。
+        【步骤输入】在 fixture 创建的租户/命名空间/主题下，创建 producer 与
+        consumer，发送一条字节消息再同步消费。
+        【期望输出】consumer 收到的 payload 等于原始内容并成功 acknowledge，
+        说明客户端配置、身份与 topic 元数据均正确。
+        """
         tenant, namespace, topic = tenant_namespace_topic
         client = PulsarConnector.make_client()
         producer = client.create_producer(topic)
@@ -86,9 +94,19 @@ class TestPulsarConnector:
         client.close()
 
     def test_get_broker_url(self, broker_url):
+        """
+        【场景背景】broker URL 应符合 Pulsar 客户端地址规范。
+        【步骤输入】调用 fixture 提供的 broker_url。
+        【期望输出】字符串以 pulsar:// 开头，保证后续客户端能识别协议。
+        """
         assert broker_url.startswith("pulsar://")
 
     def test_get_admin_url(self, admin_url):
+        """
+        【场景背景】Pulsar 管理接口需通过 HTTP 访问。
+        【步骤输入】读取 admin_url fixture。
+        【期望输出】URL 以 http:// 开头，确保管理 API 可以访问。
+        """
         assert admin_url.startswith("http://")
 
 
@@ -150,7 +168,12 @@ class TestPulsarIntegration:
         assert requests.get(tenant_url, headers=get_headers()).status_code == 404
 
     def test_producer_creation(self):
-        """Test Producer creation and message sending."""
+        """
+        【场景背景】高层封装的 Producer 应根据 tenant/namespace/topic 自动关联
+        schema 并能发送消息。
+        【步骤输入】构建 Producer 实例，向测试 topic 发送一条字段为 field1 的消息。
+        【期望输出】Producer 对象正常构造且 send 不抛异常，说明连接和 schema 合法。
+        """
         schema = {"type": "record", "name": "TestRecord", "fields": [{"name": "field1", "type": "string"}]}
         producer = Producer(
             tenant=self.tenant,
@@ -167,7 +190,12 @@ class TestPulsarIntegration:
         producer.close()
 
     def test_consumer_creation(self):
-        """Test Consumer creation, message receiving, and acknowledgment."""
+        """
+        【场景背景】Consumer 封装需支持订阅、拉取和确认消息。
+        【步骤输入】创建 Producer & Consumer，先发消息再调用 consumer.receive，
+        最后执行 acknowledge。
+        【期望输出】能收到非空 record 并成功 ack，表示 schema/订阅配置都正确。
+        """
         schema = {"type": "record", "name": "TestRecord", "fields": [{"name": "field1", "type": "string"}]}
         producer = Producer(
             tenant=self.tenant,
@@ -198,7 +226,11 @@ class TestPulsarIntegration:
         producer.close()
 
     def test_topic_lifecycle(self):
-        """Test topic creation and deletion lifecycle."""
+        """
+        【场景背景】管理 API 应允许创建/删除持久化 topic，并能在 stats 接口中反映。
+        【步骤输入】使用 REST Admin API 创建 topic，再查询 stats；随后删除并再次查询。
+        【期望输出】创建后 stats=200，删除后 stats=404，以证明生命周期操作可用。
+        """
         topic_url = f"{PulsarConnector.get_admin_url()}/admin/v2/persistent/{self.tenant}/{self.namespace}/{self.topic}"
 
         # Create topic
@@ -233,25 +265,41 @@ class TestPulsarAdminHelper:
         PulsarAdminHelper.cleanup_tenant(self.tenant)
 
     def test_create_tenant(self):
-        """测试租户创建"""
+        """
+        【场景背景】PulsarAdminHelper.create_tenant 应负责租户初始化。
+        【步骤输入】直接调用 create_tenant(self.tenant)。
+        【期望输出】is_tenant_exists 返回 True，说明租户元数据被创建。
+        """
         PulsarAdminHelper.create_tenant(self.tenant)
         assert PulsarAdminHelper.is_tenant_exists(self.tenant), "Tenant creation failed."
 
     def test_create_namespace(self):
-        """测试命名空间创建"""
+        """
+        【场景背景】命名空间依赖已存在的租户，应在 helper 中生成。
+        【步骤输入】先建租户再 create_namespace(tenant/namespace)。
+        【期望输出】is_namespace_exists 返回 True，证明命名空间生效。
+        """
         PulsarAdminHelper.create_tenant(self.tenant)
         PulsarAdminHelper.create_namespace(f"{self.tenant}/{self.namespace}")
         assert PulsarAdminHelper.is_namespace_exists(self.tenant, self.namespace), "Namespace creation failed."
 
     def test_create_topic(self):
-        """测试主题创建"""
+        """
+        【场景背景】Topic 依赖租户与命名空间，helper 应自动创建底层资源。
+        【步骤输入】按顺序 create_tenant -> create_namespace -> create_topic。
+        【期望输出】is_topic_exists 为 True，说明 topic 元信息注册成功。
+        """
         PulsarAdminHelper.create_tenant(self.tenant)
         PulsarAdminHelper.create_namespace(f"{self.tenant}/{self.namespace}")
         PulsarAdminHelper.create_topic(f"{self.tenant}/{self.namespace}/{self.topic}")
         assert PulsarAdminHelper.is_topic_exists(self.tenant, self.namespace, self.topic), "Topic creation failed."
 
     def test_cleanup_tenant(self):
-        """测试租户清理"""
+        """
+        【场景背景】cleanup_tenant 应递归删除租户下的命名空间与 topic。
+        【步骤输入】先创建一套租户/命名空间/主题，再调用 cleanup_tenant。
+        【期望输出】清理前存在、清理后 is_tenant_exists 变 False，验证深度删除。
+        """
         PulsarAdminHelper.create_tenant(self.tenant)
         PulsarAdminHelper.create_namespace(f"{self.tenant}/{self.namespace}")
         PulsarAdminHelper.create_topic(f"{self.tenant}/{self.namespace}/{self.topic}")
@@ -268,7 +316,11 @@ class TestPulsarAdminHelper:
         assert not PulsarAdminHelper.is_tenant_exists(self.tenant), "Tenant cleanup failed."
 
     def test_ensure_tenant_namespace_topic(self):
-        """测试 ensure_tenant_namespace_topic 方法"""
+        """
+        【场景背景】ensure_tenant_namespace_topic 应幂等地确保三种资源存在。
+        【步骤输入】调用 ensure...，然后依次检查租户/命名空间/主题存在性。
+        【期望输出】三项检查均为 True，证明 helper 能自动补齐缺失资源。
+        """
         try:
             # 调用 ensure_tenant_namespace_topic 方法
             PulsarAdminHelper.ensure_tenant_namespace_topic(self.tenant, self.namespace, self.topic)

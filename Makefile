@@ -13,7 +13,7 @@ ifeq ($(strip $(ENV_HAVE)),)
 else
   ENV_MK := $(abspath $(ENV_SRC)).mk
 
-  $(ENV_MK):
+  $(ENV_MK): $(ENV_SRC)
 	@set -e
 	awk '\
 	  /^[[:space:]]*#/ || /^[[:space:]]*$$/ { next } \
@@ -27,11 +27,7 @@ else
 	    print "export " key " = " val; }' \
 	  "$(ENV_SRC)" > "$(ENV_MK)"
 	echo "[ok] .env -> $(ENV_MK)"
-
-  ifneq ($(filter docker-up-all,$(MAKECMDGOALS)),)
-    -include $(ENV_MK)
-    export
-  endif
+  include $(ENV_MK)
 endif
 
 .PHONY: env-guard env-print env-expose env-clean

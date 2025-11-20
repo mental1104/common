@@ -42,12 +42,21 @@ class TestRedisLock:
             pytest.skip("Cannot connect to Redis: " + str(e))
 
     def test_connection_context_manager(self, redis_client):
-        """测试 RedisConnection 上下文管理器能否正常返回 Redis 客户端"""
+        """
+        【场景背景】RedisConnection 充当上下文管理器时应自动建立/关闭连接。
+        【步骤输入】在 with RedisConnection(): 块内执行 client.ping()。
+        【期望输出】ping 返回 True 且未抛出异常，证明上下文管理器封装正确。
+        """
         with RedisConnection() as client:
             assert client.ping() is True, "RedisConnection 未能正确连接到 Redis"
 
     def test_single_thread_lock(self, redis_client):
-        """测试单线程下的 try_lock 与 unlock API"""
+        """
+        【场景背景】RedisLock 在单线程环境下应严格互斥，释放后可再次锁定。
+        【步骤输入】创建两个锁实例，依次 try_lock / unlock 相同 key。
+        【期望输出】第一个实例立刻拿到锁，第二个实例在锁被释放前失败，
+        unlock 后第二个实例获得锁，验证基本互斥语义。
+        """
         key = "test::{distributed_lock}"
         # 清理指定 key
         redis_client.delete(key)
@@ -68,7 +77,11 @@ class TestRedisLock:
         lock2.unlock()
 
     def test_multiprocess_lock(self, redis_client):
-        """测试多进程下使用 try_lock 与 unlock 保证互斥性"""
+        """
+        【场景背景】在多进程竞争场景中，分布式锁仍需保证只有一个进程进入临界区。
+        【步骤输入】并发启动多个子进程，分别执行 try_lock -> 累加计数 -> unlock。
+        【期望输出】计数器最终值等于进程数，说明每次只有一个进程能成功进入临界区。
+        """
         def worker(counter, redis_params):
             with RedisConnection(
                 host=redis_params["host"],
@@ -104,7 +117,11 @@ class TestRedisLock:
         assert counter.value == process_count, f"多进程测试失败：最终计数应等于进程数，当前计数为 {counter.value}"
 
     def test_multi_process_redis_resource(self, redis_client):
-        """多进程测试：多个进程访问同一个 Redis 资源，确保分布式锁生效"""
+        """
+        【场景背景】模拟多进程对同一 Redis 资源的高频读写，验证锁可防止并发写冲突。
+        【步骤输入】5 个进程循环 try_lock，成功后读取 shared_counter、自增并写回。
+        【期望输出】最终计数等于加锁次数，且日志显示锁竞争与释放过程，证明资源更新有序。
+        """
 
         def access_redis_resource(redis_client, key):
             """高并发访问 Redis 共享资源，确保同一时刻只有一个进程操作"""
