@@ -9,7 +9,7 @@
 # ---- Direct imports (safe modules; no mental1104 top-level imports) ----
 from mental1104.app.anki import AnkiApkgGenerator
 from mental1104.concurrency.types import MPStartMethod
-from mental1104.connector.postgres import Base, db_connection, db_params_clickhouse, db_params_postgres, ensure_database_exists, ensure_tables_exist, get_db_config, logger, open_session, params, process_record, sql_query, startup
+from mental1104.connector.postgres import Base, close_session, db_connection, db_params_clickhouse, db_params_postgres, ensure_database_exists, ensure_tables_exist, get_db_config, get_db_url, get_session, init_database, logger, open_session, params, process_record, setup, sql_query, startup, with_session
 from mental1104.connector.redis import RedisConnection, RedisLock
 from mental1104.debug.deciprobe import ELLIPSIS_CHAR, FUNC_FIELD_WIDTH, HEAD_PREFIX, ID_FIELD_WIDTH, SITE_FIELD_WIDTH, TRACE_IF_ENABLED, TYPE_FIELD_WIDTH, deciprobe, trace_if
 from mental1104.env.environment import MissingEnvVarError, check_required_env_vars
@@ -99,6 +99,7 @@ __all__ = [
     'async_delay',
     'async_timed',
     'check_required_env_vars',
+    'close_session',
     'csv_writer',
     'db_connection',
     'db_params_clickhouse',
@@ -117,6 +118,9 @@ __all__ = [
     'generate_salt',
     'get_current_time',
     'get_db_config',
+    'get_db_url',
+    'get_session',
+    'init_database',
     'iterator_csv',
     'iterator_json',
     'json_to_yaml',
@@ -130,10 +134,12 @@ __all__ = [
     'process_record',
     'random_pick',
     'replace_space_with',
+    'setup',
     'sql_query',
     'startup',
     'timed',
     'trace_if',
+    'with_session',
     'yaml_to_json',
 ]
 

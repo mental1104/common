@@ -40,3 +40,4 @@ viztracer
 pypandoc
 xlrd
 pymupdf4llm
+pydantic
