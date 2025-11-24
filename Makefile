@@ -66,6 +66,10 @@ CPP_SRC_DIR := cpp
 CPP_BUILD_DIR := $(CPP_SRC_DIR)/build
 CPP_BUILD_TYPE ?= Release
 PREFIX ?= /usr/local
+CPP_TEST ?=
+CPP_TEST_FILES ?=
+CPP_TEST_DIRS ?=
+CPP_BENCH_FILES ?=
 
 # ---------- 通用测试 verbose 开关 ----------
 VERBOSE ?= 0
@@ -212,7 +216,10 @@ define _test_python
 		echo "[proxy] disabled for pytest (HTTP_PROXY/HTTPS_PROXY/NO_PROXY/ALL_PROXY 皆已清空)"; \
 		if ! command -v pytest >/dev/null 2>/dev/null; then echo "[warn] 未检测到 pytest；请先执行: make setup-python"; exit 1; fi; \
 		cd python; \
-		$(PYTHON) -m pytest $(PYTEST_V) -k "not bench and not benchmark"'
+		kexpr="not bench and not benchmark"; \
+		[[ -n "$${FILTER:-}" ]] && kexpr="($${FILTER}) and $$kexpr"; \
+		[[ -n "$${FILE:-}" ]] && kexpr="($${FILE}) and $$kexpr"; \
+		$(PYTHON) -m pytest $(PYTEST_V) -k "$$kexpr"'
 endef
 
 define _install_python
@@ -252,13 +259,22 @@ define _bench_python
 		cd python; \
 		if ! $(PYTHON) -m pytest -q --help 2>/dev/null | grep -qi benchmark; then \
 			echo "[warn] 未检测到 pytest-benchmark 插件，回退到名称筛选"; \
-			$(PYTHON) -m pytest $(PYTEST_V) -k "$(PYTEST_BENCH_K)"; \
+			kexpr="$(PYTEST_BENCH_K)"; \
+			[[ -n "$${FILTER:-}" ]] && kexpr="($${FILTER}) and ($$kexpr)"; \
+			[[ -n "$${FILE:-}" ]] && kexpr="($${FILE}) and ($$kexpr)"; \
+			$(PYTHON) -m pytest $(PYTEST_V) -k "$$kexpr"; \
 			exit 0; \
 		fi; \
 		bench_files=$$(find test_benchmark -type f -name "test_*.py" | sort); \
+		if [ -n "$${FILE:-}" ]; then \
+			bench_files=$$(printf "%s\n" $$bench_files | grep -E "$${FILE}" || true); \
+		fi; \
 		if [ -z "$$bench_files" ]; then \
 			echo "[warn] 未找到 test_benchmark/* 基准文件，回退到名称筛选"; \
-			$(PYTHON) -m pytest $(PYTEST_V) -k "$(PYTEST_BENCH_K)" --benchmark-only; \
+			kexpr="$(PYTEST_BENCH_K)"; \
+			[[ -n "$${FILTER:-}" ]] && kexpr="($${FILTER}) and ($$kexpr)"; \
+			[[ -n "$${FILE:-}" ]] && kexpr="($${FILE}) and ($$kexpr)"; \
+			$(PYTHON) -m pytest $(PYTEST_V) -k "$$kexpr" --benchmark-only; \
 			exit 0; \
 		fi; \
 		rm -rf "$(PY_BENCH_ARTIFACT_DIR)"; \
@@ -272,7 +288,12 @@ define _bench_python
 				*) extra_opts="";; \
 			esac; \
 			echo "[bench-python] $$file -> $$json"; \
-			$(PYTHON) -m pytest $(PYTEST_V) "$$file" --benchmark-only --benchmark-json "$$json" $(PY_BENCHMARK_OPTS) $$extra_opts; \
+			kexpr=""; \
+			[[ -n "$${FILTER:-}" ]] && kexpr="($${FILTER})"; \
+			[[ -n "$${FILE:-}" ]] && kexpr="$${kexpr:+($$kexpr) and }($${FILE})"; \
+			kargs=(); \
+			[[ -n "$$kexpr" ]] && kargs+=(-k "$$kexpr"); \
+			$(PYTHON) -m pytest $(PYTEST_V) "$$file" --benchmark-only --benchmark-json "$$json" $(PY_BENCHMARK_OPTS) $$extra_opts "$${kargs[@]}"; \
 			$(PYTHON) tools/render_bench_plots.py \
 				--input "$$json" \
 				--test-type pytest-benchmark \
@@ -302,7 +323,43 @@ define _test_cpp
 		unset HTTP_PROXY HTTPS_PROXY NO_PROXY ALL_PROXY http_proxy https_proxy no_proxy all_proxy; \
 		echo "[proxy] disabled for pytest (HTTP_PROXY/HTTPS_PROXY/NO_PROXY/ALL_PROXY 皆已清空)"; \
 		cd "$(CPP_BUILD_DIR)"; \
-		$(CTEST) --output-on-failure -LE bench -j $(JOBS) $(CTEST_V)'
+		ctest_pat="$${FILE:-}"; \
+		gtest_filter="$${FILTER:-}"; \
+		if [[ -z "$$ctest_pat" && -n "$(CPP_TEST_FILES)$(CPP_TEST_DIRS)" ]]; then \
+			files=""; \
+			[[ -n "$(CPP_TEST_FILES)" ]] && files+=" $(CPP_TEST_FILES)"; \
+			if [[ -n "$(CPP_TEST_DIRS)" ]]; then \
+				while IFS= read -r f; do files+=" $$f"; done < <(find $(CPP_TEST_DIRS) -type f -name "*.cpp" | sort); \
+			fi; \
+			names=$$(for f in $$files; do b=$$(basename "$$f"); echo $${b%.cpp}; done | sort -u | paste -sd"|" -); \
+			[[ -n "$$names" ]] && ctest_pat="^($$names)$$"; \
+		elif [[ -z "$$ctest_pat" && -n "$(CPP_TEST)" ]]; then \
+			files=""; unknown=""; \
+			for tok in $(CPP_TEST); do \
+				if [[ -f "$$tok" ]]; then files+=" $$tok"; continue; fi; \
+				if [[ -d "$$tok" ]]; then \
+					while IFS= read -r f; do files+=" $$f"; done < <(find "$$tok" -type f -name "*.cpp" | sort); \
+					continue; \
+				fi; \
+				unknown="$$tok"; \
+			done; \
+			if [[ -n "$$files" ]]; then \
+				names=$$(for f in $$files; do b=$$(basename "$$f"); echo $${b%.cpp}; done | sort -u | paste -sd"|" -); \
+				[[ -n "$$names" ]] && ctest_pat="^($$names)$$"; \
+			elif [[ -z "$$ctest_pat" && -n "$$unknown" ]]; then \
+				ctest_pat="$$unknown"; \
+			fi; \
+		fi; \
+		args=(--output-on-failure -LE bench -j $(JOBS)); \
+		[[ -n "$(CTEST_V)" ]] && args+=($(CTEST_V)); \
+		[[ -n "$$ctest_pat" ]] && args+=(-R "$$ctest_pat"); \
+		if [[ -n "$$gtest_filter" ]]; then \
+			echo "[ctest] GTEST_FILTER=$$gtest_filter $(CTEST) $${args[*]}"; \
+			GTEST_FILTER="$$gtest_filter" $(CTEST) "$${args[@]}"; \
+		else \
+			echo "[ctest] $(CTEST) $${args[*]}"; \
+			$(CTEST) "$${args[@]}"; \
+		fi'
 endef
 
 define _coverage_cpp
@@ -361,10 +418,34 @@ define _bench_cpp
 		shopt -s nullglob; \
 		binaries=($(CPP_BUILD_DIR)/bin/bench_*); \
 		shopt -u nullglob; \
+		file_pat="$${FILE:-}"; \
+		bench_filter="$${FILTER:-}"; \
+		if [[ -n "$(CPP_BENCH_FILES)" ]]; then \
+			declare -A want=(); \
+			for f in $(CPP_BENCH_FILES); do b=$$(basename "$$f"); b=$${b%.cpp}; want["$$b"]=1; done; \
+			filtered=(); \
+			for exe in "$${binaries[@]}"; do \
+				base=$$(basename "$$exe"); \
+				[[ -n "$${want[$$base]}" ]] && filtered+=("$${exe}"); \
+			done; \
+			binaries=("$${filtered[@]}"); \
+		fi; \
+		if [[ -n "$$file_pat" ]]; then \
+			filtered=(); \
+			for exe in "$${binaries[@]}"; do \
+				base=$$(basename "$$exe"); \
+				if [[ "$$base" =~ $$file_pat ]]; then filtered+=("$${exe}"); fi; \
+			done; \
+			binaries=("$${filtered[@]}"); \
+		fi; \
 		if [[ $${#binaries[@]} -eq 0 ]]; then \
 			echo "[warn] 未找到 bench_* 可执行文件，回退到 ctest"; \
 			cd "$(CPP_BUILD_DIR)"; \
-			$(CTEST) --output-on-failure -L bench -j $(JOBS); \
+			args=(--output-on-failure -L bench -j $(JOBS)); \
+			[[ -n "$(CTEST_V)" ]] && args+=($(CTEST_V)); \
+			[[ -n "$$file_pat" ]] && args+=(-R "$$file_pat"); \
+			echo "[ctest] $(CTEST) $${args[*]}"; \
+			$(CTEST) "$${args[@]}"; \
 			exit 0; \
 		fi; \
 		rm -rf "$(CPP_BENCH_ARTIFACT_DIR)"; \
@@ -373,13 +454,29 @@ define _bench_cpp
 			name=$$(basename "$$exe"); \
 			json="$(CPP_BENCH_ARTIFACT_DIR)/$${name}.json"; \
 			echo "[bench-cpp] $$name -> $$json"; \
-			"$$exe" \
+			args=( \
 				--benchmark_out="$$json" \
 				--benchmark_out_format=json \
 				--benchmark_min_time=0.2 \
 				--benchmark_repetitions=5 \
 				--benchmark_display_aggregates_only=true \
-				--benchmark_time_unit=ms; \
+				--benchmark_time_unit=ms \
+			); \
+			[[ -n "$$bench_filter" ]] && args+=(--benchmark_filter="$$bench_filter"); \
+			if ! "$$exe" "$${args[@]}"; then \
+				if [[ -n "$$bench_filter" ]]; then \
+					echo "[bench-cpp][skip] $$name 无匹配项 (FILTER=$$bench_filter)"; \
+					rm -f "$$json"; \
+					continue; \
+				else \
+					echo "[bench-cpp][fail] $$name 运行失败"; \
+					exit 1; \
+				fi; \
+			fi; \
+			if [[ ! -s "$$json" ]]; then \
+				echo "[bench-cpp][skip] $$name 未生成有效输出"; \
+				continue; \
+			fi; \
 			$(PYTHON) python/tools/render_bench_plots.py \
 				--input "$$json" \
 				--test-type google-benchmark \
@@ -487,9 +584,20 @@ define _test_go
 		unset HTTP_PROXY HTTPS_PROXY NO_PROXY ALL_PROXY http_proxy https_proxy no_proxy all_proxy; \
 		echo "[proxy] disabled for pytest (HTTP_PROXY/HTTPS_PROXY/NO_PROXY/ALL_PROXY 皆已清空)"; \
 		cd "$(GO_DIR)"; \
-		echo "[go] test -count=1 $(GO_TEST_V) ./..."; \
+		run_args=(); pkg_args=(./...); \
+		[[ -n "$${FILTER:-}" ]] && run_args+=(-run "$${FILTER}"); \
+		if [[ -n "$${FILE:-}" ]]; then \
+			mapfile -t dirs < <(find . -name "*_test.go" | grep -E "$${FILE}" | xargs -r -n1 dirname | sort -u); \
+			if [[ $${#dirs[@]} -gt 0 ]]; then \
+				pkg_args=(); \
+				for d in "$${dirs[@]}"; do pkg_args+=("$${d#./}"); done; \
+			else \
+				echo "[warn] FILE=$${FILE} 未匹配到 *_test.go，回退全量包"; \
+			fi; \
+		fi; \
+		echo "[go] test -count=1 $(GO_TEST_V) $${run_args[*]:-} $${pkg_args[*]}"; \
 		GOWORK=$(GOWORK) GOTOOLCHAIN=$(GOTOOLCHAIN) GOPROXY="$(GOPROXY)" GOPRIVATE="$(GOPRIVATE)" \
-		$(GO) test -count=1 $(GO_TEST_V) ./...; \
+		$(GO) test -count=1 $(GO_TEST_V) "$${run_args[@]}" "$${pkg_args[@]}"; \
 		echo "[ok] go test 通过。"'
 endef
 
@@ -514,8 +622,21 @@ define _fmt_go
 endef
 
 define _bench_go
-	$(SHELL) -lc 'set -e; cd "$(GO_DIR)"; GOWORK=$(GOWORK) GOTOOLCHAIN=$(GOTOOLCHAIN) GOPROXY="$(GOPROXY)" GOPRIVATE="$(GOPRIVATE)" \
-	$(GO) test $(GO_TEST_V) -bench=. -benchmem ./...'
+	$(SHELL) -lc 'set -e; \
+		cd "$(GO_DIR)"; \
+		bench_pat="$${FILTER:-.}"; pkg_args=(./...); \
+		if [[ -n "$${FILE:-}" ]]; then \
+			mapfile -t dirs < <(find . -name "*_test.go" | grep -E "$${FILE}" | xargs -r -n1 dirname | sort -u); \
+			if [[ $${#dirs[@]} -gt 0 ]]; then \
+				pkg_args=(); \
+				for d in "$${dirs[@]}"; do pkg_args+=("$${d#./}"); done; \
+			else \
+				echo "[warn] FILE=$${FILE} 未匹配到 *_test.go，回退全量包"; \
+			fi; \
+		fi; \
+		echo "[go] test $(GO_TEST_V) -bench=\"$$bench_pat\" -benchmem $${pkg_args[*]}"; \
+		GOWORK=$(GOWORK) GOTOOLCHAIN=$(GOTOOLCHAIN) GOPROXY="$(GOPROXY)" GOPRIVATE="$(GOPRIVATE)" \
+		$(GO) test $(GO_TEST_V) -bench="$$bench_pat" -benchmem "$${pkg_args[@]}"'
 endef
 
 define _install_go
@@ -559,11 +680,43 @@ endef
 define _test_rust
 	$(SHELL) -lc 'set -e; unset HTTP_PROXY HTTPS_PROXY NO_PROXY ALL_PROXY http_proxy https_proxy no_proxy all_proxy; \
 		echo "[proxy] disabled for pytest (HTTP_PROXY/HTTPS_PROXY/NO_PROXY/ALL_PROXY 皆已清空)"; \
-		cd "$(RUST_DIR)"; cargo test --all-features $(CARGO_TEST_V)'
+		cd "$(RUST_DIR)"; \
+		file_pat="$${FILE:-}"; fn_pat="$${FILTER:-}"; \
+		if [[ -n "$$file_pat" ]]; then \
+			mapfile -t bins < <(find tests -maxdepth 1 -type f -name "*.rs" 2>/dev/null | grep -E "$$file_pat" | sed "s#.*/##" | sed "s/\\.rs$$//"); \
+			if [[ $${#bins[@]} -gt 0 ]]; then \
+				for b in "$${bins[@]}"; do \
+					args=(test --all-features $(CARGO_TEST_V) --test "$$b"); \
+					[[ -n "$$fn_pat" ]] && args+=("$$fn_pat"); \
+					cargo "$${args[@]}"; \
+				done; \
+				exit 0; \
+			fi; \
+			echo "[warn] FILE=$$file_pat 未匹配到 tests/*.rs，回退全量"; \
+		fi; \
+		args=(test --all-features $(CARGO_TEST_V)); \
+		[[ -n "$$fn_pat" ]] && args+=("$$fn_pat"); \
+		cargo "$${args[@]}"'
 endef
 
 define _bench_rust
-	$(SHELL) -lc 'set -e; cd "$(RUST_DIR)"; cargo bench $(CARGO_TEST_V)'
+	$(SHELL) -lc 'set -e; cd "$(RUST_DIR)"; \
+		file_pat="$${FILE:-}"; fn_pat="$${FILTER:-}"; \
+		if [[ -n "$$file_pat" ]]; then \
+			mapfile -t bins < <(find benches -maxdepth 1 -type f -name "*.rs" 2>/dev/null | grep -E "$$file_pat" | sed "s#.*/##" | sed "s/\\.rs$$//"); \
+			if [[ $${#bins[@]} -gt 0 ]]; then \
+				for b in "$${bins[@]}"; do \
+					args=(bench $(CARGO_TEST_V) --bench "$$b"); \
+					[[ -n "$$fn_pat" ]] && args+=("$$fn_pat"); \
+					cargo "$${args[@]}"; \
+				done; \
+				exit 0; \
+			fi; \
+			echo "[warn] FILE=$$file_pat 未匹配到 benches/*.rs，回退全量"; \
+		fi; \
+		args=(bench $(CARGO_TEST_V)); \
+		[[ -n "$$fn_pat" ]] && args+=("$$fn_pat"); \
+		cargo "$${args[@]}"'
 endef
 
 define _fmt_rust
