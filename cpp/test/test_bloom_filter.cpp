@@ -1,5 +1,7 @@
 #include "mental1104/bloom_filter.h"
 #include <gtest/gtest.h>
+#include <string>
+#include <vector>
 
 // 测试 BloomFilter 的初始化
 TEST(BloomFilterTest, Initialization) {

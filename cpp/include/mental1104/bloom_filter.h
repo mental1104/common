@@ -1,10 +1,9 @@
 #ifndef __MENTAL1104_BLOOM_FILTER
 #define __MENTAL1104_BLOOM_FILTER
 
-#include <bitset>
-#include <cmath>
+#include <cstddef>
 #include <functional>
-#include <iostream>
+#include <string>
 #include <vector>
 
 class BloomFilter {
@@ -15,40 +14,17 @@ protected:
   std::hash<std::string> hash_fn; // 标准哈希函数
 
   // 哈希函数: 使用两个哈希值生成 k 个索引
-  size_t hash(const std::string &key, size_t seed) const {
-    return (hash_fn(key) ^ (seed * 0x5bd1e995)) % m;
-  }
+  size_t hash(const std::string &key, size_t seed) const;
 
 public:
   // 构造函数，允许用户设置误判率 p 和预期存储的元素数 n
-  BloomFilter(size_t n, double p) {
-    // 计算所需的位数组大小 m
-    m = std::ceil(-(n * std::log(p)) / (std::log(2) * std::log(2)));
-    // 计算哈希函数个数 k
-    k = std::ceil((m / n) * std::log(2));
-
-    bit_array.resize(m, false);
-    std::cout << "Bloom Filter 初始化: 位数组大小 = " << m
-              << ", 哈希函数个数 = " << k << std::endl;
-  }
+  BloomFilter(size_t n, double p);
 
   // 插入元素
-  void insert(const std::string &key) {
-    for (size_t i = 0; i < k; ++i) {
-      size_t index = hash(key, i);
-      bit_array[index] = true;
-    }
-  }
+  void insert(const std::string &key);
 
   // 查询元素是否存在
-  bool contains(const std::string &key) const {
-    for (size_t i = 0; i < k; ++i) {
-      size_t index = hash(key, i);
-      if (!bit_array[index])
-        return false; // 只要有一个 bit 为 0，则一定不存在
-    }
-    return true; // 可能存在（存在误判）
-  }
+  bool contains(const std::string &key) const;
 
 public:
   // 公开 `m` 和 `k`，用于测试
