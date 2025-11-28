@@ -14,6 +14,7 @@
 
 #include "mental1104/thread_utils.h"
 #include "mental1104/random.h"
+#include "mental1104/log.h"
 #include "mental1104/redis_lock.h"
 #include "mental1104/util.h"
 using namespace sw::redis;
@@ -187,9 +188,9 @@ TEST_F(RedisLockTest, MultiThreadStringIncrementTest) { // 同上
             break;
           }
           // 打印线程编号和当前值
-          std::cout << "Thread " << thread_id
-                    << " accessed array_key, current value: " << *val_opt
-                    << "\n";
+          M1104_LOG_DEBUGF(
+              "Thread {} accessed array_key, current value: {}", thread_id,
+              *val_opt);
           // 解析整数值并累加
           int current_value = std::stoi(*val_opt);
           current_value += 1;
@@ -200,8 +201,8 @@ TEST_F(RedisLockTest, MultiThreadStringIncrementTest) { // 同上
           lock.unlock();
           break;
         } else {
-          std::cout << "Thread " << thread_id
-                    << " cannot get the lock: " << lock_key << "\n";
+          M1104_LOG_DEBUGF("Thread {} cannot get the lock: {}", thread_id,
+                           lock_key);
           mental1104::sleep_for(std::chrono::milliseconds(10));
         }
       }

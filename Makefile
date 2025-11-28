@@ -70,6 +70,7 @@ CPP_TEST ?=
 CPP_TEST_FILES ?=
 CPP_TEST_DIRS ?=
 CPP_BENCH_FILES ?=
+CPP_LOG_LEVEL ?=
 
 # ---------- 通用测试 verbose 开关 ----------
 VERBOSE ?= 0
@@ -322,6 +323,10 @@ define _test_cpp
 	$(SHELL) -lc 'set -e; \
 		unset HTTP_PROXY HTTPS_PROXY NO_PROXY ALL_PROXY http_proxy https_proxy no_proxy all_proxy; \
 		echo "[proxy] disabled for pytest (HTTP_PROXY/HTTPS_PROXY/NO_PROXY/ALL_PROXY 皆已清空)"; \
+		if [[ -n "$(CPP_LOG_LEVEL)" ]]; then \
+			export MENTAL1104_LOG_LEVEL="$(CPP_LOG_LEVEL)"; \
+			echo "[log] MENTAL1104_LOG_LEVEL=$(CPP_LOG_LEVEL)"; \
+		fi; \
 		cd "$(CPP_BUILD_DIR)"; \
 		ctest_pat="$${FILE:-}"; \
 		gtest_filter="$${FILTER:-}"; \
@@ -434,6 +439,10 @@ endef
 
 define _bench_cpp
 	$(SHELL) -lc 'set -e; \
+		if [[ -n "$(CPP_LOG_LEVEL)" ]]; then \
+			export MENTAL1104_LOG_LEVEL="$(CPP_LOG_LEVEL)"; \
+			echo "[log] MENTAL1104_LOG_LEVEL=$(CPP_LOG_LEVEL)"; \
+		fi; \
 		if [[ ! -d "$(CPP_BUILD_DIR)" ]]; then echo "[info] 未发现 $(CPP_BUILD_DIR)，请先执行: make build-cpp"; exit 1; fi; \
 		shopt -s nullglob; \
 		binaries=($(CPP_BUILD_DIR)/bin/bench_*); \

@@ -31,3 +31,7 @@
 	path = cpp/lib/redis-plus-plus
 	url = git@github.com:sewenew/redis-plus-plus.git
 	ignore = dirty
+[submodule "cpp/lib/spdlog"]
+	path = cpp/lib/spdlog
+	url = https://github.com/gabime/spdlog.git
+	ignore = dirty

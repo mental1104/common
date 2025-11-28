@@ -96,6 +96,7 @@ set(_LIB_HDR_CANDS
   "${THIRDROOT}/hiredis"
   "${THIRDROOT}/hiredis/include"
   "${THIRDROOT}/pystring"
+  "${THIRDROOT}/spdlog/include"
   "${THIRDROOT}/redis-plus-plus/src"
 )
 foreach(_d ${_LIB_HDR_CANDS})
