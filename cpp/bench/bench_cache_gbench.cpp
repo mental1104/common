@@ -3,6 +3,9 @@
 #include <cstdint>
 #include "mental1104/cache.h"
 
+using mental1104::make_cache;
+using mental1104::make_lru_cache;
+
 static inline uint64_t workload(uint64_t n) {
     double x = 0.0;
     for (uint64_t i = 0; i < n; ++i) {
