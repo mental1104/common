@@ -18,12 +18,29 @@
 
 #include <iostream>
 #include <sstream>
+#include <string>
 #include <string_view>
 #include <utility>
 #include <atomic>
 #include <cstdlib>
 #include <cctype>
 #include <cstdio>
+#include <forward_list>
+#include <list>
+#include <map>
+#include <unordered_map>
+#include <vector>
+#include <iterator>
+#include <tuple>
+#include <type_traits>
+
+#include "mental1104/meta/check_cpp_version.h"
+
+#if M1104_HAS_CXX20
+#include <source_location>
+#else
+struct no_source_location {};
+#endif
 
 #if defined(__has_include)
 #  if __has_include(<format>)
@@ -39,6 +56,195 @@
 #else
 #  define M1104_HAS_STD_FORMAT 0
 #endif
+
+namespace mental1104 {
+namespace log_detail {
+
+template <typename T, typename = void>
+struct has_size_method : std::false_type {};
+#if M1104_HAS_CXX17
+template <typename T>
+struct has_size_method<T, std::void_t<decltype(std::declval<T>().size())>>
+    : std::true_type {};
+#endif
+
+template <typename T> struct is_sequence : std::false_type {};
+template <typename T> struct is_sequence<std::vector<T>> : std::true_type {};
+template <typename T> struct is_sequence<std::list<T>> : std::true_type {};
+template <typename T>
+struct is_sequence<std::forward_list<T>> : std::true_type {};
+
+template <typename T> struct is_map_like : std::false_type {};
+template <typename K, typename V>
+struct is_map_like<std::map<K, V>> : std::true_type {};
+template <typename K, typename V>
+struct is_map_like<std::unordered_map<K, V>> : std::true_type {};
+
+#if !M1104_HAS_CXX17
+template <typename Container>
+size_t distance_size(const Container &c) {
+  return static_cast<size_t>(std::distance(c.begin(), c.end()));
+}
+#endif
+
+template <typename Container, typename SourceLocation>
+void maybe_print_info(const Container &c, bool show_info, std::ostream &out,
+                      SourceLocation loc) {
+#if M1104_HAS_CXX20
+  if (show_info) {
+    out << "[File: " << loc.file_name() << ", Line: " << loc.line() << "] ";
+    if constexpr (has_size_method<Container>::value) {
+      out << "(size: " << c.size() << ") " << std::endl;
+    }
+  }
+#elif M1104_HAS_CXX17
+  if (show_info) {
+    if constexpr (has_size_method<Container>::value) {
+      out << "(size: " << c.size() << ") " << std::endl;
+    }
+  }
+#else
+  if (show_info) {
+    if constexpr (has_size_method<Container>::value) {
+      out << "(size: " << c.size() << ") " << std::endl;
+    } else {
+      out << "(size: " << distance_size(c) << ") " << std::endl;
+    }
+  }
+#endif
+}
+
+template <typename Container, typename SourceLocation>
+void format_sequence(const Container &c, bool show_info, std::ostream &out,
+                     SourceLocation loc) {
+  maybe_print_info(c, show_info, out, loc);
+  out << "{";
+  bool first = true;
+  for (const auto &element : c) {
+    if (!first)
+      out << ", ";
+    out << element;
+    first = false;
+  }
+  out << "}" << std::endl;
+}
+
+template <typename K, typename V, typename SourceLocation>
+void format_map_entry(const K &key, const V &value, bool is_first_element,
+                      int indent_level, std::ostream &out,
+                      SourceLocation loc) {
+  if (!is_first_element) {
+    out << ",\n";
+  }
+  out << std::string(indent_level * 4, ' ') << "\"" << key << "\": ";
+  if constexpr (is_map_like<V>::value) {
+    out << "{\n";
+    bool nested_first = true;
+    for (const auto &[nested_key, nested_value] : value) {
+      format_map_entry(nested_key, nested_value, nested_first, indent_level + 1,
+                       out, loc);
+      nested_first = false;
+    }
+    out << "\n" << std::string(indent_level * 4, ' ') << "}";
+  } else {
+    out << "\"" << value << "\"";
+  }
+}
+
+template <typename K, typename V, typename SourceLocation>
+void format_map_like(const std::map<K, V> &m, bool show_info,
+                     std::ostream &out, SourceLocation loc) {
+  maybe_print_info(m, show_info, out, loc);
+  out << "{\n";
+  bool first = true;
+  for (const auto &[key, value] : m) {
+    format_map_entry(key, value, first, 1, out, loc);
+    first = false;
+  }
+  out << "\n}" << std::endl;
+}
+
+template <typename K, typename V, typename SourceLocation>
+void format_map_like(const std::unordered_map<K, V> &m, bool show_info,
+                     std::ostream &out, SourceLocation loc) {
+  maybe_print_info(m, show_info, out, loc);
+  out << "{\n";
+  bool first = true;
+  for (const auto &[key, value] : m) {
+    format_map_entry(key, value, first, 1, out, loc);
+    first = false;
+  }
+  out << "\n}" << std::endl;
+}
+
+// Format containers with optional source location
+#if M1104_HAS_CXX20
+template <typename Container>
+std::string format_container(const Container &c, bool show_info = true,
+                             std::source_location loc =
+                                 std::source_location::current()) {
+  std::ostringstream out;
+  if constexpr (is_map_like<Container>::value) {
+    format_map_like(c, show_info, out, loc);
+  } else if constexpr (is_sequence<Container>::value) {
+    format_sequence(c, show_info, out, loc);
+  } else {
+    format_sequence(c, show_info, out, loc);
+  }
+  return out.str();
+}
+#else
+template <typename Container>
+std::string format_container(const Container &c, bool show_info = true,
+                             no_source_location loc = no_source_location()) {
+  std::ostringstream out;
+  if constexpr (is_map_like<Container>::value) {
+    format_map_like(c, show_info, out, loc);
+  } else if constexpr (is_sequence<Container>::value) {
+    format_sequence(c, show_info, out, loc);
+  } else {
+    format_sequence(c, show_info, out, loc);
+  }
+  return out.str();
+}
+#endif
+
+// Traits
+template <typename T> struct is_supported : std::false_type {};
+template <typename T> struct is_supported<std::vector<T>> : std::true_type {};
+template <typename T> struct is_supported<std::list<T>> : std::true_type {};
+template <typename T>
+struct is_supported<std::forward_list<T>> : std::true_type {};
+template <typename K, typename V>
+struct is_supported<std::map<K, V>> : std::true_type {};
+template <typename K, typename V>
+struct is_supported<std::unordered_map<K, V>> : std::true_type {};
+
+// Supported formatting dispatcher
+template <typename T>
+std::string format_supported(const T &val) {
+  if constexpr (is_sequence<T>::value || is_map_like<T>::value) {
+    return format_container(val);
+  } else {
+    std::ostringstream oss;
+    oss << val;
+    return oss.str();
+  }
+}
+
+template <typename T>
+std::string format_value(const T &val) {
+  if constexpr (is_supported<std::decay_t<T>>::value) {
+    return format_supported(val);
+  } else {
+    std::ostringstream oss;
+    oss << val;
+    return oss.str();
+  }
+}
+
+} // namespace log_detail
+} // namespace mental1104
 
 namespace mental1104 {
 
@@ -116,7 +322,15 @@ inline int level_rank(LogLevel lvl) { return static_cast<int>(lvl); }
 
 template <typename... Args> std::string to_string(Args &&...args) {
   std::ostringstream oss;
-  (oss << ... << std::forward<Args>(args));
+  auto append = [&](auto &&val) {
+    using Decayed = std::decay_t<decltype(val)>;
+    if constexpr (mental1104::log_detail::is_supported<Decayed>::value) {
+      oss << mental1104::log_detail::format_value(val);
+    } else {
+      oss << std::forward<decltype(val)>(val);
+    }
+  };
+  (append(std::forward<Args>(args)), ...);
   return oss.str();
 }
 

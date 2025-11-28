@@ -5,8 +5,13 @@
  * @LastEditTime: 2025-02-01 11:33:56
  */
 #include "mental1104/cache.h" // 引入你的LRUCache类定义
-#include "mental1104/container_printer.h"
 #include <gtest/gtest.h>
+
+using mental1104::LFUCache;
+using mental1104::LRUCache;
+using mental1104::make_cache;
+using mental1104::make_lfu_cache;
+using mental1104::make_lru_cache;
 
 // 一个简单的计算函数，用来作为缓存的测试函数
 int compute(int x) { return x * 2; }
@@ -92,7 +97,7 @@ TEST(LRUCacheTest, ComputeFibonacci50) {
   // 计算 Fibonacci(50)
   unsigned long long fib40 = (*cache_ptr)(40);
 
-  mental1104::ContainerPrinter::print(std::move(*cache_ptr));
+  // 保留原有逻辑，无需打印
   // 打印计算结果
   std::cout << "Computed Fibonacci(40): " << fib40 << std::endl;
 
