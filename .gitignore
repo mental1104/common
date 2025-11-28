@@ -1,6 +1,5 @@
 *.egg-info
 build
-.vscode
 a.out
 .env
 __pycache__
