@@ -10,12 +10,12 @@
 #include <unordered_map>
 #include <vector>
 
+#include "mental1104/meta/check_cpp_version.h"
 #include "cache.h"
-// 判断编译器是否支持 C++20
-#if __cplusplus >= 202002L
+#if M1104_HAS_CXX20
 #include <source_location>
 #else
-struct no_source_location {}; // 在 C++17 中使用一个占位类型
+struct no_source_location {}; // C++20 前的占位类型
 #endif
 
 namespace mental1104 {
@@ -25,7 +25,7 @@ private:
   template <typename T, typename = void>
   struct has_size_method : std::false_type {};
 
-#if __cplusplus >= 201703L
+#if M1104_HAS_CXX17
   template <typename T>
   struct has_size_method<T, std::void_t<decltype(std::declval<T>().size())>>
       : std::true_type {};
@@ -56,7 +56,7 @@ private:
   template <typename Container, typename SourceLocation = void>
   static void print_info(const Container &c, bool show_info, std::ostream &out,
                          SourceLocation loc = {}) {
-#if __cplusplus >= 202002L
+#if M1104_HAS_CXX20
     // If C++20 is supported, use source_location to print file and line
     if (show_info) {
       out << "[File: " << loc.file_name() << ", Line: " << loc.line()
@@ -65,7 +65,7 @@ private:
         out << "(size: " << c.size() << ") " << std::endl;
       }
     }
-#elif __cplusplus >= 201703L
+#elif M1104_HAS_CXX17
     // If C++20 is not supported, do not print file and line
     if (show_info) {
       if constexpr (has_size_method<Container>::value) {
@@ -231,7 +231,7 @@ private:
 public:
   // Unified print function, automatically capture file and line numbers
   template <typename Container>
-#if __cplusplus >= 202002L
+#if M1104_HAS_CXX20
   static void print(const Container &c, std::ostream &out = std::cout,
                     bool show_info = true,
                     std::source_location loc = std::source_location::current())
