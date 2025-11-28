@@ -23,8 +23,10 @@ TEST(EpollServerTest, ReadableTriggersCallback) {
 
     srv.add_fd(rfd, EPOLLIN, [&](int fd){
         char buf[64];
-        (void)::read(fd, buf, sizeof(buf));
-        called.fetch_add(1, std::memory_order_relaxed);
+        ssize_t n = ::read(fd, buf, sizeof(buf));
+        if (n > 0) {
+            called.fetch_add(1, std::memory_order_relaxed);
+        }
     });
 
     const char* msg = "hi";
