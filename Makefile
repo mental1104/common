@@ -396,6 +396,26 @@ define _install_cpp
 		echo "[ok] 安装完成。"'
 endef
 
+define _uninstall_cpp
+	$(SUDO_MSG)
+	$(SHELL) -lc 'set -e; \
+		manifest="$(CPP_BUILD_DIR)/install_manifest.txt"; \
+		if [ ! -f "$$manifest" ]; then \
+			echo "[error] 未找到 $$manifest，请先执行 make install-cpp"; exit 1; \
+		fi; \
+		echo "[info] 从 $$manifest 卸载已安装文件"; \
+		while IFS= read -r f; do \
+			[ -z "$$f" ] && continue; \
+			if [ -e "$$f" ]; then \
+				echo "[rm] $$f"; \
+				$(SUDO) rm -f "$$f"; \
+			else \
+				echo "[warn] 跳过缺失文件: $$f"; \
+			fi; \
+		done < "$$manifest"; \
+		echo "[ok] 卸载完成。"'
+endef
+
 define _clean_cpp
 	$(SHELL) -lc 'set -e; \
 		echo "[info] 清理顶层 C++ 构建目录: $(CPP_BUILD_DIR)"; \
@@ -995,7 +1015,7 @@ bench-go:
 	@$(MAKE) --no-print-directory bench-report
 
 # =================== 直达入口（C++） ===================
-.PHONY: git-submodules setup-cpp build-cpp build-cpp-release build-cpp-debug build-cpp-core test-cpp install-cpp clean-cpp coverage-cpp fmt-cpp bench-cpp
+.PHONY: git-submodules setup-cpp build-cpp build-cpp-release build-cpp-debug build-cpp-core test-cpp install-cpp uninstall-cpp clean-cpp coverage-cpp fmt-cpp bench-cpp
 git-submodules:        ; $(call _git_fetch_submodules)
 
 setup-cpp:
@@ -1015,6 +1035,7 @@ build-cpp: build-cpp-release
 
 test-cpp:       ; $(call _test_cpp)
 install-cpp:    ; $(call _install_cpp)
+uninstall-cpp:  ; $(call _uninstall_cpp)
 
 clean-cpp:
 	$(call _clean_cpp_submodules)

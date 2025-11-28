@@ -2,6 +2,7 @@
 
 #include <list>
 #include <map>
+#include <chrono>
 #include <set>
 #include <string>
 #include <vector>
@@ -38,4 +39,33 @@ TEST(ContainsTest, MapTest) {
 TEST(ContainsTest, EmptyContainerTest) {
   std::vector<int> empty_vec;
   EXPECT_FALSE(mental1104::contains(empty_vec, 1)); // 测试空容器，元素不存在
+}
+
+TEST(ExponentialBackoffTest, BasicSequenceAndCap) {
+  using namespace std::chrono;
+  mental1104::ExponentialBackoff backoff(10ms, 50ms, 2);
+  EXPECT_EQ(backoff.next(), 10ms);
+  EXPECT_EQ(backoff.next(), 20ms);
+  EXPECT_EQ(backoff.next(), 40ms);
+  EXPECT_EQ(backoff.next(), 50ms); // 封顶
+  EXPECT_EQ(backoff.next(), 50ms); // 保持封顶
+}
+
+TEST(ExponentialBackoffTest, Reset) {
+  using namespace std::chrono;
+  mental1104::ExponentialBackoff backoff(5ms, 20ms, 3);
+  backoff.next();  // 5
+  backoff.next();  // 15
+  backoff.next();  // 20 capped
+  backoff.reset();
+  EXPECT_EQ(backoff.next(), 5ms); // 重置回初始
+}
+
+TEST(ExponentialBackoffTest, IntegralCtorDefaultsAndCap) {
+  mental1104::ExponentialBackoff backoff_int(5, 12); // 默认 factor=2
+  EXPECT_EQ(backoff_int.next(), std::chrono::milliseconds(5));
+  EXPECT_EQ(backoff_int.next(), std::chrono::milliseconds(10));
+  EXPECT_EQ(backoff_int.next(), std::chrono::milliseconds(12)); // capped
+  mental1104::ExponentialBackoff backoff_default; // 使用默认参数 10,200,2
+  EXPECT_EQ(backoff_default.next(), std::chrono::milliseconds(10));
 }
