@@ -4,7 +4,7 @@
  * @LastEditors: mental1104 mental1104@gmail.com
  * @LastEditTime: 2025-02-01 11:33:56
  */
-#include "mental1104/cache.h" // 引入你的LRUCache类定义
+#include "mental1104/core/cache.h" // 引入你的LRUCache类定义
 #include <gtest/gtest.h>
 
 using mental1104::LFUCache;
