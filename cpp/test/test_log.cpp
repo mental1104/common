@@ -16,7 +16,7 @@
 #include <filesystem>
 #endif
 
-#include "mental1104/cache.h"
+#include "mental1104/core/cache.h"
 #include "mental1104/log.h"
 #include "mental1104/log/adapters/cache_printer.h"
 

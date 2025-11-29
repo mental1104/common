@@ -1,7 +1,7 @@
 #include <benchmark/benchmark.h>
 #include <cmath>
 #include <cstdint>
-#include "mental1104/cache.h"
+#include "mental1104/core/cache.h"
 
 using mental1104::make_cache;
 using mental1104::make_lru_cache;
