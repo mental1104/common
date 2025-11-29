@@ -1,10 +1,14 @@
 #ifndef __MENTAL1104_UTIL
 #define __MENTAL1104_UTIL
 
+#include "mental1104/meta/compiler_support.h"
+
 #include <algorithm>
 #include <chrono>
 #include <map>
 #include <unordered_map>
+#include <cctype>
+#include <string>
 
 #if __cplusplus >= 202302L // 检查是否支持 C++23 的 ranges::contains
 #include <ranges>
@@ -25,6 +29,15 @@ bool contains(const std::map<K, V> &m, const T &value) {
 template <typename Container, typename T>
 bool contains(const Container &c, const T &value) {
   return std::find(c.begin(), c.end(), value) != c.end();
+}
+
+// to_lower_copy：把 string_view 按字符快速转换为全小写 std::string，复用 log 等场景的需求。
+// 预先用 '\0' 填充只是为了分配足够空间，后续 transform 会写满；即便省略填充值（用 string(size_t) 构造）也会默认填 char(0)，行为等价，这里显式写出便于理解。
+inline std::string to_lower_copy(string_view text) {
+  auto lower = [](char c) { return static_cast<char>(std::tolower(static_cast<unsigned char>(c))); };
+  std::string out(text.size(), '\0');
+  std::transform(text.begin(), text.end(), out.begin(), lower);
+  return out;
 }
 
 // 指数退避工具：返回下一次等待时长并步进，带上限与可重置。

@@ -1,5 +1,5 @@
-#ifndef MENTAL1104_META_CHECK_CPP_VERSION_H
-#define MENTAL1104_META_CHECK_CPP_VERSION_H
+#ifndef MENTAL1104_META_COMPILER_SUPPORT_H
+#define MENTAL1104_META_COMPILER_SUPPORT_H
 
 // Normalize the C++ version macro:
 // - MSVC sets __cplusplus inconsistently; _MSVC_LANG is the reliable one there.
@@ -55,4 +55,31 @@
 #  define M1104_HAS_CXX26 0
 #endif
 
-#endif // MENTAL1104_META_CHECK_CPP_VERSION_H
+#include <string>
+#if M1104_HAS_CXX17
+#  include <string_view>
+#endif
+
+// __has_include wrapper: returns 1 when the header is reachable via the normal include search path.
+#if defined(__has_include)
+#  define M1104_HAS_INCLUDE(header) __has_include(header)
+#else
+#  define M1104_HAS_INCLUDE(header) 0
+#endif
+
+// string_view feature flag：C++17 起有 std::string_view，低于此关闭。
+#if M1104_HAS_CXX17
+#  define M1104_HAS_STRING_VIEW 1
+#else
+#  define M1104_HAS_STRING_VIEW 0
+#endif
+
+namespace mental1104 {
+#if M1104_HAS_STRING_VIEW
+using string_view = std::string_view; // C++17 起用 std::string_view
+#else
+using string_view = std::string;      // C++11/14 回退到 std::string 保持接口一致
+#endif
+} // namespace mental1104
+
+#endif // MENTAL1104_META_COMPILER_SUPPORT_H
