@@ -7,7 +7,11 @@ from types import MappingProxyType
 from typing import Any, Callable, Mapping
 
 try:
-    from export_layer import parse_json as _cpp_parse_json
+    from export_layer import parse_json as _cpp_parse_json, get_active_strategy_name as _get_strategy  # type: ignore
+    try:
+        _get_strategy()
+    except Exception:
+        _cpp_parse_json = None  # 无可用后端则视为不可用
 except Exception:
     _cpp_parse_json = None
 
@@ -59,9 +63,20 @@ class JsonUtil:
             elif not isinstance(payload, str):
                 text = str(payload)
 
-            ok, err, offset = _cpp_parse_json(text)
+            res = _cpp_parse_json(text)
+            value = None
+            try:
+                if isinstance(res, (list, tuple)) and len(res) == 4:
+                    ok, value, err, offset = res
+                else:
+                    ok, err, offset = res  # type: ignore[misc]
+            except Exception as exc:  # pragma: no cover - defensive
+                raise ValueError(f"C++ parse_json returned unexpected result: {res!r}") from exc
+
             if not ok:
                 raise ValueError(f"C++ parse_json failed at offset {offset}: {err}")
+            if value is not None:
+                return value
             return json.loads(text)
 
         __parsers["cpp"] = _cpp_loader

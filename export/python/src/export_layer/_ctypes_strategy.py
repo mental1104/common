@@ -64,8 +64,8 @@ class CTypesStrategy(Strategy):
                 return candidate
         raise CTypesUnavailable("no shared library found; set EXPORT_LAYER_CTYPE_LIB to point to libexport_json.so")
 
-    def parse_json(self, payload: str) -> tuple[bool, str, int]:
+    def parse_json(self, payload: str) -> tuple[bool, object | None, str, int]:
         res = self._json_func(payload.encode("utf-8"))
         ok = bool(res.ok)
         error = res.error.decode(sys.getdefaultencoding()) if res.error else ""
-        return ok, error, int(res.offset)
+        return ok, None, error, int(res.offset)

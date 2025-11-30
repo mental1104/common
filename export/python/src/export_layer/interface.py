@@ -34,7 +34,7 @@ def _init_default() -> Strategy:
 
         try:
             _default_strategy = factory()
-            logger.debug("Using export_layer backend: %s", _default_strategy.name)
+            logger.info("Using export_layer backend: %s", _default_strategy.name)
             return _default_strategy
         except BackendUnavailable as exc:
             errors.append(exc)
@@ -47,7 +47,7 @@ def _init_default() -> Strategy:
         for factory in (PyBindStrategy, CTypesStrategy):
             try:
                 _default_strategy = factory()
-                logger.debug("Using export_layer backend (fallback): %s", _default_strategy.name)
+                logger.info("Using export_layer backend (fallback): %s", _default_strategy.name)
                 return _default_strategy
             except BackendUnavailable as exc:
                 errors.append(exc)
@@ -72,7 +72,7 @@ def get_active_strategy_name() -> str:
     return _default_strategy.name
 
 
-def parse_json(payload: str) -> tuple[bool, str, int]:
+def parse_json(payload: str):
     if _default_strategy is None:
         _init_default()
     assert _default_strategy is not None

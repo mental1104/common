@@ -30,5 +30,5 @@ class BackendUnavailable(StrategyError):
 class Strategy:
     name: str
 
-    def parse_json(self, payload: str) -> tuple[bool, str, int]:  # (ok, error, offset)
+    def parse_json(self, payload: str) -> tuple[bool, object | None, str, int]:  # (ok, value, error, offset)
         raise NotImplementedError
