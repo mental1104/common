@@ -4,4 +4,4 @@ Python layout & habits
 - Unit tests under python/test/.
 - Virtualenv: python/.venv used by Makefile; commands set PATH to venv automatically. python/requirements.txt includes pybind11, ujson, orjson, pytest-benchmark, etc.
 - Bench flow: make bench-python -> finds test_benchmark files, writes artifacts to artifacts/bench/python, renders plots via tools/render_bench_plots.py. FILTER narrows files (regex) when FILE not set.
-- CPP-backed JSON parser: load_json supports parsers json/ujson/orjson/cpp; cpp uses export_layer bindings.
+- CPP-backed JSON parser: load_json supports parsers json/ujson/orjson/cpp; cpp uses mental1104_export_layer bindings.

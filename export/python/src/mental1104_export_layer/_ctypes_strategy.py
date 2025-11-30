@@ -56,13 +56,13 @@ class CTypesStrategy(Strategy):
     def _resolve_path(self, lib_path: str | None) -> Path:
         if lib_path:
             return Path(lib_path).expanduser().resolve()
-        env_val = os.getenv(LIB_ENV)
+        env_val = os.getenv("MENTAL1104_EXPORT_LAYER_CTYPE_LIB") or os.getenv(LIB_ENV)
         if env_val:
             return Path(env_val).expanduser().resolve()
         for candidate in _default_candidates():
             if candidate.exists():
                 return candidate
-        raise CTypesUnavailable("no shared library found; set EXPORT_LAYER_CTYPE_LIB to point to libexport_json.so")
+        raise CTypesUnavailable("no shared library found; set MENTAL1104_EXPORT_LAYER_CTYPE_LIB (or legacy EXPORT_LAYER_CTYPE_LIB) to point to libexport_json.so")
 
     def parse_json(self, payload: str) -> tuple[bool, object | None, str, int]:
         res = self._json_func(payload.encode("utf-8"))

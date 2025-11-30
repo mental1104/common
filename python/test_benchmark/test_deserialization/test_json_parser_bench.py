@@ -16,7 +16,7 @@ import pytest
 from mental1104 import JsonParserType, load_json
 from mental1104.utils.bench_tasks import DatasetFactory
 try:
-    from export_layer import get_active_strategy_name
+    from mental1104_export_layer import get_active_strategy_name
 except Exception:
     get_active_strategy_name = None
 
@@ -75,7 +75,7 @@ def _run_benchmark(
 ):
     if parser_type == JsonParserType.CPP and get_active_strategy_name is not None:
         try:
-            benchmark.extra_info["export_backend"] = get_active_strategy_name()
+            benchmark.extra_info["mental1104_export_backend"] = get_active_strategy_name()
         except Exception:
             pass
 
