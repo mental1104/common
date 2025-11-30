@@ -232,6 +232,7 @@ define _test_python
 	$(SHELL) -lc 'set -e; \
 		if [[ ! -x "$(PY_VENV_PYTHON)" ]]; then echo "[error] 未找到项目 venv: $(PY_VENV_PYTHON)，请先执行 make setup-python"; exit 1; fi; \
 		export VIRTUAL_ENV="$(PY_VENV)"; export PATH="$(PY_VENV)/bin:$$PATH"; \
+		export EXPORT_LAYER_LOG_LEVEL=DEBUG; \
 		unset HTTP_PROXY HTTPS_PROXY NO_PROXY ALL_PROXY http_proxy https_proxy no_proxy all_proxy; \
 		export PYTEST_DISABLE_PLUGIN_AUTOLOAD=0; \
 		export PYTEST_PLUGINS=pytest_benchmark.plugin; \
@@ -297,6 +298,7 @@ define _bench_python
 			export VIRTUAL_ENV="$(PY_VENV)"; \
 			export PATH="$(PY_VENV)/bin:$$PATH"; \
 		fi; \
+		export EXPORT_LAYER_LOG_LEVEL=DEBUG; \
 		if ! command -v pytest >/dev/null 2>&1; then echo "[error] 未检测到 pytest；请先执行: make setup-python"; exit 1; fi; \
 		EXP_LIB=""; \
 		for ext in so dylib dll; do \
@@ -364,7 +366,7 @@ define _configure_cpp
 		fi; \
 		extra=""; \
 		[[ -n "$$pybind_dir" ]] && extra="-Dpybind11_DIR=$$pybind_dir"; \
-		$(CMAKE) -S "$(CPP_SRC_DIR)" -B "$(CPP_BUILD_DIR)" -DCMAKE_BUILD_TYPE="$(CPP_BUILD_TYPE)" $$extra; \
+		$(CMAKE) -S "$(CPP_SRC_DIR)" -B "$(CPP_BUILD_DIR)" -DCMAKE_BUILD_TYPE="$(CPP_BUILD_TYPE)" -DPYBIND11_FINDPYTHON=ON $$extra; \
 		echo "[ok] 顶层 cmake 配置完成（$(CPP_BUILD_TYPE)）"'
 endef
 
@@ -1037,8 +1039,15 @@ guard-rust-miri:   ; $(MAKE) --no-print-directory guard-rust MODE=miri
 .PHONY: build-export-cpp clean-export-cpp
 build-export-cpp:
 	$(SHELL) -lc 'set -e; \
+		if [[ -x "$(PY_VENV_PYTHON)" ]]; then \
+			export VIRTUAL_ENV="$(PY_VENV)"; \
+			export PATH="$(PY_VENV)/bin:$$PATH"; \
+		fi; \
+		pybind_dir="$$( $(PY_VENV_PYTHON) -m pybind11 --cmakedir 2>/dev/null || true)"; \
+		extra=""; \
+		[[ -n "$$pybind_dir" ]] && extra="-Dpybind11_DIR=$$pybind_dir"; \
 		cd export/cpp; \
-		$(CMAKE) -S . -B $(EXPORT_CPP_BUILD_DIR) -DEXPORT_BUILD_PYBIND11=ON; \
+		$(CMAKE) -S . -B $(EXPORT_CPP_BUILD_DIR) -DEXPORT_BUILD_PYBIND11=ON -DPYBIND11_FINDPYTHON=ON -DCMAKE_BUILD_TYPE=$(CPP_BUILD_TYPE) $$extra; \
 		$(CMAKE) --build $(EXPORT_CPP_BUILD_DIR); \
 		echo "[ok] export/cpp built (pybind11 optional)"; \
 	'

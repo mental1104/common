@@ -21,7 +21,11 @@ class PyBindStrategy(Strategy):
             raise PyBindUnavailable("module export_pybind not found; build it via CMake") from exc
         if not hasattr(self._mod, "parse_json"):
             raise PyBindUnavailable("export_pybind.parse_json not found; rebuild bindings")
+        self._parse_value = getattr(self._mod, "parse_json_value", None)
 
-    def parse_json(self, payload: str) -> tuple[bool, str, int]:
+    def parse_json(self, payload: str):
+        if callable(self._parse_value):
+            ok, value, error, offset = self._parse_value(payload)
+            return bool(ok), value, str(error), int(offset)
         ok, error, offset = self._mod.parse_json(payload)
-        return bool(ok), str(error), int(offset)
+        return bool(ok), None, str(error), int(offset)
