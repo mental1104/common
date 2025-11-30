@@ -15,6 +15,10 @@ import pytest
 
 from mental1104 import JsonParserType, load_json
 from mental1104.utils.bench_tasks import DatasetFactory
+try:
+    from export_layer import get_active_strategy_name
+except Exception:
+    get_active_strategy_name = None
 
 # -------------------- 基准参数，可按需调整 --------------------
 OBJECT_COUNT = 20_000
@@ -69,6 +73,12 @@ def _run_benchmark(
     inner_repeat: int = INNER_REPEAT,
     rounds: int = PEDANTIC_ROUNDS,
 ):
+    if parser_type == JsonParserType.CPP and get_active_strategy_name is not None:
+        try:
+            benchmark.extra_info["export_backend"] = get_active_strategy_name()
+        except Exception:
+            pass
+
     def _parse_many() -> list[dict[str, object]]:
         last: list[dict[str, object]] | None = None
         for _ in range(inner_repeat):

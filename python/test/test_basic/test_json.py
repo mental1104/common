@@ -123,6 +123,16 @@ class TestParseJson:
         assert "[解析失败]" in output
         # 同上：BinaryIO 下也不强求上下文片段与 '^'
 
+    def test_cpp_backend_if_available(self):
+        """
+        当 C++ 导出层可用时，应能解析成功；不可用则跳过。
+        """
+        if "cpp" not in JsonUtil.get_parser_names():
+            pytest.skip("C++ export backend not available")
+        result = load_json(valid_json, parser=JsonParserType.CPP)
+        assert isinstance(result, dict)
+        assert result["name"] == "Espeon"
+
 
 class TestDumpJson:
     # ==== 返回字符串（默认 ensure_ascii=True）====

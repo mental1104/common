@@ -21,3 +21,6 @@ ruff
 ujson
 orjson
 semgrep
+pybind11
+export-layer @ file:../export/python
+

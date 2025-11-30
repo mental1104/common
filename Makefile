@@ -60,6 +60,9 @@ DOCKER_DISABLED := $(if $(and $(SKIP_DOCKER_ON_DARWIN),$(IS_DARWIN)),1,)
 # ---------- 工具/路径/参数 ----------
 PYTHON ?= python3
 PIP3 ?= pip3
+PY_VENV ?= $(REPO_ROOT)/python/.venv
+PY_VENV_PYTHON := $(PY_VENV)/bin/python
+PY_VENV_PIP := $(PY_VENV)/bin/pip
 CMAKE ?= cmake
 CTEST ?= ctest
 CPP_SRC_DIR := cpp
@@ -71,6 +74,7 @@ CPP_TEST_FILES ?=
 CPP_TEST_DIRS ?=
 CPP_BENCH_FILES ?=
 CPP_LOG_LEVEL ?=
+EXPORT_CPP_BUILD_DIR ?= $(REPO_ROOT)/export/cpp/build
 
 # ---------- 通用测试 verbose 开关 ----------
 VERBOSE ?= 0
@@ -176,20 +180,32 @@ endef
 define _setup_python
 	$(SHELL) -lc 'set -e; \
 		echo "[info] 平台: $(UNAME_S)$(if $(IS_UBUNTU), (ubuntu),)"; \
+		if [[ -e "$(PY_VENV_PYTHON)" && ! -x "$(PY_VENV_PYTHON)" ]]; then rm -rf "$(PY_VENV)"; fi; \
+		if [[ ! -x "$(PY_VENV_PYTHON)" ]]; then \
+			echo "[venv] 创建 $(PY_VENV)"; \
+			$(PYTHON) -m venv "$(PY_VENV)"; \
+		else \
+			echo "[venv] 已存在: $(PY_VENV)"; \
+		fi; \
+		chmod u+x "$(PY_VENV)"/bin/python* "$(PY_VENV)"/bin/pip* 2>/dev/null || true; \
+		export VIRTUAL_ENV="$(PY_VENV)"; export PATH="$(PY_VENV)/bin:$$PATH"; \
+		echo "[venv] 升级 pip/setuptools/wheel"; \
+		"$(PY_VENV_PIP)" install --no-build-isolation --upgrade pip setuptools wheel $(BREAK_FLAG); \
 		if [[ -f python/requirements.txt ]]; then \
-			echo "[pip] 安装依赖到用户目录: python/requirements.txt"; \
-			$(PYTHON) -m pip install --user -r python/requirements.txt $(BREAK_FLAG); \
+			echo "[pip] 安装依赖到 venv: python/requirements.txt (no build isolation)"; \
+			cd python; "$(PY_VENV_PIP)" install --no-build-isolation -r requirements.txt $(BREAK_FLAG); \
 		else \
 			echo "[info] 未找到 python/requirements.txt，跳过依赖安装。"; \
 		fi; \
+		cd "$(REPO_ROOT)"; \
 		if [[ -f python/generate_init.py ]]; then \
 			echo "[info] 执行 python/generate_init.py …"; \
-			$(PYTHON) python/generate_init.py; \
+			"$(PY_VENV_PYTHON)" python/generate_init.py; \
 		else \
 			echo "[info] 未找到 python/generate_init.py，跳过。"; \
 		fi; \
 		echo "[compat] 扫描并修复使用 | 联合类型注解的源码（兼容 Py3.9）…"; \
-		files=$$(grep -R -l -E ":\s*[^#]*\|[^=]*" python || true); \
+		files=$$(grep -R -l -E ":\s*[^#]*\|[^=]*" python --exclude-dir=.venv || true); \
 		inserted=0; \
 		for f in $$files; do \
 		  [ -f "$$f" ] || continue; \
@@ -206,21 +222,38 @@ END{ if(ins==0) ins=0; for(i=1;i<=NR;i++){ print lines[i]; if(i==ins) print \"fr
 		echo "[compat] files_found=$$cnt, inserted=$$inserted"; \
 		echo "[info] 构建本地 wheel（不安装本体）…"; \
 		mkdir -p python/dist; \
-		$(PYTHON) -m pip wheel --no-deps -w python/dist python/; \
-		echo "[ok] setup 完成（依赖 --user 安装 + 构建 wheel，不安装本体）。"'
+		"$(PY_VENV_PYTHON)" -m pip wheel --no-deps -w python/dist python/; \
+		echo "[ok] setup 完成（venv 安装依赖 + 构建 wheel，不安装本体）。"; \
+		echo "[hint] 如需使用此 venv，请执行: source $(PY_VENV)/bin/activate"'
 endef
 
 define _test_python
 	$(SUDO_MSG)
 	$(SHELL) -lc 'set -e; \
+		if [[ ! -x "$(PY_VENV_PYTHON)" ]]; then echo "[error] 未找到项目 venv: $(PY_VENV_PYTHON)，请先执行 make setup-python"; exit 1; fi; \
+		export VIRTUAL_ENV="$(PY_VENV)"; export PATH="$(PY_VENV)/bin:$$PATH"; \
 		unset HTTP_PROXY HTTPS_PROXY NO_PROXY ALL_PROXY http_proxy https_proxy no_proxy all_proxy; \
+		export PYTEST_DISABLE_PLUGIN_AUTOLOAD=0; \
+		export PYTEST_PLUGINS=pytest_benchmark.plugin; \
+		if ! "$(PY_VENV_PIP)" show pytest-benchmark >/dev/null 2>&1; then \
+			echo "[info] 安装 pytest-benchmark 到 venv …"; \
+			"$(PY_VENV_PIP)" install pytest-benchmark $(BREAK_FLAG); \
+		fi; \
 		echo "[proxy] disabled for pytest (HTTP_PROXY/HTTPS_PROXY/NO_PROXY/ALL_PROXY 皆已清空)"; \
-		if ! command -v pytest >/dev/null 2>/dev/null; then echo "[warn] 未检测到 pytest；请先执行: make setup-python"; exit 1; fi; \
+		PY_BIN="$(PY_VENV_PYTHON)"; \
+		if ! "$$PY_BIN" -m pytest --version >/dev/null 2>&1; then echo "[warn] 未检测到 pytest；请先执行: make setup-python"; exit 1; fi; \
+		EXP_LIB=""; \
+		for ext in so dylib dll; do \
+			cand="$(EXPORT_CPP_BUILD_DIR)/libexport_json.$$ext"; \
+			if [[ -f "$$cand" ]]; then EXP_LIB="$$cand"; break; fi; \
+		done; \
+		if [[ -n "$$EXP_LIB" ]]; then export EXPORT_LAYER_CTYPE_LIB="$$EXP_LIB"; fi; \
+		export PYTHONPATH="$(EXPORT_CPP_BUILD_DIR):$$PYTHONPATH"; \
 		cd python; \
 		kexpr="not bench and not benchmark"; \
 		[[ -n "$${FILTER:-}" ]] && kexpr="($${FILTER}) and $$kexpr"; \
 		[[ -n "$${FILE:-}" ]] && kexpr="($${FILE}) and $$kexpr"; \
-		$(PYTHON) -m pytest $(PYTEST_V) -k "$$kexpr"'
+		"$$PY_BIN" -m pytest $(PYTEST_V) -k "$$kexpr"'
 endef
 
 define _install_python
@@ -237,6 +270,10 @@ define _clean_python
 		find python -type d -name "__pycache__" -exec rm -rf {} +; \
 		find python -type f -name "*.py[co]" -delete; \
 		find python -type d -name ".pytest_cache" -exec rm -rf {} +; \
+		if [[ -d "python/.venv" ]]; then \
+			echo "[info] 移除 Python venv: python/.venv"; \
+			rm -rf python/.venv; \
+		fi; \
 		echo "[ok] clean 完成。"'
 endef
 
@@ -256,7 +293,18 @@ endef
 
 define _bench_python
 	$(SHELL) -lc 'set -e; \
+		if [[ -x "$(PY_VENV_PYTHON)" ]]; then \
+			export VIRTUAL_ENV="$(PY_VENV)"; \
+			export PATH="$(PY_VENV)/bin:$$PATH"; \
+		fi; \
 		if ! command -v pytest >/dev/null 2>&1; then echo "[error] 未检测到 pytest；请先执行: make setup-python"; exit 1; fi; \
+		EXP_LIB=""; \
+		for ext in so dylib dll; do \
+			cand="$(EXPORT_CPP_BUILD_DIR)/libexport_json.$$ext"; \
+			if [[ -f "$$cand" ]]; then EXP_LIB="$$cand"; break; fi; \
+		done; \
+		if [[ -n "$$EXP_LIB" ]]; then export EXPORT_LAYER_CTYPE_LIB="$$EXP_LIB"; fi; \
+		export PYTHONPATH="$(EXPORT_CPP_BUILD_DIR):$(REPO_ROOT)/export/python/src:$$PYTHONPATH"; \
 		cd python; \
 		if ! $(PYTHON) -m pytest -q --help 2>/dev/null | grep -qi benchmark; then \
 			echo "[warn] 未检测到 pytest-benchmark 插件，回退到名称筛选"; \
@@ -269,6 +317,8 @@ define _bench_python
 		bench_files=$$(find test_benchmark -type f -name "test_*.py" | sort); \
 		if [ -n "$${FILE:-}" ]; then \
 			bench_files=$$(printf "%s\n" $$bench_files | grep -E "$${FILE}" || true); \
+		elif [ -n "$${FILTER:-}" ]; then \
+			bench_files=$$(printf "%s\n" $$bench_files | grep -Ei "$${FILTER}" || true); \
 		fi; \
 		if [ -z "$$bench_files" ]; then \
 			echo "[warn] 未找到 test_benchmark/* 基准文件，回退到名称筛选"; \
@@ -308,7 +358,13 @@ endef
 define _configure_cpp
 	$(SHELL) -lc 'set -e; \
 		mkdir -p "$(CPP_BUILD_DIR)"; \
-		$(CMAKE) -S "$(CPP_SRC_DIR)" -B "$(CPP_BUILD_DIR)" -DCMAKE_BUILD_TYPE="$(CPP_BUILD_TYPE)"; \
+		pybind_dir=""; \
+		if [[ -x "$(PY_VENV_PYTHON)" ]]; then \
+			pybind_dir="$$( "$(PY_VENV_PYTHON)" -m pybind11 --cmakedir 2>/dev/null || true)"; \
+		fi; \
+		extra=""; \
+		[[ -n "$$pybind_dir" ]] && extra="-Dpybind11_DIR=$$pybind_dir"; \
+		$(CMAKE) -S "$(CPP_SRC_DIR)" -B "$(CPP_BUILD_DIR)" -DCMAKE_BUILD_TYPE="$(CPP_BUILD_TYPE)" $$extra; \
 		echo "[ok] 顶层 cmake 配置完成（$(CPP_BUILD_TYPE)）"'
 endef
 
@@ -977,6 +1033,18 @@ guard-rust-mem:    ; $(MAKE) --no-print-directory guard-rust MODE=mem
 guard-rust-race:   ; $(MAKE) --no-print-directory guard-rust MODE=race
 guard-rust-miri:   ; $(MAKE) --no-print-directory guard-rust MODE=miri
 
+# =================== Export layer (C++ JSON -> Python) ===================
+.PHONY: build-export-cpp clean-export-cpp
+build-export-cpp:
+	$(SHELL) -lc 'set -e; \
+		cd export/cpp; \
+		$(CMAKE) -S . -B $(EXPORT_CPP_BUILD_DIR) -DEXPORT_BUILD_PYBIND11=ON; \
+		$(CMAKE) --build $(EXPORT_CPP_BUILD_DIR); \
+		echo "[ok] export/cpp built (pybind11 optional)"; \
+	'
+clean-export-cpp:
+	$(SHELL) -lc 'rm -rf $(EXPORT_CPP_BUILD_DIR); echo "[ok] cleaned export/cpp build"'
+
 .PHONY: guard guard-cpp guard-go guard-rust guard-python
 guard-cpp:    ; $(call _guard_cpp)
 guard-go:     ; $(call _guard_go)
@@ -1001,7 +1069,7 @@ coverage-rust:; $(call _coverage_rust)
 .PHONY: setup-python build-python test-python install-python clean-python coverage-python fmt-python bench-python
 setup-python:   ; $(call _setup_python)
 build-python:   | setup-python
-test-python:    ; $(call _test_python)
+test-python:    | build-export-cpp ; $(call _test_python)
 install-python: ; $(call _install_python)
 clean-python:   ; $(call _clean_python)
 coverage-python:; $(call _coverage_python)
