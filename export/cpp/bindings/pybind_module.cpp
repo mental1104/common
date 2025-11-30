@@ -40,12 +40,12 @@ py::object rapidjson_value_to_py(const rapidjson::Value& v) {
 
 }  // namespace
 
-PYBIND11_MODULE(export_pybind, m) {
-    m.doc() = "Pybind11 bindings for export_layer JSON";
+PYBIND11_MODULE(mental1104_export_layer_pybind, m) {
+    m.doc() = "Pybind11 bindings for mental1104_export_layer JSON";
     m.def(
         "parse_json",
         [](const std::string &payload) {
-            auto r = export_layer::parse_json(payload, mental1104::JsonParser::CJSON);
+            auto r = mental1104_export_layer::parse_json(payload, mental1104::JsonParser::CJSON);
             return py::make_tuple(r.ok, r.error, r.offset);
         },
         R"pbdoc(Parse JSON with the C++ backend; returns (ok, error, offset).)pbdoc");

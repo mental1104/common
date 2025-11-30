@@ -22,5 +22,4 @@ ujson
 orjson
 semgrep
 pybind11
-export-layer @ file:../export/python
-
+mental1104_export_layer @ file://../export/python

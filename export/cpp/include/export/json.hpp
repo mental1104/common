@@ -6,7 +6,7 @@
 
 #include "mental1104/json.h"
 
-namespace export_layer {
+namespace mental1104_export_layer {
 
 struct JsonParseResult {
     bool ok{false};
@@ -28,4 +28,4 @@ struct export_json_result {
 export_json_result export_parse_json(const char* input);
 }
 
-}  // namespace export_layer
+}  // namespace mental1104_export_layer

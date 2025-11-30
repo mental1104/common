@@ -1,6 +1,6 @@
 #include "export/json.hpp"
 
-namespace export_layer {
+namespace mental1104_export_layer {
 
 JsonParseResult parse_json(std::string_view input, mental1104::JsonParser parser) {
     JsonParseResult result{};
@@ -11,4 +11,4 @@ JsonParseResult parse_json(std::string_view input, mental1104::JsonParser parser
     return result;
 }
 
-}  // namespace export_layer
+}  // namespace mental1104_export_layer

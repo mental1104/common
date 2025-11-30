@@ -14,8 +14,12 @@ _default_strategy: Optional[Strategy] = None
 def _init_default() -> Strategy:
     global _default_strategy
     # Allow users to force a strategy via ENV; default preference is pybind11 > ctypes.
-    env_choice = os.getenv("EXPORT_LAYER_STRATEGY", "").lower().strip()
-    allow_fallback = os.getenv("EXPORT_LAYER_ALLOW_FALLBACK", "1") != "0"
+    env_choice = os.getenv("MENTAL1104_EXPORT_LAYER_STRATEGY") or os.getenv("EXPORT_LAYER_STRATEGY", "")
+    env_choice = env_choice.lower().strip()
+    allow_fallback_val = os.getenv("MENTAL1104_EXPORT_LAYER_ALLOW_FALLBACK")
+    if allow_fallback_val is None:
+        allow_fallback_val = os.getenv("EXPORT_LAYER_ALLOW_FALLBACK", "1")
+    allow_fallback = allow_fallback_val != "0"
     if env_choice:
         candidates = [env_choice]
     else:
@@ -34,11 +38,11 @@ def _init_default() -> Strategy:
 
         try:
             _default_strategy = factory()
-            logger.info("Using export_layer backend: %s", _default_strategy.name)
+            logger.info("Using mental1104_export_layer backend: %s", _default_strategy.name)
             return _default_strategy
         except BackendUnavailable as exc:
             errors.append(exc)
-            logger.warning("export_layer backend unavailable: %s", exc)
+            logger.warning("mental1104_export_layer backend unavailable: %s", exc)
             if env_choice and not allow_fallback:
                 break
 
@@ -47,13 +51,13 @@ def _init_default() -> Strategy:
         for factory in (PyBindStrategy, CTypesStrategy):
             try:
                 _default_strategy = factory()
-                logger.info("Using export_layer backend (fallback): %s", _default_strategy.name)
+                logger.info("Using mental1104_export_layer backend (fallback): %s", _default_strategy.name)
                 return _default_strategy
             except BackendUnavailable as exc:
                 errors.append(exc)
-                logger.warning("export_layer backend unavailable: %s", exc)
+                logger.warning("mental1104_export_layer backend unavailable: %s", exc)
 
-    raise StrategyError("No usable export_layer backend", errors)
+    raise StrategyError("No usable mental1104_export_layer backend", errors)
 
 
 def choose_strategy(name: str):

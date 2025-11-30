@@ -1,4 +1,4 @@
-"""Python entrypoint for the export layer.
+"""Python entrypoint for the mental1104 export layer.
 
 Provides a simple API to call C++ backends via pybind11 (preferred) or ctypes
 fallback. Currently exposes `parse_json`, backed by the canonical
@@ -12,7 +12,8 @@ import os
 
 
 def _setup_logging() -> None:
-    level_name = os.getenv("EXPORT_LAYER_LOG_LEVEL", "INFO").upper()
+    level_name = os.getenv("MENTAL1104_EXPORT_LAYER_LOG_LEVEL") or os.getenv("EXPORT_LAYER_LOG_LEVEL", "INFO")
+    level_name = level_name.upper()
     level = getattr(logging, level_name, logging.INFO)
     root = logging.getLogger()
     if not root.handlers:

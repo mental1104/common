@@ -191,9 +191,31 @@ define _setup_python
 		export VIRTUAL_ENV="$(PY_VENV)"; export PATH="$(PY_VENV)/bin:$$PATH"; \
 		echo "[venv] 升级 pip/setuptools/wheel"; \
 		"$(PY_VENV_PIP)" install --no-build-isolation --upgrade pip setuptools wheel $(BREAK_FLAG); \
+		if [[ -d export/python ]]; then \
+			echo "[pip] 安装 mental1104_export_layer (editable)"; \
+			cd export/python; "$(PY_VENV_PIP)" install --no-build-isolation -e . $(BREAK_FLAG); \
+			cd "$(REPO_ROOT)"; \
+		else \
+			echo "[warn] 未找到 export/python，跳过 mental1104_export_layer 安装"; \
+		fi; \
 		if [[ -f python/requirements.txt ]]; then \
 			echo "[pip] 安装依赖到 venv: python/requirements.txt (no build isolation)"; \
+			EXPORT_ABS_DIR="$(REPO_ROOT)/export/python"; \
+			if [[ ! -d "$$EXPORT_ABS_DIR" ]]; then echo "[err] 缺少 export/python 目录：$$EXPORT_ABS_DIR"; exit 1; fi; \
+			REQ_FILE="$(REPO_ROOT)/python/requirements.txt"; \
+			REQ_BAK="$$REQ_FILE.bak.setup"; \
+			restore_req(){ [[ -f "$$REQ_BAK" ]] && mv "$$REQ_BAK" "$$REQ_FILE"; }; \
+			trap 'restore_req' EXIT; \
+			if grep -q 'file://../export/python' "$$REQ_FILE"; then \
+				cp "$$REQ_FILE" "$$REQ_BAK"; \
+				python3 - "$$REQ_FILE" "$$EXPORT_ABS_DIR" <<-'PY'
+from pathlib import Path; import sys
+req=Path(sys.argv[1]); target=Path(sys.argv[2]).resolve()
+req.write_text(req.read_text().replace("file://../export/python", f"file://{target}"))
+PY
+			fi; \
 			cd python; "$(PY_VENV_PIP)" install --no-build-isolation -r requirements.txt $(BREAK_FLAG); \
+			restore_req; trap - EXIT; \
 		else \
 			echo "[info] 未找到 python/requirements.txt，跳过依赖安装。"; \
 		fi; \

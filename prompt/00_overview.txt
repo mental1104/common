@@ -1,5 +1,5 @@
 High-level context (common repo)
-- Polyglot monorepo: Python (mental1104 package, export_layer bindings), C++ core libs under cpp/, Go/Rust dirs, plus Makefile entrypoints for setup/test/bench per language.
+- Polyglot monorepo: Python (mental1104 package, mental1104_export_layer bindings), C++ core libs under cpp/, Go/Rust dirs, plus Makefile entrypoints for setup/test/bench per language.
 - Avoid undoing user changes; respect existing worktree. Default to ASCII when editing.
 - Prefer ripgrep for search; use apply_patch for manual edits.
 - Tests/bench via Make targets; many commands expect python/.venv and CPP builds.
