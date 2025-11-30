@@ -1,0 +1,35 @@
+# Editor/OS
+.DS_Store
+.vscode/
+.idea/
+
+# Python
+.venv/
+__pycache__/
+.pytest_cache/
+*.pyc
+
+# Node/TypeScript
+node_modules/
+dist/
+coverage/
+
+# C/C++
+build/
+CMakeFiles/
+*.o
+*.a
+*.out
+
+# Rust/Go
+target/
+*.profraw
+*.profdata
+
+# Java
+*.class
+*.jar
+.mvn/
+
+# Misc
+*.log
