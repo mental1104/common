@@ -1,0 +1,5 @@
+Makefile behaviors
+- setup-python: creates python/.venv, installs requirements (uses mirror vars), builds wheel but does not activate shell.
+- bench-python: auto-activates venv in subshell, sets EXPORT_LAYER_CTYPE_LIB if libexport_json.* exists, sets PYTHONPATH to export/cpp/build and export/python/src. Finds test_benchmark/test_*.py; FILE filters exact, FILTER filters filenames when FILE empty, also passed to -k.
+- clean-python: removes caches/build artifacts and deletes python/.venv.
+- _configure_cpp: passes -Dpybind11_DIR from venv if pybind11 installed.

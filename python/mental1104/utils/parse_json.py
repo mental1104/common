@@ -1,11 +1,15 @@
 from __future__ import annotations
 import json
 import io
-import importlib
 from enum import Enum
 from functools import singledispatch
 from types import MappingProxyType
 from typing import Any, Callable, Mapping
+
+try:
+    from export_layer import parse_json as _cpp_parse_json
+except Exception:
+    _cpp_parse_json = None
 
 __all__ = ["JsonParserType", "JsonUtil", "load_json", "dump_json"]
 
@@ -16,6 +20,7 @@ class JsonParserType(str, Enum):
     JSON = "json"
     UJSON = "ujson"
     ORJSON = "orjson"
+    CPP = "cpp"
 
     @classmethod
     def available(cls) -> tuple["JsonParserType", ...]:
@@ -45,6 +50,22 @@ class JsonUtil:
         __modules["orjson"] = _orjson
     except Exception:
         pass
+
+    if _cpp_parse_json is not None:
+        def _cpp_loader(payload: str | bytes) -> Any:
+            text = payload
+            if isinstance(payload, (bytes, bytearray)):
+                text = payload.decode("utf-8", errors="replace")
+            elif not isinstance(payload, str):
+                text = str(payload)
+
+            ok, err, offset = _cpp_parse_json(text)
+            if not ok:
+                raise ValueError(f"C++ parse_json failed at offset {offset}: {err}")
+            return json.loads(text)
+
+        __parsers["cpp"] = _cpp_loader
+        __modules["cpp"] = None
 
     __parser_names: tuple[str, ...] = tuple(__parsers.keys())
 

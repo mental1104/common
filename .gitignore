@@ -39,3 +39,4 @@ build-asan
 
 .env.mk
 artifacts/
+.venv
