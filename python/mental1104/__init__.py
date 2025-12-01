@@ -139,7 +139,7 @@ __all__ = [
     'yaml_to_json',
 ]
 
-def __getattr__(name):
+def __getattr__(name):  # __getattr__ 在 from mental1104 import foo 时触发惰性加载
     # PEP 562: lazy attribute access for risky modules & fallback
     try:
         modname = _EXPORT_MAP[name]
