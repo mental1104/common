@@ -402,6 +402,8 @@ def _match_filters(rec: BenchmarkRecord, filters: dict[str, str] | None) -> bool
         if str(actual) != expected:
             return False
     return True
+
+
 # 统一的浅色调配色，方便在不同图表间保持视觉一致性
 _PALETTE = [
     "#5B8FF9",

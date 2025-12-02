@@ -19,7 +19,9 @@ bool is_hex_string(const std::string &s) {
 struct ConstEngine {
   using result_type = uint64_t;
   static constexpr result_type min() { return 0; }
-  static constexpr result_type max() { return 1; } // max 必须大于 min 以通过 uniform_int_distribution 的要求
+  static constexpr result_type max() {
+    return 1;
+  } // max 必须大于 min 以通过 uniform_int_distribution 的要求
   explicit ConstEngine(uint64_t seed = 0) { (void)seed; }
   result_type operator()() { return 0; }
 };

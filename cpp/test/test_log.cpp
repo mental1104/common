@@ -1,10 +1,10 @@
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <forward_list>
 #include <list>
 #include <map>
 #include <string>
-#include <algorithm>
 #include <unordered_map>
 #include <vector>
 // 如果C++版本大于等于C++20，则将format库引入
@@ -33,10 +33,9 @@ TEST(ContainerPrinterTest, PrintForwardList) {
   // clang-format on
 // forward_list没有 .size() 方法
 #if __cplusplus >= 202002L
-  EXPECT_EQ(out,
-            std::format("[File: {}, Line: {}] {{1, 2, 3, 4, 5, 6, 7}}\n",
-                        std::string(std::filesystem::absolute(__FILE__)),
-                        line));
+  EXPECT_EQ(out, std::format("[File: {}, Line: {}] {{1, 2, 3, 4, 5, 6, 7}}\n",
+                             std::string(std::filesystem::absolute(__FILE__)),
+                             line));
 #elif __cplusplus >= 201703L
   EXPECT_EQ(out, "{1, 2, 3, 4, 5, 6, 7}\n");
 #else
@@ -67,11 +66,10 @@ TEST(ContainerPrinterTest, PrintVector) {
     int line = __LINE__; auto out = mental1104::log_detail::format_container(v);
   // clang-format on
 #if __cplusplus >= 202002L
-  EXPECT_EQ(out,
-            std::format("[File: {}, Line: {}] (size: "
-                        "7) \n{{1, 2, 3, 4, 5, 6, 7}}\n",
-                        std::string(std::filesystem::absolute(__FILE__)),
-                        line));
+  EXPECT_EQ(out, std::format("[File: {}, Line: {}] (size: "
+                             "7) \n{{1, 2, 3, 4, 5, 6, 7}}\n",
+                             std::string(std::filesystem::absolute(__FILE__)),
+                             line));
 #else
   EXPECT_EQ(out, "(size: 7) \n{1, 2, 3, 4, 5, 6, 7}\n");
 #endif
@@ -83,11 +81,10 @@ TEST(ContainerPrinterTest, PrintMap) {
     int line = __LINE__; auto out = mental1104::log_detail::format_container(m);
   // clang-format on
 #if __cplusplus >= 202002L
-  EXPECT_EQ(
-      out,
-      std::format("[File: {}, Line: {}] (size: 3) \n{{\n    "
-                  "\"a\": \"1\",\n    \"b\": \"2\",\n    \"c\": \"3\"\n}}\n",
-                  std::string(std::filesystem::absolute(__FILE__)), line));
+  EXPECT_EQ(out, std::format(
+                     "[File: {}, Line: {}] (size: 3) \n{{\n    "
+                     "\"a\": \"1\",\n    \"b\": \"2\",\n    \"c\": \"3\"\n}}\n",
+                     std::string(std::filesystem::absolute(__FILE__)), line));
 #else
   EXPECT_EQ(out,
             "(size: 3) \n{\n    \"a\": \"1\",\n    \"b\": \"2\",\n    \"c\": "

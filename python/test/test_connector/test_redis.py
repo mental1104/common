@@ -41,6 +41,7 @@ class TestRedisLock:
                 yield client
         except Exception as e:
             pytest.skip("Cannot connect to Redis: " + str(e))
+
     @pytest.fixture(scope="module")
     def redis_bloom_client(self, redis_client):
         """

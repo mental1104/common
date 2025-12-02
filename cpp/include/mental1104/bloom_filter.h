@@ -1,24 +1,23 @@
 #ifndef __MENTAL1104_BLOOM_FILTER
 #define __MENTAL1104_BLOOM_FILTER
 
-#include <cstddef>
 #include <cmath>
+#include <cstddef>
 #include <functional>
 #include <string>
 #include <vector>
 
 // 通用模板版布隆过滤器
-template <typename Key, typename Hash = std::hash<Key>>
-class BasicBloomFilter {
+template <typename Key, typename Hash = std::hash<Key>> class BasicBloomFilter {
 public:
   using key_type = Key;
   using hash_type = Hash;
 
 protected:
-  std::size_t m;                 // 位数组大小
-  std::size_t k;                 // 哈希函数个数
-  std::vector<bool> bit_array;   // 位数组
-  hash_type hash_fn;             // 针对 Key 的哈希函数对象
+  std::size_t m;               // 位数组大小
+  std::size_t k;               // 哈希函数个数
+  std::vector<bool> bit_array; // 位数组
+  hash_type hash_fn;           // 针对 Key 的哈希函数对象
 
   // 使用一个基础哈希值 + seed 混合出 k 个下标
   std::size_t hash(const key_type &key, std::size_t seed) const {
@@ -85,7 +84,6 @@ public:
 // 原有所有代码、单测继续用 BloomFilter 就行
 using BloomFilter = BasicBloomFilter<std::string, std::hash<std::string>>;
 
-
 #include <mutex>
 #include <shared_mutex> // C++17
 #include <utility>
@@ -98,8 +96,8 @@ using BloomFilter = BasicBloomFilter<std::string, std::hash<std::string>>;
 template <typename Key, typename Hash = std::hash<Key>>
 class ThreadSafeBloomFilter {
 public:
-  using key_type        = Key;
-  using hash_type       = Hash;
+  using key_type = Key;
+  using hash_type = Hash;
   using underlying_type = BasicBloomFilter<Key, Hash>;
 
   // 构造：保持和 BasicBloomFilter 一致
@@ -120,7 +118,7 @@ public:
     if (this == &other)
       return *this;
     // 避免死锁：按地址排序上锁
-    ThreadSafeBloomFilter *first  = this < &other ? this : &other;
+    ThreadSafeBloomFilter *first = this < &other ? this : &other;
     ThreadSafeBloomFilter *second = this < &other ? &other : this;
     std::unique_lock lk1(first->mutex_);
     std::unique_lock lk2(second->mutex_);
@@ -159,31 +157,28 @@ public:
   }
 
   // 如果你确实需要访问底层对象，可以提供一个带锁执行的 helper
-  template <typename Fn>
-  auto with_lock(Fn &&fn) {
+  template <typename Fn> auto with_lock(Fn &&fn) {
     std::unique_lock lk(mutex_);
     return fn(bf_);
   }
 
-  template <typename Fn>
-  auto with_shared_lock(Fn &&fn) const {
+  template <typename Fn> auto with_shared_lock(Fn &&fn) const {
     std::shared_lock lk(mutex_);
     return fn(bf_);
   }
 
 private:
   mutable std::shared_mutex mutex_;
-  underlying_type           bf_;
+  underlying_type bf_;
 };
 
 // 常用：字符串版线程安全 BloomFilter
-// 用法：ThreadSafeStringBloomFilter bf(n, p); 和原来 BloomFilter 一样用 insert/contains
+// 用法：ThreadSafeStringBloomFilter bf(n, p); 和原来 BloomFilter 一样用
+// insert/contains
 using ThreadSafeStringBloomFilter =
     ThreadSafeBloomFilter<std::string, std::hash<std::string>>;
 
 // 如果你想保持命名风格，也可以再别名一个更短的名字：
 // using TSBloomFilter = ThreadSafeStringBloomFilter;
-
-
 
 #endif // __MENTAL1104_BLOOM_FILTER

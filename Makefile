@@ -6,15 +6,18 @@ SHELL := /bin/bash
 REPO_ROOT := $(abspath $(dir $(firstword $(MAKEFILE_LIST))))
 ENV_SRC    ?= $(REPO_ROOT)/.env
 ENV_STAMP  ?= $(REPO_ROOT)/.env.active
+ENV_MK     := $(abspath $(ENV_SRC)).mk
 ENV_HAVE   := $(wildcard $(ENV_SRC))
+ENV_KEYS   := $(if $(ENV_HAVE),$(shell awk 'BEGIN{FS="="} /^[[:space:]]*(#|$$)/{next} {k=$$1; sub(/^[[:space:]]*export[[:space:]]+/,"",k); sub(/[[:space:]]+/,"",k); print k}' $(ENV_SRC)))
 
-# 仅当 .env 与激活标记同时存在时才导入；否则将 ENV_MK 设为 /dev/null 以免触发任何配方
-ifeq ($(strip $(ENV_HAVE)$(wildcard $(ENV_STAMP))),)
-  ENV_MK := /dev/null
+# 仅当 .env 与激活标记同时存在时才导入
+ifeq ($(and $(ENV_HAVE),$(wildcard $(ENV_STAMP))),)
+  ENV_ACTIVE := 0
 else
-  ENV_MK := $(abspath $(ENV_SRC)).mk
+  ENV_ACTIVE := 1
+endif
 
-  $(ENV_MK): $(ENV_SRC)
+$(ENV_MK): $(ENV_SRC)
 	@set -e
 	awk '\
 	  /^[[:space:]]*#/ || /^[[:space:]]*$$/ { next } \
@@ -28,7 +31,14 @@ else
 	    print "export " key " = " val; }' \
 	  "$(ENV_SRC)" > "$(ENV_MK)"
 	echo "[ok] .env -> $(ENV_MK)"
-  include $(ENV_MK)
+
+ifeq ($(ENV_ACTIVE),1)
+include $(ENV_MK)
+endif
+
+# 若未激活 env，则清空关键环境变量，避免沿用旧值导致连接外部服务
+ifeq ($(ENV_ACTIVE),0)
+  $(foreach k,$(ENV_KEYS),$(eval override $(k)=))
 endif
 
 .PHONY: env-guard env-print env-expose env-clean
@@ -41,64 +51,45 @@ env-print:
 env-expose:
 	@[ -f "$(ENV_MK)" ] && sed -E 's/^export[[:space:]]+([^=[:space:]]+)[[:space:]]*=[[:space:]]*(.*)$/export \1=\2/' "$(ENV_MK)" || true
 env-clean:
-	@[ -f "$(ENV_STAMP)" ] && rm -f "$(ENV_STAMP)" || true; \
-	@[ "$(ENV_MK)" != "/dev/null" ] && rm -f "$(ENV_MK)" || true; \
+	if [ -f "$(ENV_STAMP)" ]; then rm -f "$(ENV_STAMP)"; fi; \
+	if [ -f "$(ENV_MK)" ]; then rm -f "$(ENV_MK)"; fi; \
 	echo "[ok] 已移除导入文件与激活标记：$(ENV_MK) $(ENV_STAMP)"
 # ============================================================
 
 .DEFAULT_GOAL := setup
 
-# ---------- 基础开关/环境检测 ----------
+# ---------- 平台/通用开关 ----------
 UID := $(shell id -u)
 SUDO := $(if $(filter 0,$(UID)),,sudo)
 SUDO_MSG := $(if $(filter 0,$(UID)),,@echo "[info] 当前非root，将使用sudo执行；可能会提示输入管理员密码。")
 UNAME_S := $(shell uname -s)
 IS_UBUNTU := $(shell sh -lc 'u=$$(uname -s); if [ "$$u" = Linux ] && [ -r /etc/os-release ]; then . /etc/os-release; [ "$$ID" = ubuntu ] && echo 1; fi')
-JOBS ?= $(shell sh -lc 'command -v nproc >/dev/null 2>&1 && nproc || sysctl -n hw.ncpu 2>/dev/null || echo 4')
 IS_DARWIN := $(if $(filter Darwin,$(UNAME_S)),1,)
+JOBS ?= $(shell sh -lc 'command -v nproc >/dev/null 2>&1 && nproc || sysctl -n hw.ncpu 2>/dev/null || echo 4')
+
+VERBOSE ?= 0
+TEST_VERBOSE ?= $(VERBOSE)
+CTEST_V := $(if $(filter 1,$(TEST_VERBOSE)),-V,)
+PYTEST_V := $(if $(filter 1,$(TEST_VERBOSE)),-vv,-q)
+GO_TEST_V := $(if $(filter 1,$(TEST_VERBOSE)),-v,)
+CARGO_TEST_V := $(if $(filter 1,$(TEST_VERBOSE)),-v,)
+
+BENCH_ARTIFACT_ROOT ?= $(REPO_ROOT)/artifacts/bench
+BENCH_GALLERY := $(BENCH_ARTIFACT_ROOT)/index.html
+
 SKIP_DOCKER_ON_DARWIN ?= 1
 DOCKER_DISABLED := $(if $(and $(SKIP_DOCKER_ON_DARWIN),$(IS_DARWIN)),1,)
 
-# ---------- 工具/路径/参数 ----------
+# ---------- Python ----------
 PYTHON ?= python3
 PIP3 ?= pip3
 PY_VENV ?= $(REPO_ROOT)/python/.venv
 PY_VENV_PYTHON := $(PY_VENV)/bin/python
 PY_VENV_PIP := $(PY_VENV)/bin/pip
-CMAKE ?= cmake
-CTEST ?= ctest
-CPP_SRC_DIR := cpp
-CPP_BUILD_DIR := $(CPP_SRC_DIR)/build
-CPP_BUILD_TYPE ?= Release
-PREFIX ?= /usr/local
-CPP_TEST ?=
-CPP_TEST_FILES ?=
-CPP_TEST_DIRS ?=
-CPP_BENCH_FILES ?=
-CPP_LOG_LEVEL ?=
-EXPORT_CPP_BUILD_DIR ?= $(REPO_ROOT)/export/cpp/build
-
-# ---------- 通用测试 verbose 开关 ----------
-VERBOSE ?= 0
-TEST_VERBOSE ?= $(VERBOSE)
-CTEST_V := $(if $(filter 1,$(TEST_VERBOSE)),-V,)
-PYTEST_V := $(if $(filter 1,$(TEST_VERBOSE)),-vv,-q)
-PYTEST_BENCH_K ?= bench or benchmark
-PY_BENCHMARK_OPTS ?= --benchmark-name=short --benchmark-sort=name
-PY_BENCHMARK_CONCURRENCY_OPTS ?= --benchmark-max-time=0.25 --benchmark-min-rounds=3
-GO_TEST_V := $(if $(filter 1,$(TEST_VERBOSE)),-v,)
-CARGO_TEST_V := $(if $(filter 1,$(TEST_VERBOSE)),-v,)
-
-BENCH_ARTIFACT_ROOT ?= $(REPO_ROOT)/artifacts/bench
-PY_BENCH_ARTIFACT_DIR := $(BENCH_ARTIFACT_ROOT)/python
-CPP_BENCH_ARTIFACT_DIR := $(BENCH_ARTIFACT_ROOT)/cpp
-BENCH_GALLERY := $(BENCH_ARTIFACT_ROOT)/index.html
-
-# ---------- PIP 镜像配置 ----------
-USE_PIP_MIRROR := 1
 PIP_INDEX_URL := https://pypi.tuna.tsinghua.edu.cn/simple
 PIP_EXTRA_INDEX_URL :=
 PIP_TRUSTED_HOST :=
+USE_PIP_MIRROR := 1
 PIP_MIRROR_OPTS :=
 ifeq ($(USE_PIP_MIRROR),1)
   ifneq ($(strip $(PIP_INDEX_URL)),)
@@ -111,6 +102,10 @@ ifeq ($(USE_PIP_MIRROR),1)
     PIP_MIRROR_OPTS += --trusted-host $(PIP_TRUSTED_HOST)
   endif
 endif
+PYTEST_BENCH_K ?= bench or benchmark
+PY_BENCHMARK_OPTS ?= --benchmark-name=short --benchmark-sort=name
+PY_BENCHMARK_CONCURRENCY_OPTS ?= --benchmark-max-time=0.25 --benchmark-min-rounds=3
+PY_BENCH_ARTIFACT_DIR := $(BENCH_ARTIFACT_ROOT)/python
 
 # ---------- Go ----------
 GO ?= go
@@ -123,23 +118,45 @@ GOTOOLCHAIN ?= local
 GOWORK ?= off
 GOBIN ?=
 
+# ---------- C++ ----------
+CMAKE ?= cmake
+CTEST ?= ctest
+CPP_SRC_DIR := cpp
+CPP_BUILD_DIR := $(CPP_SRC_DIR)/build
+CPP_BUILD_TYPE ?= Release
+CPP_TEST ?=
+CPP_TEST_FILES ?=
+CPP_TEST_DIRS ?=
+CPP_BENCH_FILES ?=
+CPP_LOG_LEVEL ?=
+CPP_BENCH_ARTIFACT_DIR := $(BENCH_ARTIFACT_ROOT)/cpp
+EXPORT_CPP_BUILD_DIR ?= $(REPO_ROOT)/export/cpp/build
+PREFIX ?= /usr/local
+VET_DIR ?= cpp/test
+
 # ---------- Rust ----------
 RUST_DIR := rust/mental1104
 RUST_COVER_FAIL_UNDER ?=
-
-# ---------- Vet/Guard 的兜底重复（保持原习惯，不改语义） ----------
-VET_DIR ?= cpp/test
-CPP_BUILD_DIR ?= cpp/build
-RUST_DIR ?= rust/mental1104
 MODE ?= all
 AUTO_SETUP_RUST_NIGHTLY ?= 0
-RUST_DIR ?= rust/mental1104
-MODE ?= all
-AUTO_SETUP_RUST_NIGHTLY ?= 0
-RUST_DIR ?= rust/mental1104
-MODE ?= all
 
 # =================== 函数/宏（Defines） ===================
+
+define __env_apply_runtime
+# 若存在激活标记则加载 .env；否则按 .env 中的键逐个 unset，避免残留环境变量
+if [[ -f "$(ENV_STAMP)" && -f "$(ENV_SRC)" ]]; then \
+  set -a; . "$(ENV_SRC)"; set +a; \
+else \
+  if [[ -f "$(ENV_SRC)" ]]; then \
+    while IFS= read -r line; do \
+      case "$$line" in ''|\#*) continue ;; \
+      esac; \
+      k="$$line"; k=$${k#export }; k=$${k%%=*}; k=$${k%%[[:space:]]*}; \
+      [[ -n "$$k" ]] && unset "$$k"; \
+    done < "$(ENV_SRC)"; \
+  fi; \
+fi
+endef
 
 define _setup_python
 	$(SHELL) -lc 'set -e; \
@@ -222,6 +239,20 @@ define _guard_python
 		$(call __py_guard_pytest)'       # 运行一次 pytest（过滤 bench）
 endef
 
+# =================== 直达入口（Python） ===================
+.PHONY: setup-python build-python test-python install-python clean-python coverage-python fmt-python bench-python
+setup-python:   ; $(call _setup_python)
+build-python:   ; $(call __py_guard_venv) ; $(call __py_build_wheel)   # 依赖已就绪的 venv，单独构建 wheel
+test-python:    | build-export-cpp ; $(call _test_python)              # 需导出 C++ 桥接库，pytest 内部自检 venv
+install-python: ; $(call _install_python)                             # 系统安装，不强制前置 setup
+clean-python:   ; $(call _clean_python)
+coverage-python:; $(call _coverage_python)
+fmt-python:     ; $(call _fmt_python)
+bench-python:   | build-export-cpp
+	$(call __py_guard_venv)
+	$(call _bench_python)
+	@$(MAKE) --no-print-directory bench-report
+
 define _configure_cpp
 	$(SHELL) -lc 'set -e; \
 		$(call __cpp_configure_env)   # 处理 pybind11 路径、创建 build 目录
@@ -283,6 +314,52 @@ define _bench_report
 		echo "[bench] 图库：$(BENCH_GALLERY)"'
 endef
 
+# =================== 直达入口（C++） ===================
+.PHONY: git-submodules setup-cpp build-cpp build-cpp-release build-cpp-debug build-cpp-core test-cpp install-cpp uninstall-cpp clean-cpp coverage-cpp fmt-cpp bench-cpp
+git-submodules:        ; $(call _git_fetch_submodules)
+
+setup-cpp:
+	$(MAKE) git-submodules
+	$(call _build_cpp_submodules)
+	$(call _configure_cpp)
+
+build-cpp-core: | setup-cpp ; $(call _build_cpp)
+
+build-cpp-release:
+	$(MAKE) --no-print-directory build-cpp-core CPP_BUILD_TYPE=Release
+
+build-cpp-debug:
+	$(MAKE) --no-print-directory build-cpp-core CPP_BUILD_TYPE=Debug
+
+build-cpp: build-cpp-release
+
+test-cpp:       ; $(call _test_cpp)
+install-cpp:    ; $(call _install_cpp)
+uninstall-cpp:  ; $(call _uninstall_cpp)
+
+clean-cpp:
+	$(call _clean_cpp_submodules)
+	$(call _clean_cpp)
+
+coverage-cpp:   | test-cpp  ; $(call _coverage_cpp)
+fmt-cpp:        ; $(call _fmt_cpp)
+bench-cpp:
+	$(call _bench_cpp)
+	@$(MAKE) --no-print-directory bench-report
+
+# Export layer (C++ JSON -> Python)
+.PHONY: build-export-cpp clean-export-cpp
+build-export-cpp:
+	$(SHELL) -lc 'set -e; \
+		$(call __export_cpp_use_venv)     # 如有 venv 则导出 PATH 以查找 pybind11 cmake 配置
+		$(call __export_cpp_pybind_dir)   # 发现 pybind11_DIR 供 CMake 使用
+		$(call __export_cpp_configure)    # 运行 cmake 配置 export/cpp
+		$(call __export_cpp_build)'       # 构建 export/cpp
+
+clean-export-cpp:
+	$(SHELL) -lc 'rm -rf $(EXPORT_CPP_BUILD_DIR); echo "[ok] cleaned export/cpp build"'
+
+# =================== Go 宏 ===================
 define _setup_go
 	$(SHELL) -lc 'set -e; \
 		$(call __go_guard_tool)           # 检查 go 命令存在 \
@@ -331,6 +408,19 @@ define _clean_go
 	$(SHELL) -lc 'set -e; \
 		$(call __go_clean_run)'          # 清理覆盖率、产物与缓存
 endef
+
+# =================== 直达入口（Go） ===================
+.PHONY: setup-go build-go test-go coverage-go install-go clean-go fmt-go bench-go
+setup-go:    ; $(call _setup_go)
+build-go:    | setup-go ; $(call _build_go)
+test-go:     ; $(call _test_go)
+coverage-go: | test-go  ; $(call _coverage_go)
+install-go:  ; $(call _install_go)
+clean-go:    ; $(call _clean_go)
+fmt-go:      ; $(call _fmt_go)
+bench-go:
+	$(call _bench_go)
+	@$(MAKE) --no-print-directory bench-report
 
 define _setup_rust
 	$(SHELL) -lc 'set -e; \
@@ -416,6 +506,21 @@ define _guard_rust
 		$(call __rust_guard_run)'             # 运行 mem/race/miri 诊断
 endef
 
+# =================== 直达入口（Rust） ===================
+.PHONY: setup-rust build-rust test-rust bench-rust fmt-rust clippy-rust example-rust clean-rust install-rust coverage-rust
+setup-rust:   ; $(call _setup_rust)
+build-rust:   | setup-rust ; $(call _build_rust)
+test-rust:    ; $(call _test_rust)
+bench-rust:
+	$(call _bench_rust)
+	@$(MAKE) --no-print-directory bench-report
+fmt-rust:     ; $(call _fmt_rust)
+clippy-rust:  ; $(call _clippy_rust)
+example-rust: ; $(call _example_rust)
+clean-rust:   ; $(call _clean_rust)
+install-rust: ; $(call _install_rust)
+coverage-rust:; $(call _coverage_rust)
+
 .PHONY: _docker-up-all-if-needed _docker-down-all-if-needed
 _docker-up-all-if-needed:
 	@if [ -n "$(DOCKER_DISABLED)" ]; then \
@@ -446,101 +551,14 @@ guard-rust-mem:    ; $(MAKE) --no-print-directory guard-rust MODE=mem
 guard-rust-race:   ; $(MAKE) --no-print-directory guard-rust MODE=race
 guard-rust-miri:   ; $(MAKE) --no-print-directory guard-rust MODE=miri
 
-# =================== Export layer (C++ JSON -> Python) ===================
-.PHONY: build-export-cpp clean-export-cpp
-build-export-cpp:
-	$(SHELL) -lc 'set -e; \
-		$(call __export_cpp_use_venv)     # 如有 venv 则导出 PATH 以查找 pybind11 cmake 配置
-		$(call __export_cpp_pybind_dir)   # 发现 pybind11_DIR 供 CMake 使用
-		$(call __export_cpp_configure)    # 运行 cmake 配置 export/cpp
-		$(call __export_cpp_build)'       # 构建 export/cpp
-
-clean-export-cpp:
-	$(SHELL) -lc 'rm -rf $(EXPORT_CPP_BUILD_DIR); echo "[ok] cleaned export/cpp build"'
-
 .PHONY: guard guard-cpp guard-go guard-rust guard-python
 guard-cpp:    ; $(call _guard_cpp)
 guard-go:     ; $(call _guard_go)
 guard-python: ; $(call _guard_python)
 guard:        guard-cpp guard-go guard-rust guard-python
 
-.PHONY: setup-rust build-rust test-rust bench-rust fmt-rust clippy-rust example-rust clean-rust install-rust coverage-rust
-setup-rust:   ; $(call _setup_rust)
-build-rust:   | setup-rust ; $(call _build_rust)
-test-rust:    ; $(call _test_rust)
-bench-rust:
-	$(call _bench_rust)
-	@$(MAKE) --no-print-directory bench-report
-fmt-rust:     ; $(call _fmt_rust)
-clippy-rust:  ; $(call _clippy_rust)
-example-rust: ; $(call _example_rust)
-clean-rust:   ; $(call _clean_rust)
-install-rust: ; $(call _install_rust)
-coverage-rust:; $(call _coverage_rust)
-
-# =================== 直达入口（Python） ===================
-.PHONY: setup-python build-python test-python install-python clean-python coverage-python fmt-python bench-python
-setup-python:   ; $(call _setup_python)
-build-python:   ; $(call __py_guard_venv) ; $(call __py_build_wheel)   # 依赖已就绪的 venv，单独构建 wheel
-test-python:    | build-export-cpp ; $(call _test_python)              # 需导出 C++ 桥接库，pytest 内部自检 venv
-install-python: ; $(call _install_python)                             # 系统安装，不强制前置 setup
-clean-python:   ; $(call _clean_python)
-coverage-python:; $(call _coverage_python)
-fmt-python:     ; $(call _fmt_python)
-bench-python:   | build-export-cpp
-	$(call __py_guard_venv)
-	$(call _bench_python)
-	@$(MAKE) --no-print-directory bench-report
-
-# =================== 直达入口（Go） ===================
-.PHONY: setup-go build-go test-go coverage-go install-go clean-go fmt-go bench-go
-setup-go:    ; $(call _setup_go)
-build-go:    | setup-go ; $(call _build_go)
-test-go:     ; $(call _test_go)
-coverage-go: | test-go  ; $(call _coverage_go)
-install-go:  ; $(call _install_go)
-clean-go:    ; $(call _clean_go)
-fmt-go:      ; $(call _fmt_go)
-bench-go:
-	$(call _bench_go)
-	@$(MAKE) --no-print-directory bench-report
-
-# =================== 直达入口（C++） ===================
-.PHONY: git-submodules setup-cpp build-cpp build-cpp-release build-cpp-debug build-cpp-core test-cpp install-cpp uninstall-cpp clean-cpp coverage-cpp fmt-cpp bench-cpp
-git-submodules:        ; $(call _git_fetch_submodules)
-
-setup-cpp:
-	$(MAKE) git-submodules
-	$(call _build_cpp_submodules)
-	$(call _configure_cpp)
-
-build-cpp-core: | setup-cpp ; $(call _build_cpp)
-
-build-cpp-release:
-	$(MAKE) --no-print-directory build-cpp-core CPP_BUILD_TYPE=Release
-
-build-cpp-debug:
-	$(MAKE) --no-print-directory build-cpp-core CPP_BUILD_TYPE=Debug
-
-build-cpp: build-cpp-release
-
-test-cpp:       ; $(call _test_cpp)
-install-cpp:    ; $(call _install_cpp)
-uninstall-cpp:  ; $(call _uninstall_cpp)
-
-clean-cpp:
-	$(call _clean_cpp_submodules)
-	$(call _clean_cpp)
-
-coverage-cpp:   | test-cpp  ; $(call _coverage_cpp)
-fmt-cpp:        ; $(call _fmt_cpp)
-bench-cpp:
-	$(call _bench_cpp)
-	@$(MAKE) --no-print-directory bench-report
-
 # ============ env 模板生成 ============
-ENV_SRC      ?= .env
-ENV_EXAMPLE  ?= .env.example
+ENV_EXAMPLE  ?= $(REPO_ROOT)/.env.example
 
 .PHONY: env-example
 env-example:
@@ -602,7 +620,7 @@ clean:
 	$(MAKE) env-clean
 
 coverage: coverage-python coverage-go coverage-cpp coverage-rust
-fmt:      fmt-go fmt-cpp fmt-rust
+fmt:      fmt-python fmt-go fmt-cpp fmt-rust
 bench:    bench-python bench-go bench-cpp bench-rust
 	@$(MAKE) --no-print-directory bench-report
 

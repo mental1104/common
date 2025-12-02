@@ -1,5 +1,5 @@
-#include <benchmark/benchmark.h>
 #include "mental1104/bloom_filter.h"
+#include <benchmark/benchmark.h>
 
 #include <algorithm>
 #include <chrono>
@@ -19,7 +19,8 @@ std::vector<std::string> make_keys(std::size_t count, std::size_t offset = 0) {
   return keys;
 }
 
-void simulate_io_miss(std::chrono::microseconds cost = std::chrono::microseconds(50)) {
+void simulate_io_miss(
+    std::chrono::microseconds cost = std::chrono::microseconds(50)) {
   std::this_thread::sleep_for(cost);
 }
 
@@ -28,10 +29,12 @@ std::size_t bloom_mem_bytes(const BloomFilter &bf) {
   return (bf.getM() + 7) / 8;
 }
 
-std::size_t unordered_map_mem_bytes(const std::unordered_map<std::string, int> &mp) {
+std::size_t
+unordered_map_mem_bytes(const std::unordered_map<std::string, int> &mp) {
   // 粗略估算：桶指针 + 节点 + 字符存储
   std::size_t bytes = mp.bucket_count() * sizeof(void *);
-  bytes += mp.size() * (sizeof(std::pair<const std::string, int>) + sizeof(void *));
+  bytes +=
+      mp.size() * (sizeof(std::pair<const std::string, int>) + sizeof(void *));
   for (const auto &kv : mp) {
     bytes += kv.first.capacity();
   }
@@ -84,8 +87,9 @@ static void BM_BloomFilter_Query(benchmark::State &state) {
 
 // 对照场景：未使用布隆过滤，直接查询 unordered_map，未命中时模拟 IO
 static void BM_MapBackend_Mixed(benchmark::State &state) {
-  const std::size_t n = static_cast<std::size_t>(state.range(0));      // 元素规模
-  const std::size_t hit_ratio = static_cast<std::size_t>(state.range(1)); // 命中百分比 [0,100]
+  const std::size_t n = static_cast<std::size_t>(state.range(0)); // 元素规模
+  const std::size_t hit_ratio =
+      static_cast<std::size_t>(state.range(1)); // 命中百分比 [0,100]
 
   auto present = make_keys(n);
   auto misses = make_keys(n, n + 1024);
@@ -113,19 +117,20 @@ static void BM_MapBackend_Mixed(benchmark::State &state) {
     }
   }
 
-  state.counters["hit_rate"] =
-      benchmark::Counter(static_cast<double>(hit_count) /
-                             static_cast<double>(queries.size()),
-                         benchmark::Counter::kAvgThreads);
-  state.counters["mem_bytes"] = static_cast<double>(unordered_map_mem_bytes(store));
+  state.counters["hit_rate"] = benchmark::Counter(
+      static_cast<double>(hit_count) / static_cast<double>(queries.size()),
+      benchmark::Counter::kAvgThreads);
+  state.counters["mem_bytes"] =
+      static_cast<double>(unordered_map_mem_bytes(store));
   state.SetItemsProcessed(static_cast<int64_t>(state.iterations()) *
                           static_cast<int64_t>(queries.size()));
 }
 
 // 布隆过滤守护的查询：先查布隆，过滤绝大部分未命中请求，再进入 unordered_map/IO
 static void BM_BloomGuardedBackend_Mixed(benchmark::State &state) {
-  const std::size_t n = static_cast<std::size_t>(state.range(0));      // 元素规模
-  const std::size_t hit_ratio = static_cast<std::size_t>(state.range(1)); // 命中百分比 [0,100]
+  const std::size_t n = static_cast<std::size_t>(state.range(0)); // 元素规模
+  const std::size_t hit_ratio =
+      static_cast<std::size_t>(state.range(1)); // 命中百分比 [0,100]
 
   auto present = make_keys(n);
   auto misses = make_keys(n, n + 1024);
@@ -166,14 +171,13 @@ static void BM_BloomGuardedBackend_Mixed(benchmark::State &state) {
   }
 
   const std::size_t total_queries = queries.size();
-  state.counters["hit_rate"] =
-      benchmark::Counter(static_cast<double>(hit_count) /
-                             static_cast<double>(total_queries),
-                         benchmark::Counter::kAvgThreads);
-  state.counters["skipped_rate"] =
-      benchmark::Counter(static_cast<double>(skipped) /
-                             static_cast<double>(total_queries * state.iterations()),
-                         benchmark::Counter::kAvgThreads);
+  state.counters["hit_rate"] = benchmark::Counter(
+      static_cast<double>(hit_count) / static_cast<double>(total_queries),
+      benchmark::Counter::kAvgThreads);
+  state.counters["skipped_rate"] = benchmark::Counter(
+      static_cast<double>(skipped) /
+          static_cast<double>(total_queries * state.iterations()),
+      benchmark::Counter::kAvgThreads);
   state.counters["false_positive_io"] =
       benchmark::Counter(static_cast<double>(false_positive_io) /
                              static_cast<double>(state.iterations()),

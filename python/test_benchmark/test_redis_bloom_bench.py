@@ -66,7 +66,7 @@ def _benchmark_bloom(client, bloom: RedisBloom, workload):
 def _benchmark_pipeline_plain(client, workload, batch_size: int):
     start = time.perf_counter()
     for i in range(0, len(workload), batch_size):
-        batch = workload[i : i + batch_size]
+        batch = workload[i: i + batch_size]
         pipe = client.pipeline()
         for key in batch:
             pipe.get(key)
@@ -78,7 +78,7 @@ def _benchmark_pipeline_bloom(client, bloom: RedisBloom, workload, batch_size: i
     skipped = 0
     start = time.perf_counter()
     for i in range(0, len(workload), batch_size):
-        batch = workload[i : i + batch_size]
+        batch = workload[i: i + batch_size]
         # 1) pipeline BF.EXISTS
         pipe = client.pipeline()
         for key in batch:
@@ -101,7 +101,7 @@ def _benchmark_pipeline_bloom(client, bloom: RedisBloom, workload, batch_size: i
 def _chunk_work(workload, chunks: int):
     size = (len(workload) + chunks - 1) // chunks
     for i in range(0, len(workload), size):
-        yield workload[i : i + size]
+        yield workload[i: i + size]
 
 
 def _benchmark_concurrent_plain(client, workload, workers: int):

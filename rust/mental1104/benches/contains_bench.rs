@@ -11,9 +11,7 @@ fn bench(c: &mut Criterion) {
         b.iter(|| black_box(contains(sorted, &2047)))
     });
 
-    c.bench_function("hashset_4k", |b| {
-        b.iter(|| black_box(contains(&hs, &2047)))
-    });
+    c.bench_function("hashset_4k", |b| b.iter(|| black_box(contains(&hs, &2047))));
 }
 
 criterion_group!(benches, bench);
