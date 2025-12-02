@@ -4,10 +4,10 @@
 //! - 暴露 `prelude` 便于外部一次性引入常用符号。
 //! - collections::contains：统一“是否包含 key”的静态多态 API（Trait + 泛型）。
 
-pub mod prelude;
-pub mod macros;
-pub mod error;
 pub mod collections;
+pub mod error;
+pub mod macros;
+pub mod prelude;
 
 // 可选：暴露常用类型别名（例如更快的 HashMap/HashSet）
 #[cfg(feature = "fast-hash")]

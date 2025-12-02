@@ -8,7 +8,7 @@ from typing import Dict, List, Tuple, Set
 PKG = "mental1104"
 # resolve() 获取当前文件绝对路径；parent 为其所在目录；"/" 左为 Path/PurePath，右为路径片段(str/Path-like)，用于拼接；最后附加包名
 # "/" 作为 pathlib.Path 的拼接运算符是在 Python 3.4 引入 pathlib（PEP 428）时一起出现的特性。"/" 作为 pathlib.Path 的拼接运算符是在 Python 3.4 引入 pathlib（PEP 428）时一起出现的特性。"/" 作为 pathlib.Path 的拼接运算符是在 Python 3.4 引入 pathlib（PEP 428）时一起出现的特性。"/" 作为 pathlib.Path 的拼接运算符是在 Python 3.4 引入 pathlib（PEP 428）时一起出现的特性。"/" 作为 pathlib.Path 的拼接运算符是在 Python 3.4 引入 pathlib（PEP 428）时一起出现的特性。"/" 作为 pathlib.Path 的拼接运算符是在 Python 3.4 引入 pathlib（PEP 428）时一起出现的特性。"/" 作为 pathlib.Path 的拼接运算符是在 Python 3.4 引入 pathlib（PEP 428）时一起出现的特性。"/" 作为 pathlib.Path 的拼接运算符是在 Python 3.4 引入 pathlib（PEP 428）时一起出现的特性。"/" 作为 pathlib.Path 的拼接运算符是在 Python 3.4 引入 pathlib（PEP 428）时一起出现的特性。"/" 作为 pathlib.Path 的拼接运算符是在 Python 3.4 引入 pathlib（PEP 428）时一起出现的特性。"/" 作为 pathlib.Path 的拼接运算符是在 Python 3.4 引入 pathlib（PEP 428）时一起出现的特性。"/" 作为 pathlib.Path 的拼接运算符是在 Python 3.4 引入 pathlib（PEP 428）时一起出现的特性。"/" 作为 pathlib.Path 的拼接运算符是在 Python 3.4 引入 pathlib（PEP 428）时一起出现的特性。"/" 作为 pathlib.Path 的拼接运算符是在 Python 3.4 引入 pathlib（PEP 428）时一起出现的特性。"/" 作为 pathlib.Path 的拼接运算符是在 Python 3.4 引入 pathlib（PEP 428）时一起出现的特性。"/" 作为 pathlib.Path 的拼接运算符是在 Python 3.4 引入 pathlib（PEP 428）时一起出现的特性。
-BASE_PACKAGE = Path(__file__).resolve().parent / PKG  
+BASE_PACKAGE = Path(__file__).resolve().parent / PKG
 INIT_FILE = BASE_PACKAGE / "__init__.py"
 
 
@@ -74,7 +74,8 @@ def walk_modules(base_dir: Path) -> List[ModuleInfo]:
     out: List[ModuleInfo] = []
     for dirpath, dirnames, filenames in os.walk(base_dir):  # os.walk 返回迭代器，逐层递归遍历目录，遍历完覆盖全部子树但不会一次性列出全部文件
         dirnames.sort()  # 确保目录遍历顺序稳定，生成结果可复现
-        py_files = sorted(f for f in filenames if f.endswith(".py") and f != "__init__.py")  # 筛选当前目录下除 __init__.py 的 py 文件并排序，保证处理顺序稳定
+        py_files = sorted(f for f in filenames if f.endswith(".py") and f !=
+                          "__init__.py")  # 筛选当前目录下除 __init__.py 的 py 文件并排序，保证处理顺序稳定
         for filename in py_files:  # 内层循环处理当前目录的每个 .py 文件，外层遍历目录、内层遍历文件形成双重循环
             file_path = Path(dirpath) / filename
             # 例如 base_dir=/home/.../mental1104，file_path=/home/.../mental1104/foo
@@ -152,7 +153,8 @@ def generate_init(mods: List[ModuleInfo]) -> str:
     # 重名注释
     dup_lines: List[str] = []  # 重名信息只写入注释，不影响导出内容
     if dups:
-        dup_lines.append("# NOTE: Duplicate names detected; chosen provider by (shallower module path -> lexicographic):")  # 仅生成说明注释
+        dup_lines.append(
+            "# NOTE: Duplicate names detected; chosen provider by (shallower module path -> lexicographic):")  # 仅生成说明注释
         for name in sorted(dups.keys()):
             chosen = export_map[name]
             others = ", ".join(sorted(set(dups[name]) - {chosen}))

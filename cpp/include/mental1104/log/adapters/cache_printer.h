@@ -1,8 +1,8 @@
 #ifndef MENTAL1104_LOG_ADAPTERS_CACHE_PRINTER_H
 #define MENTAL1104_LOG_ADAPTERS_CACHE_PRINTER_H
 
-#include "mental1104/log.h"
 #include "mental1104/core/cache.h"
+#include "mental1104/log.h"
 
 namespace mental1104 {
 namespace log_detail {

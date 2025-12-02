@@ -14,8 +14,7 @@ inline uint64_t mix_seed() {
          (static_cast<uint64_t>(std::random_device{}()) << 1);
 }
 
-template <typename Engine>
-Engine &thread_local_engine() {
+template <typename Engine> Engine &thread_local_engine() {
   static thread_local Engine engine(mix_seed());
   return engine;
 }
@@ -45,4 +44,3 @@ inline std::string key_with_random_suffix(const std::string &prefix,
 }
 
 } // namespace mental1104
-

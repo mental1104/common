@@ -1,8 +1,8 @@
 #include <gtest/gtest.h>
 
+#include <chrono>
 #include <list>
 #include <map>
-#include <chrono>
 #include <set>
 #include <string>
 #include <vector>
@@ -54,9 +54,9 @@ TEST(ExponentialBackoffTest, BasicSequenceAndCap) {
 TEST(ExponentialBackoffTest, Reset) {
   using namespace std::chrono;
   mental1104::ExponentialBackoff backoff(5ms, 20ms, 3);
-  backoff.next();  // 5
-  backoff.next();  // 15
-  backoff.next();  // 20 capped
+  backoff.next(); // 5
+  backoff.next(); // 15
+  backoff.next(); // 20 capped
   backoff.reset();
   EXPECT_EQ(backoff.next(), 5ms); // 重置回初始
 }

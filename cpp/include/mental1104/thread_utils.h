@@ -19,13 +19,9 @@ inline void sleep_for(const std::chrono::duration<Rep, Period> &dur) {
   std::this_thread::sleep_for(dur);
 }
 
-inline void sleep_for(int ms) {
-  sleep_for(std::chrono::milliseconds(ms));
-}
+inline void sleep_for(int ms) { sleep_for(std::chrono::milliseconds(ms)); }
 
-inline void sleep_for_ms(int ms) {
-  sleep_for(ms);
-}
+inline void sleep_for_ms(int ms) { sleep_for(ms); }
 
 } // namespace mental1104
 

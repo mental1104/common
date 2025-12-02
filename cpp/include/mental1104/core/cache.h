@@ -9,12 +9,12 @@
 
 #include <functional>
 #include <iostream>
+#include <limits> // std::numeric_limits
 #include <list>
 #include <tuple>
+#include <type_traits> // std::decay_t
 #include <unordered_map>
-#include <limits>       // std::numeric_limits
-#include <type_traits>  // std::decay_t
-#include <utility>      // std::forward
+#include <utility> // std::forward
 
 // Hash function for tuple arguments
 namespace std {

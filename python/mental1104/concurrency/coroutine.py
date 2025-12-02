@@ -55,6 +55,7 @@ class AsCompletedStrategy(TaskExecutionStrategy):
     async def execute(self, loop, tasks: List[Awaitable[_T]]) -> List[_T]:
         if not tasks:
             return []
+
         async def _wrap(index: int, aw: Awaitable[_T]) -> tuple[int, _T]:
             return index, await aw
 
