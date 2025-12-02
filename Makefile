@@ -331,125 +331,51 @@ endef
 
 define _setup_go
 	$(SHELL) -lc 'set -e; \
-		echo "[go] 目录: $(GO_DIR)"; \
-		if ! command -v $(GO) >/dev/null 2>&1; then echo "[error] 未找到 go 命令"; exit 1; fi; \
-		if [[ ! -f "$(GO_DIR)/go.mod" ]]; then \
-			echo "[warn] $(GO_DIR)/go.mod 不存在，请先在 $(GO_DIR) 执行: go mod init <module>"; \
-			exit 1; \
-		fi; \
-		cd "$(GO_DIR)"; \
-		echo "[go] env: GOWORK=$(GOWORK) GOTOOLCHAIN=$(GOTOOLCHAIN) GOPROXY=$(GOPROXY) GOPRIVATE=$(GOPRIVATE)"; \
-		GOWORK=$(GOWORK) GOTOOLCHAIN=$(GOTOOLCHAIN) GOPROXY="$(GOPROXY)" GOPRIVATE="$(GOPRIVATE)" $(GO) mod tidy; \
-		GOWORK=$(GOWORK) GOTOOLCHAIN=$(GOTOOLCHAIN) GOPROXY="$(GOPROXY)" GOPRIVATE="$(GOPRIVATE)" $(GO) mod download; \
-		echo "[ok] go setup 完成。"'
+		$(call __go_guard_tool)           # 检查 go 命令存在 \
+		$(call __go_guard_mod)            # 确认 go.mod 存在 \
+		$(call __go_mod_tidy_download)'   # tidy + download
 endef
 
 define _build_go
 	$(SHELL) -lc 'set -e; \
-		cd "$(GO_DIR)"; \
-		echo "[go] build ./... (库包仅做编译检查，不产生仓库内产物)"; \
-		GOWORK=$(GOWORK) GOTOOLCHAIN=$(GOTOOLCHAIN) GOPROXY="$(GOPROXY)" GOPRIVATE="$(GOPRIVATE)" $(GO) build ./...; \
-		echo "[ok] go build 完成。"'
+		$(call __go_build_pkgs)'          # go build ./...
 endef
 
 define _build_go_bins
 	$(SHELL) -lc 'set -e; \
-		cd "$(GO_DIR)"; mkdir -p bin; \
-		echo "[go] 扫描 package main …"; \
-		$(GO) list -f "{{if eq .Name \"main\"}}{{.ImportPath}}|{{.Dir}}{{end}}" ./... \
-		  | sed "/^$$/d" \
-		  | while IFS="|" read -r pkg dir; do \
-				name=$$(basename "$$dir"); \
-				echo "  - build $$pkg -> bin/$$name"; \
-				GOWORK=$(GOWORK) GOTOOLCHAIN=$(GOTOOLCHAIN) GOPROXY="$(GOPROXY)" GOPRIVATE="$(GOPRIVATE)" \
-				$(GO) build -o "bin/$$name" "$$pkg"; \
-			done; \
-		echo "[ok] go 可执行产物已生成到 $(GO_DIR)/bin/";'
+		$(call __go_build_bins)'          # 构建 package main 可执行文件到 bin/
 endef
 
 define _test_go
 	$(SHELL) -lc 'set -e; \
-		unset HTTP_PROXY HTTPS_PROXY NO_PROXY ALL_PROXY http_proxy https_proxy no_proxy all_proxy; \
-		echo "[proxy] disabled for pytest (HTTP_PROXY/HTTPS_PROXY/NO_PROXY/ALL_PROXY 皆已清空)"; \
-		cd "$(GO_DIR)"; \
-		run_args=(); pkg_args=(./...); \
-		[[ -n "$${FILTER:-}" ]] && run_args+=(-run "$${FILTER}"); \
-		if [[ -n "$${FILE:-}" ]]; then \
-			mapfile -t dirs < <(find . -name "*_test.go" | grep -E "$${FILE}" | xargs -r -n1 dirname | sort -u); \
-			if [[ $${#dirs[@]} -gt 0 ]]; then \
-				pkg_args=(); \
-				for d in "$${dirs[@]}"; do pkg_args+=("$${d#./}"); done; \
-			else \
-				echo "[warn] FILE=$${FILE} 未匹配到 *_test.go，回退全量包"; \
-			fi; \
-		fi; \
-		echo "[go] test -count=1 $(GO_TEST_V) $${run_args[*]:-} $${pkg_args[*]}"; \
-		GOWORK=$(GOWORK) GOTOOLCHAIN=$(GOTOOLCHAIN) GOPROXY="$(GOPROXY)" GOPRIVATE="$(GOPRIVATE)" \
-		$(GO) test -count=1 $(GO_TEST_V) "$${run_args[@]}" "$${pkg_args[@]}"; \
-		echo "[ok] go test 通过。"'
+		$(call __go_env_clear_proxy)      # 清空代理提示
+		$(call __go_test_run)'            # go test（支持 FILE/FILTER）
 endef
 
 define _coverage_go
 	$(SHELL) -lc 'set -e; \
-		cd "$(GO_DIR)"; \
-		echo "[go] 计算 coverpkg（跨包覆盖）…"; \
-		PKGS=$$($(GO) list ./... | paste -sd, -); \
-		PKGS=$$(echo "$$PKGS" | sed "s/,\$$//"); \
-		echo "[go] test -covermode=atomic -coverpkg=$$PKGS -coverprofile=coverage.out ./..."; \
-		GOWORK=$(GOWORK) GOTOOLCHAIN=$(GOTOOLCHAIN) GOPROXY="$(GOPROXY)" GOPRIVATE="$(GOPRIVATE)" \
-		$(GO) test -count=1 -covermode=atomic -coverpkg="$$PKGS" -coverprofile=coverage.out ./...; \
-		echo "[go] 覆盖率汇总："; \
-		$(GO) tool cover -func=coverage.out; \
-		echo "[go] 生成 HTML 报告：$(GO_COVER_HTML)"; \
-		$(GO) tool cover -html=coverage.out -o coverage.html; \
-		echo "[ok] 覆盖率生成完成：$(GO_COVER_OUT) / $(GO_COVER_HTML)";'
+		$(call __go_env_clear_proxy)      # 清空代理提示
+		$(call __go_coverage_run)'        # go test 覆盖率并生成报告
 endef
 
 define _fmt_go
-	$(SHELL) -lc 'set -e; cd "$(GO_DIR)"; go fmt ./... >/dev/null; echo "[ok] go fmt 完成。"'
+	$(SHELL) -lc 'set -e; \
+		$(call __go_fmt_run)'            # go fmt ./...
 endef
 
 define _bench_go
 	$(SHELL) -lc 'set -e; \
-		cd "$(GO_DIR)"; \
-		bench_pat="$${FILTER:-.}"; pkg_args=(./...); \
-		if [[ -n "$${FILE:-}" ]]; then \
-			mapfile -t dirs < <(find . -name "*_test.go" | grep -E "$${FILE}" | xargs -r -n1 dirname | sort -u); \
-			if [[ $${#dirs[@]} -gt 0 ]]; then \
-				pkg_args=(); \
-				for d in "$${dirs[@]}"; do pkg_args+=("$${d#./}"); done; \
-			else \
-				echo "[warn] FILE=$${FILE} 未匹配到 *_test.go，回退全量包"; \
-			fi; \
-		fi; \
-		echo "[go] test $(GO_TEST_V) -bench=\"$$bench_pat\" -benchmem $${pkg_args[*]}"; \
-		GOWORK=$(GOWORK) GOTOOLCHAIN=$(GOTOOLCHAIN) GOPROXY="$(GOPROXY)" GOPRIVATE="$(GOPRIVATE)" \
-		$(GO) test $(GO_TEST_V) -bench="$$bench_pat" -benchmem "$${pkg_args[@]}"'
+		$(call __go_bench_run)'          # go test -bench...
 endef
 
 define _install_go
 	$(SHELL) -lc 'set -e; \
-		cd "$(GO_DIR)"; \
-		echo "[go] install ./... （仅对 package main 生效）"; \
-		GOWORK=$(GOWORK) GOTOOLCHAIN=$(GOTOOLCHAIN) GOPROXY="$(GOPROXY)" GOPRIVATE="$(GOPRIVATE)" \
-		GOBIN="$(GOBIN)" $(GO) install ./...; \
-		if [[ -n "$(GOBIN)" ]]; then \
-			echo "[ok] 可执行文件安装到: $(GOBIN)"; \
-		else \
-			echo "[ok] 可执行文件已安装到默认 GOBIN（见: go env GOBIN 或 GOPATH/bin）"; \
-		fi'
+		$(call __go_install_run)'        # go install ./...
 endef
 
 define _clean_go
 	$(SHELL) -lc 'set -e; \
-		cd "$(GO_DIR)"; \
-		echo "[go] 清理覆盖率与产物 …"; \
-		rm -f coverage.out coverage.html; \
-		rm -rf bin; \
-		echo "[go] 执行 go clean（移除测试缓存与临时对象） …"; \
-		GOWORK=$(GOWORK) $(GO) clean -testcache; \
-		GOWORK=$(GOWORK) $(GO) clean ./...; \
-		echo "[ok] go clean 完成。"'
+		$(call __go_clean_run)'          # 清理覆盖率、产物与缓存
 endef
 
 define _setup_rust
@@ -579,15 +505,7 @@ endef
 
 define _vet_go
 	$(SHELL) -lc 'set -e; \
-		cd golang; \
-		echo "[info] 运行 go vet 静态分析..."; \
-		out=$$(GOWORK=$(GOWORK) $(GO) vet ./... 2>&1 || true); \
-		if [ -z "$$out" ]; then \
-			echo "[ok] go vet 未发现问题。"; \
-		else \
-			echo "$$out"; \
-			exit 1; \
-		fi'
+		$(call __go_vet_run)'           # go vet ./...
 endef
 
 define _vet_cpp
@@ -601,13 +519,8 @@ define _guard_cpp
 endef
 
 define _guard_go
-	$(SHELL) -lc 'set -e -o pipefail; cd "$(GO_DIR)"; log=$$(mktemp -t guard_go.XXXX).log; \
-		echo "[go] go test -race -count=1 ./..."; \
-		if ! GOWORK=$(GOWORK) GOTOOLCHAIN=$(GOTOOLCHAIN) $(GO) test -race -count=1 ./... | tee "$$log"; then \
-			if grep -q "DATA RACE" "$$log"; then echo "[fail][concurrency] 并发竞态问题, 日志 $$log"; else echo "[fail][test] 测试失败, 日志 $$log"; fi; exit 1; \
-		fi; if grep -q "DATA RACE" "$$log"; then echo "[fail][concurrency] 并发竞态问题, 日志 $$log"; exit 1; fi; \
-		echo "[ok] guard-go 通过"; \
-	'
+	$(SHELL) -lc 'set -e -o pipefail; \
+		$(call __go_guard_race)'        # go test -race -count=1 ./...
 endef
 
 define _guard_rust
@@ -1533,6 +1446,151 @@ define __docker_down_all
 		|| { echo "[warn] $$d 关闭失败（已忽略）"; continue; }; \
 done
 @echo "[ok] clean-docker 完成（出错已忽略）"
+endef
+
+define __go_guard_tool
+echo "[go] 目录: $(GO_DIR)"; \
+if ! command -v $(GO) >/dev/null 2>&1; then echo "[error] 未找到 go 命令"; exit 1; fi
+endef
+
+define __go_guard_mod
+if [[ ! -f "$(GO_DIR)/go.mod" ]]; then \
+  echo "[warn] $(GO_DIR)/go.mod 不存在，请先在 $(GO_DIR) 执行: go mod init <module>"; \
+  exit 1; \
+fi
+endef
+
+define __go_mod_tidy_download
+cd "$(GO_DIR)"; \
+echo "[go] env: GOWORK=$(GOWORK) GOTOOLCHAIN=$(GOTOOLCHAIN) GOPROXY=$(GOPROXY) GOPRIVATE=$(GOPRIVATE)"; \
+GOWORK=$(GOWORK) GOTOOLCHAIN=$(GOTOOLCHAIN) GOPROXY="$(GOPROXY)" GOPRIVATE="$(GOPRIVATE)" $(GO) mod tidy; \
+GOWORK=$(GOWORK) GOTOOLCHAIN=$(GOTOOLCHAIN) GOPROXY="$(GOPROXY)" GOPRIVATE="$(GOPRIVATE)" $(GO) mod download; \
+echo "[ok] go setup 完成。"
+endef
+
+define __go_build_pkgs
+cd "$(GO_DIR)"; \
+echo "[go] build ./... (库包仅做编译检查，不产生仓库内产物)"; \
+GOWORK=$(GOWORK) GOTOOLCHAIN=$(GOTOOLCHAIN) GOPROXY="$(GOPROXY)" GOPRIVATE="$(GOPRIVATE)" $(GO) build ./...; \
+echo "[ok] go build 完成。"
+endef
+
+define __go_build_bins
+cd "$(GO_DIR)"; mkdir -p bin; \
+echo "[go] 扫描 package main …"; \
+$(GO) list -f "{{if eq .Name \"main\"}}{{.ImportPath}}|{{.Dir}}{{end}}" ./... \
+  | sed "/^$$/d" \
+  | while IFS="|" read -r pkg dir; do \
+		name=$$(basename "$$dir"); \
+		echo "  - build $$pkg -> bin/$$name"; \
+		GOWORK=$(GOWORK) GOTOOLCHAIN=$(GOTOOLCHAIN) GOPROXY="$(GOPROXY)" GOPRIVATE="$(GOPRIVATE)" \
+		$(GO) build -o "bin/$$name" "$$pkg"; \
+	done; \
+echo "[ok] go 可执行产物已生成到 $(GO_DIR)/bin/"
+endef
+
+define __go_env_clear_proxy
+unset HTTP_PROXY HTTPS_PROXY NO_PROXY ALL_PROXY http_proxy https_proxy no_proxy all_proxy; \
+echo "[proxy] disabled for go (HTTP_PROXY/HTTPS_PROXY/NO_PROXY/ALL_PROXY 皆已清空)"
+endef
+
+define __go_test_run
+cd "$(GO_DIR)"; \
+run_args=(); pkg_args=(./...); \
+[[ -n "$${FILTER:-}" ]] && run_args+=(-run "$${FILTER}"); \
+if [[ -n "$${FILE:-}" ]]; then \
+	mapfile -t dirs < <(find . -name "*_test.go" | grep -E "$${FILE}" | xargs -r -n1 dirname | sort -u); \
+	if [[ $${#dirs[@]} -gt 0 ]]; then \
+		pkg_args=(); \
+		for d in "$${dirs[@]}"; do pkg_args+=("$${d#./}"); done; \
+	else \
+		echo "[warn] FILE=$${FILE} 未匹配到 *_test.go，回退全量包"; \
+	fi; \
+fi; \
+echo "[go] test -count=1 $(GO_TEST_V) $${run_args[*]:-} $${pkg_args[*]}"; \
+GOWORK=$(GOWORK) GOTOOLCHAIN=$(GOTOOLCHAIN) GOPROXY="$(GOPROXY)" GOPRIVATE="$(GOPRIVATE)" \
+$(GO) test -count=1 $(GO_TEST_V) "$${run_args[@]}" "$${pkg_args[@]}"; \
+echo "[ok] go test 通过。"
+endef
+
+define __go_coverage_run
+cd "$(GO_DIR)"; \
+echo "[go] 计算 coverpkg（跨包覆盖）…"; \
+PKGS=$$($(GO) list ./... | paste -sd, -); \
+PKGS=$$(echo "$$PKGS" | sed "s/,\$$//"); \
+echo "[go] test -covermode=atomic -coverpkg=$$PKGS -coverprofile=coverage.out ./..."; \
+GOWORK=$(GOWORK) GOTOOLCHAIN=$(GOTOOLCHAIN) GOPROXY="$(GOPROXY)" GOPRIVATE="$(GOPRIVATE)" \
+$(GO) test -count=1 -covermode=atomic -coverpkg="$$PKGS" -coverprofile=coverage.out ./...; \
+echo "[go] 覆盖率汇总："; \
+$(GO) tool cover -func=coverage.out; \
+echo "[go] 生成 HTML 报告：$(GO_COVER_HTML)"; \
+$(GO) tool cover -html=coverage.out -o coverage.html; \
+echo "[ok] 覆盖率生成完成：$(GO_COVER_OUT) / $(GO_COVER_HTML)"
+endef
+
+define __go_fmt_run
+cd "$(GO_DIR)"; go fmt ./... >/dev/null; echo "[ok] go fmt 完成。"
+endef
+
+define __go_bench_run
+cd "$(GO_DIR)"; \
+bench_pat="$${FILTER:-.}"; pkg_args=(./...); \
+if [[ -n "$${FILE:-}" ]]; then \
+	mapfile -t dirs < <(find . -name "*_test.go" | grep -E "$${FILE}" | xargs -r -n1 dirname | sort -u); \
+	if [[ $${#dirs[@]} -gt 0 ]]; then \
+		pkg_args=(); \
+		for d in "$${dirs[@]}"; do pkg_args+=("$${d#./}"); done; \
+	else \
+		echo "[warn] FILE=$${FILE} 未匹配到 *_test.go，回退全量包"; \
+	fi; \
+fi; \
+echo "[go] test $(GO_TEST_V) -bench=\"$$bench_pat\" -benchmem $${pkg_args[*]}"; \
+GOWORK=$(GOWORK) GOTOOLCHAIN=$(GOTOOLCHAIN) GOPROXY="$(GOPROXY)" GOPRIVATE="$(GOPRIVATE)" \
+$(GO) test $(GO_TEST_V) -bench="$$bench_pat" -benchmem "$${pkg_args[@]}"
+endef
+
+define __go_install_run
+cd "$(GO_DIR)"; \
+echo "[go] install ./... （仅对 package main 生效）"; \
+GOWORK=$(GOWORK) GOTOOLCHAIN=$(GOTOOLCHAIN) GOPROXY="$(GOPROXY)" GOPRIVATE="$(GOPRIVATE)" \
+GOBIN="$(GOBIN)" $(GO) install ./...; \
+if [[ -n "$(GOBIN)" ]]; then \
+	echo "[ok] 可执行文件安装到: $(GOBIN)"; \
+else \
+	echo "[ok] 可执行文件已安装到默认 GOBIN（见: go env GOBIN 或 GOPATH/bin）"; \
+fi
+endef
+
+define __go_clean_run
+cd "$(GO_DIR)"; \
+echo "[go] 清理覆盖率与产物 …"; \
+rm -f coverage.out coverage.html; \
+rm -rf bin; \
+echo "[go] 执行 go clean（移除测试缓存与临时对象） …"; \
+GOWORK=$(GOWORK) $(GO) clean -testcache; \
+GOWORK=$(GOWORK) $(GO) clean ./...; \
+echo "[ok] go clean 完成。"
+endef
+
+define __go_vet_run
+cd golang; \
+echo "[info] 运行 go vet 静态分析..."; \
+out=$$(GOWORK=$(GOWORK) $(GO) vet ./... 2>&1 || true); \
+if [ -z "$$out" ]; then \
+  echo "[ok] go vet 未发现问题。"; \
+else \
+  echo "$$out"; \
+  exit 1; \
+fi
+endef
+
+define __go_guard_race
+cd "$(GO_DIR)"; log=$$(mktemp -t guard_go.XXXX).log; \
+echo "[go] go test -race -count=1 ./..."; \
+if ! GOWORK=$(GOWORK) GOTOOLCHAIN=$(GOTOOLCHAIN) $(GO) test -race -count=1 ./... | tee "$$log"; then \
+  if grep -q "DATA RACE" "$$log"; then echo "[fail][concurrency] 并发竞态问题, 日志 $$log"; else echo "[fail][test] 测试失败, 日志 $$log"; fi; exit 1; \
+fi; if grep -q "DATA RACE" "$$log"; then echo "[fail][concurrency] 并发竞态问题, 日志 $$log"; exit 1; fi; \
+echo "[ok] guard-go 通过"
 endef
 
 define __export_cpp_use_venv
