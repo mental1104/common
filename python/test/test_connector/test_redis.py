@@ -2,8 +2,9 @@ import os
 import time
 import pytest
 import multiprocessing
-from mental1104.connector.redis import RedisLock
-from mental1104.connector.redis import RedisConnection
+from mental1104.connector.redis_client import RedisLock
+from mental1104.connector.redis_client import RedisConnection
+from mental1104.connector.redis_client.redis_bloom_kv import RedisBloom
 
 
 # -------------------------------
@@ -40,6 +41,17 @@ class TestRedisLock:
                 yield client
         except Exception as e:
             pytest.skip("Cannot connect to Redis: " + str(e))
+    @pytest.fixture(scope="module")
+    def redis_bloom_client(self, redis_client):
+        """
+        提供带 Bloom 模块检查的客户端；模块不可用时跳过。
+        """
+        bloom = RedisBloom(redis_client, filter_key="test:bf:kv:testcase")
+        if not bloom.enabled:
+            pytest.skip("Redis Bloom module not loaded; skipping bloom tests")
+        # 清理测试前缀
+        clear_keys(redis_client, "test:bloom:")
+        return redis_client, bloom
 
     def test_connection_context_manager(self, redis_client):
         """
@@ -167,3 +179,22 @@ class TestRedisLock:
         # 获取最终 Redis 资源值
         final_value = int(redis_client.get(key))
         print(f"🔍 资源 {key} 最终值: {final_value}（应等于成功获取锁的进程数）")
+
+    def test_bloom_filter_basic_miss_hit(self, redis_bloom_client):
+        """
+        【场景背景】验证 Bloom 过滤器在 miss-heavy 场景下的基本行为。
+        【步骤输入】
+          1) 向 Bloom 预加载部分 key。
+          2) 对存在/不存在的 key 分别调用 exists。
+        【期望输出】已插入的 key 返回 True，未插入的 key 返回 False。
+        """
+        client, bloom = redis_bloom_client
+        prefix = "test:bloom:kv"
+        exists_key = f"{prefix}:exists:1"
+        miss_key = f"{prefix}:miss:1"
+
+        client.set(exists_key, "v")
+        bloom.add(exists_key)
+
+        assert bloom.exists(exists_key) is True
+        assert bloom.exists(miss_key) is False

@@ -10,7 +10,7 @@
 from mental1104.app.anki import AnkiApkgGenerator
 from mental1104.concurrency.types import MPStartMethod
 from mental1104.connector.postgres import Base, SessionAwareMixin, close_session, db_connection, ensure_database_exists, ensure_tables_exist, get_db_config, get_db_url, get_session, init_database, logger, open_session, setup, startup, with_session
-from mental1104.connector.redis import RedisConnection, RedisLock
+from mental1104.connector.redis_client.redis_bloom_kv import RedisBloom
 from mental1104.debug.deciprobe import ELLIPSIS_CHAR, FUNC_FIELD_WIDTH, HEAD_PREFIX, ID_FIELD_WIDTH, SITE_FIELD_WIDTH, TRACE_IF_ENABLED, TYPE_FIELD_WIDTH, deciprobe, trace_if
 from mental1104.env.environment import MissingEnvVarError, check_required_env_vars
 from mental1104.file.csv_processor import csv_writer, export_csv_from_database
@@ -85,8 +85,7 @@ __all__ = [
     'PulsarConnector',
     'PulsarEnvironment',
     'PytestBenchmarkSuite',
-    'RedisConnection',
-    'RedisLock',
+    'RedisBloom',
     'SITE_FIELD_WIDTH',
     'SessionAwareMixin',
     'TRACE_IF_ENABLED',
@@ -139,7 +138,8 @@ __all__ = [
     'yaml_to_json',
 ]
 
-def __getattr__(name):  # __getattr__ 在 from mental1104 import foo 时触发惰性加载
+# 惰性导入降低循环引用概率，但模块内部仍可能互相 import 导致循环
+def __getattr__(name):
     # PEP 562: lazy attribute access for risky modules & fallback
     try:
         modname = _EXPORT_MAP[name]
@@ -157,7 +157,7 @@ def __getattr__(name):  # __getattr__ 在 from mental1104 import foo 时触发�
         obj = getattr(sub, name, None)
         if obj is None:
             raise AttributeError(f'{modname}.{name} has no attribute {name!r}') from None
-    globals()[name] = obj  # cache
+    globals()[name] = obj  # cache：写回模块全局（由 globals() 返回的字典）以便下次直接取
     return obj
 
 def __dir__():
