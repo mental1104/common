@@ -177,77 +177,87 @@ define _git_fetch_submodules
 		fi'
 endef
 
-define _setup_python
+_setup_python:
 	$(SHELL) -lc 'set -e; \
-		echo "[info] 平台: $(UNAME_S)$(if $(IS_UBUNTU), (ubuntu),)"; \
-		if [[ -e "$(PY_VENV_PYTHON)" && ! -x "$(PY_VENV_PYTHON)" ]]; then rm -rf "$(PY_VENV)"; fi; \
-		if [[ ! -x "$(PY_VENV_PYTHON)" ]]; then \
-			echo "[venv] 创建 $(PY_VENV)"; \
-			$(PYTHON) -m venv "$(PY_VENV)"; \
-		else \
-			echo "[venv] 已存在: $(PY_VENV)"; \
-		fi; \
-		chmod u+x "$(PY_VENV)"/bin/python* "$(PY_VENV)"/bin/pip* 2>/dev/null || true; \
-		export VIRTUAL_ENV="$(PY_VENV)"; export PATH="$(PY_VENV)/bin:$$PATH"; \
-		echo "[venv] 升级 pip/setuptools/wheel"; \
-		"$(PY_VENV_PIP)" install --no-build-isolation --upgrade pip setuptools wheel $(BREAK_FLAG); \
-		if [[ -d export/python ]]; then \
-			echo "[pip] 安装 mental1104_export_layer (editable)"; \
-			cd export/python; "$(PY_VENV_PIP)" install --no-build-isolation -e . $(BREAK_FLAG); \
-			cd "$(REPO_ROOT)"; \
-		else \
-			echo "[warn] 未找到 export/python，跳过 mental1104_export_layer 安装"; \
-		fi; \
-		if [[ -f python/requirements.txt ]]; then \
-			echo "[pip] 安装依赖到 venv: python/requirements.txt (no build isolation)"; \
-			EXPORT_ABS_DIR="$(REPO_ROOT)/export/python"; \
-			if [[ ! -d "$$EXPORT_ABS_DIR" ]]; then echo "[err] 缺少 export/python 目录：$$EXPORT_ABS_DIR"; exit 1; fi; \
-			REQ_FILE="$(REPO_ROOT)/python/requirements.txt"; \
-			REQ_BAK="$$REQ_FILE.bak.setup"; \
-			restore_req(){ [[ -f "$$REQ_BAK" ]] && mv "$$REQ_BAK" "$$REQ_FILE"; }; \
-			trap 'restore_req' EXIT; \
-			if grep -q 'file://../export/python' "$$REQ_FILE"; then \
-				cp "$$REQ_FILE" "$$REQ_BAK"; \
-				python3 - "$$REQ_FILE" "$$EXPORT_ABS_DIR" <<-'PY'
-from pathlib import Path; import sys
-req=Path(sys.argv[1]); target=Path(sys.argv[2]).resolve()
-req.write_text(req.read_text().replace("file://../export/python", f"file://{target}"))
-PY
-			fi; \
-			cd python; "$(PY_VENV_PIP)" install --no-build-isolation -r requirements.txt $(BREAK_FLAG); \
-			restore_req; trap - EXIT; \
-		else \
-			echo "[info] 未找到 python/requirements.txt，跳过依赖安装。"; \
-		fi; \
-		cd "$(REPO_ROOT)"; \
-		if [[ -f python/generate_init.py ]]; then \
-			echo "[info] 执行 python/generate_init.py …"; \
-			"$(PY_VENV_PYTHON)" python/generate_init.py; \
-		else \
-			echo "[info] 未找到 python/generate_init.py，跳过。"; \
-		fi; \
-		echo "[compat] 扫描并修复使用 | 联合类型注解的源码（兼容 Py3.9）…"; \
-		files=$$(grep -R -l -E ":\s*[^#]*\|[^=]*" python --exclude-dir=.venv || true); \
-		inserted=0; \
-		for f in $$files; do \
-		  [ -f "$$f" ] || continue; \
-		  if grep -q "^from __future__ import annotations$$" "$$f"; then continue; fi; \
-		  tmp="$$f.tmp.$$RANDOM"; \
-		  awk "BEGIN{in_doc=0;doc_done=0;ins=0} \
-NR==1 && substr(\$$0,1,2)==\"#!\" {ins=NR+1} \
-NR<=2 && match(\$$0,/(coding[:=])/){if(NR>=ins) ins=NR+1} \
-doc_done==0{line=\$$0;gsub(/^[[:space:]]+/ ,\"\", line); if(in_doc==0){ if(line ~ /^([rRuUbBfF]{0,2})?\"\"\"/){ in_doc=1; if(gsub(/\"\"\"/ ,\"&\")>=2){ in_doc=0; doc_done=1; if(NR>=ins) ins=NR } } else if (line!=\"\" && substr(line,1,1)!=\"#\"){ doc_done=1 } } else { if(index(\$$0, \"\\\"\\\"\\\"\")>0){ in_doc=0; doc_done=1; if(NR>=ins) ins=NR } }} \
-{ lines[NR]=\$$0 } \
-END{ if(ins==0) ins=0; for(i=1;i<=NR;i++){ print lines[i]; if(i==ins) print \"from __future__ import annotations\" } if(NR==0) print \"from __future__ import annotations\" }" "$$f" > "$$tmp" && mv "$$tmp" "$$f" && inserted=$$((inserted+1)); \
-		done; \
-		cnt=$$(printf "%s\n" $$files | sed "/^$$/d" | wc -l | tr -d " "); \
-		echo "[compat] files_found=$$cnt, inserted=$$inserted"; \
-		echo "[info] 构建本地 wheel（不安装本体）…"; \
-		mkdir -p python/dist; \
-		"$(PY_VENV_PYTHON)" -m pip wheel --no-deps -w python/dist python/; \
-		echo "[ok] setup 完成（venv 安装依赖 + 构建 wheel，不安装本体）。"; \
-		echo "[hint] 如需使用此 venv，请执行: source $(PY_VENV)/bin/activate"'
-endef
+		script_file=$$(mktemp); \
+		trap "rm -f \"$$script_file\"" EXIT; \
+		cat <<-'"'"'__SETUP_PYTHON__'"'"' >"$$script_file"
+	set -e
+	# 平台信息
+	echo "[info] 平台: $(UNAME_S)$(if $(IS_UBUNTU), (ubuntu),)"
+	# 创建或重建虚拟环境
+	if [[ -e "$(PY_VENV_PYTHON)" && ! -x "$(PY_VENV_PYTHON)" ]]; then rm -rf "$(PY_VENV)"; fi
+	if [[ ! -x "$(PY_VENV_PYTHON)" ]]; then
+	  echo "[venv] 创建 $(PY_VENV)"
+	  $(PYTHON) -m venv "$(PY_VENV)"
+	else
+	  echo "[venv] 已存在: $(PY_VENV)"
+	fi
+	chmod u+x "$(PY_VENV)"/bin/python* "$(PY_VENV)"/bin/pip* 2>/dev/null || true
+	export VIRTUAL_ENV="$(PY_VENV)"; export PATH="$(PY_VENV)/bin:$$PATH"
+	# 升级 pip/setuptools/wheel
+	echo "[venv] 升级 pip/setuptools/wheel"
+	"$(PY_VENV_PIP)" install --no-build-isolation --upgrade pip setuptools wheel $(BREAK_FLAG)
+	# 安装本地 export/python (editable，可选)
+	if [[ -d export/python ]]; then
+	  echo "[pip] 安装 mental1104_export_layer (editable)"
+	  cd export/python; "$(PY_VENV_PIP)" install --no-build-isolation -e . $(BREAK_FLAG)
+	  cd "$(REPO_ROOT)"
+	else
+	  echo "[warn] 未找到 export/python，跳过 mental1104_export_layer 安装"
+	fi
+	# 安装 python/requirements.txt 依赖
+	if [[ -f python/requirements.txt ]]; then
+	  echo "[pip] 安装依赖到 venv: python/requirements.txt (no build isolation)"
+	  EXPORT_ABS_DIR="$(REPO_ROOT)/export/python"
+	  if [[ ! -d "$$EXPORT_ABS_DIR" ]]; then echo "[err] 缺少 export/python 目录：$$EXPORT_ABS_DIR"; exit 1; fi
+	  REQ_FILE="$(REPO_ROOT)/python/requirements.txt"
+	  REQ_BAK="$$REQ_FILE.bak.setup"
+	  restore_req(){ [[ -f "$$REQ_BAK" ]] && mv "$$REQ_BAK" "$$REQ_FILE"; }
+	  trap restore_req EXIT
+	  if grep -q "file://../export/python" "$$REQ_FILE"; then
+	    cp "$$REQ_FILE" "$$REQ_BAK"
+	    python3 - "$$REQ_FILE" "$$EXPORT_ABS_DIR" <<-'PY'
+	from pathlib import Path; import sys
+	req=Path(sys.argv[1]); target=Path(sys.argv[2]).resolve()
+	req.write_text(req.read_text().replace("file://../export/python", f"file://{target}"))
+	PY
+	  fi
+	  cd python
+	  "$(PY_VENV_PIP)" install --no-build-isolation -r requirements.txt $(BREAK_FLAG)
+	  restore_req
+	  trap - EXIT
+	else
+	  echo "[info] 未找到 python/requirements.txt，跳过依赖安装。"
+	fi
+	cd "$(REPO_ROOT)"
+	# 生成 __init__（可选）
+	if [[ -f python/generate_init.py ]]; then
+	  echo "[info] 执行 python/generate_init.py …"
+	  "$(PY_VENV_PYTHON)" python/generate_init.py
+	else
+	  echo "[info] 未找到 python/generate_init.py，跳过。"
+	fi
+	# 兼容性修复：为使用 | 联合类型的文件注解的源码注入 __future__ import annotations
+	echo "[compat] 扫描并修复使用 | 联合类型注解的源码（兼容 Py3.9）…"
+	files=$$(grep -R -l -E ":\s*[^#]*\|[^=]*" python --exclude-dir=.venv || true)
+	inserted=0
+	for f in $$files; do
+	  [ -f "$$f" ] || continue
+	  if grep -q "^from __future__ import annotations$$" "$$f"; then continue; fi
+	  tmp="$$f.tmp.$$RANDOM"
+	  awk "BEGIN{in_doc=0;doc_done=0;ins=0} NR==1 && substr(\$$0,1,2)==\"#!\" {ins=NR+1} NR<=2 && match(\$$0,/(coding[:=])/){if(NR>=ins) ins=NR+1} doc_done==0{line=\$$0;gsub(/^[[:space:]]+/ ,\"\", line); if(in_doc==0){ if(line ~ /^([rRuUbBfF]{0,2})?\"\"\"/){ in_doc=1; if(gsub(/\"\"\"/ ,\"&\")>=2){ in_doc=0; doc_done=1; if(NR>=ins) ins=NR } } else if (line!=\"\" && substr(line,1,1)!=\"#\"){ doc_done=1 } } else { if(index(\$$0, \"\\\"\\\"\\\"\")>0){ in_doc=0; doc_done=1; if(NR>=ins) ins=NR } }} { lines[NR]=\$$0 } END{ if(ins==0) ins=0; for(i=1;i<=NR;i++){ print lines[i]; if(i==ins) print \"from __future__ import annotations\" } if(NR==0) print \"from __future__ import annotations\" }" "$$f" > "$$tmp" && mv "$$tmp" "$$f" && inserted=$$((inserted+1))
+	done
+	cnt=$$(printf "%s\n" $$files | sed "/^$$/d" | wc -l | tr -d " ")
+	echo "[compat] files_found=$$cnt, inserted=$$inserted"
+	# 构建 wheel（不安装本体）
+	echo "[info] 构建本地 wheel（不安装本体）…"
+	mkdir -p python/dist
+	"$(PY_VENV_PYTHON)" -m pip wheel --no-deps -w python/dist python/
+	echo "[ok] setup 完成（venv 安装依赖 + 构建 wheel，不安装本体）。"
+	echo "[hint] 如需使用此 venv，请执行: source $(PY_VENV)/bin/activate"
+	__SETUP_PYTHON__
+	bash "$$script_file"'
 
 define _test_python
 	$(SUDO_MSG)
@@ -1097,8 +1107,8 @@ install-rust: ; $(call _install_rust)
 coverage-rust:; $(call _coverage_rust)
 
 # =================== 直达入口（Python） ===================
-.PHONY: setup-python build-python test-python install-python clean-python coverage-python fmt-python bench-python
-setup-python:   ; $(call _setup_python)
+.PHONY: setup-python _setup_python build-python test-python install-python clean-python coverage-python fmt-python bench-python
+setup-python: _setup_python
 build-python:   | setup-python
 test-python:    | build-export-cpp ; $(call _test_python)
 install-python: ; $(call _install_python)
