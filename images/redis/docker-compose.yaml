@@ -1,14 +1,17 @@
 services:
   redis:
-    image: redis:latest
+    image: redis/redis-stack:latest # 裸的可以使用redis:latest， redis-stack包含json、bloomfilter等插件
     container_name: redis
     networks:
       - shared_network
     ports:
       - "6379:6379"
+      - "8001:8001"   # RedisInsight 可视化
     volumes:
       - redis-data:/data
-    command: ["redis-server", "--appendonly", "yes"]
+    environment:
+      # 通过 REDIS_ARGS 传给默认的 redis-stack-server
+      - REDIS_ARGS=--save "" --appendonly no
 
 volumes:
   redis-data:

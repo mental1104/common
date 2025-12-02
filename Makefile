@@ -254,7 +254,7 @@ define _test_python
 	$(SHELL) -lc 'set -e; \
 		if [[ ! -x "$(PY_VENV_PYTHON)" ]]; then echo "[error] 未找到项目 venv: $(PY_VENV_PYTHON)，请先执行 make setup-python"; exit 1; fi; \
 		export VIRTUAL_ENV="$(PY_VENV)"; export PATH="$(PY_VENV)/bin:$$PATH"; \
-		export EXPORT_LAYER_LOG_LEVEL=DEBUG; \
+		export EXPORT_LAYER_LOG_LEVEL=INFO; \
 		unset HTTP_PROXY HTTPS_PROXY NO_PROXY ALL_PROXY http_proxy https_proxy no_proxy all_proxy; \
 		export PYTEST_DISABLE_PLUGIN_AUTOLOAD=0; \
 		export PYTEST_PLUGINS=pytest_benchmark.plugin; \
@@ -320,7 +320,7 @@ define _bench_python
 			export VIRTUAL_ENV="$(PY_VENV)"; \
 			export PATH="$(PY_VENV)/bin:$$PATH"; \
 		fi; \
-		export EXPORT_LAYER_LOG_LEVEL=DEBUG; \
+		export EXPORT_LAYER_LOG_LEVEL=INFO; \
 		if ! command -v pytest >/dev/null 2>&1; then echo "[error] 未检测到 pytest；请先执行: make setup-python"; exit 1; fi; \
 		EXP_LIB=""; \
 		for ext in so dylib dll; do \
