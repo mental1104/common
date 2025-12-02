@@ -229,77 +229,32 @@ endef
 
 define _fmt_python
 	$(SHELL) -lc 'set -e; \
-		if [[ ! -x "$(PY_VENV_PYTHON)" ]]; then echo "[err] 未找到项目 venv，请先执行 make setup-python"; exit 1; fi; \
-		export VIRTUAL_ENV="$(PY_VENV)"; export PATH="$(PY_VENV)/bin:$$PATH"; \
-		if ! "$(PY_VENV_PYTHON)" -c "import autopep8" >/dev/null 2>&1; then "$(PY_VENV_PIP)" install autopep8; fi; \
-		cd python; \
-		"$(PY_VENV_PYTHON)" -m autopep8 --in-place --recursive --max-line-length=120 --ignore=E402,E226,E24,W50,W690 .; \
-		echo "[ok] python autopep8 fmt 完成。"'
+		$(call __py_guard_venv)          # 确认 venv 存在并导出 PATH
+		$(call __py_fmt_ensure_tool)     # 如缺失则安装 autopep8
+		$(call __py_fmt_run)'            # 进入 python 目录执行格式化
 endef
 
 define _bench_python
 	$(SHELL) -lc 'set -e; \
-		if [[ -x "$(PY_VENV_PYTHON)" ]]; then \
-			export VIRTUAL_ENV="$(PY_VENV)"; \
-			export PATH="$(PY_VENV)/bin:$$PATH"; \
-		fi; \
-		export EXPORT_LAYER_LOG_LEVEL=INFO; \
-		if ! command -v pytest >/dev/null 2>&1; then echo "[error] 未检测到 pytest；请先执行: make setup-python"; exit 1; fi; \
-		EXP_LIB=""; \
-		for ext in so dylib dll; do \
-			cand="$(EXPORT_CPP_BUILD_DIR)/libexport_json.$$ext"; \
-			if [[ -f "$$cand" ]]; then EXP_LIB="$$cand"; break; fi; \
-		done; \
-		if [[ -n "$$EXP_LIB" ]]; then export EXPORT_LAYER_CTYPE_LIB="$$EXP_LIB"; fi; \
-		export PYTHONPATH="$(EXPORT_CPP_BUILD_DIR):$(REPO_ROOT)/export/python/src:$$PYTHONPATH"; \
-		cd python; \
-		if ! $(PYTHON) -m pytest -q --help 2>/dev/null | grep -qi benchmark; then \
-			echo "[warn] 未检测到 pytest-benchmark 插件，回退到名称筛选"; \
-			kexpr="$(PYTEST_BENCH_K)"; \
-			[[ -n "$${FILTER:-}" ]] && kexpr="($${FILTER}) and ($$kexpr)"; \
-			[[ -n "$${FILE:-}" ]] && kexpr="($${FILE}) and ($$kexpr)"; \
-			$(PYTHON) -m pytest $(PYTEST_V) -k "$$kexpr"; \
-			exit 0; \
-		fi; \
-		bench_files=$$(find test_benchmark -type f -name "test_*.py" | sort); \
-		if [ -n "$${FILE:-}" ]; then \
-			bench_files=$$(printf "%s\n" $$bench_files | grep -E "$${FILE}" || true); \
-		elif [ -n "$${FILTER:-}" ]; then \
-			bench_files=$$(printf "%s\n" $$bench_files | grep -Ei "$${FILTER}" || true); \
-		fi; \
-		if [ -z "$$bench_files" ]; then \
-			echo "[warn] 未找到 test_benchmark/* 基准文件，回退到名称筛选"; \
-			kexpr="$(PYTEST_BENCH_K)"; \
-			[[ -n "$${FILTER:-}" ]] && kexpr="($${FILTER}) and ($$kexpr)"; \
-			[[ -n "$${FILE:-}" ]] && kexpr="($${FILE}) and ($$kexpr)"; \
-			$(PYTHON) -m pytest $(PYTEST_V) -k "$$kexpr" --benchmark-only; \
-			exit 0; \
-		fi; \
-		rm -rf "$(PY_BENCH_ARTIFACT_DIR)"; \
-		mkdir -p "$(PY_BENCH_ARTIFACT_DIR)/plots"; \
-		for file in $$bench_files; do \
-			slug=$$(echo "$$file" | sed "s@/@__@g" | sed "s/\\.py$$//"); \
-			json="$(PY_BENCH_ARTIFACT_DIR)/$${slug}.json"; \
-			title="Python $$file"; \
-			case "$$file" in \
-				test_benchmark/test_concurrency/*) extra_opts="$(PY_BENCHMARK_CONCURRENCY_OPTS)";; \
-				*) extra_opts="";; \
-			esac; \
-			echo "[bench-python] $$file -> $$json"; \
-			kexpr=""; \
-			[[ -n "$${FILTER:-}" ]] && kexpr="($${FILTER})"; \
-			[[ -n "$${FILE:-}" ]] && kexpr="$${kexpr:+($$kexpr) and }($${FILE})"; \
-			kargs=(); \
-			[[ -n "$$kexpr" ]] && kargs+=(-k "$$kexpr"); \
-			$(PYTHON) -m pytest $(PYTEST_V) "$$file" --benchmark-only --benchmark-json "$$json" $(PY_BENCHMARK_OPTS) $$extra_opts "$${kargs[@]}"; \
-			$(PYTHON) tools/render_bench_plots.py \
-				--input "$$json" \
-				--test-type pytest-benchmark \
-				--chart case-matrix \
-				--output "$(PY_BENCH_ARTIFACT_DIR)/plots/$${slug}.png" \
-				--title "$$title"; \
-		done; \
-		echo "[bench-python] 图表输出目录：$(PY_BENCH_ARTIFACT_DIR)/plots"'
+		$(call __py_guard_venv)             # 确认 venv 存在并导出 PATH
+		$(call __py_bench_env)              # 环境开关（日志、代理、PYTHONPATH）
+		$(call __py_bench_plugins)          # 仅加载/安装 pytest-benchmark 插件（禁用自动插件）
+		$(call __py_bench_check_pytest)     # 校验 pytest/pytest-benchmark 可用
+		$(call __py_bench_export_lib)       # 导出 C++ 桥接库及 PYTHONPATH
+		$(call __py_bench_select_and_run)'  # 选择基准文件并执行/出图
+endef
+
+define _vet_python
+	$(SHELL) -lc 'set -e; \
+		$(call __py_guard_venv)          # 确认 venv 存在并导出 PATH
+		$(call __py_vet_ruff)'           # 使用 ruff 进行静态检查'
+endef
+
+define _guard_python
+	$(SHELL) -lc 'set -e; \
+		$(call __py_guard_venv)          # 确认 venv 存在并导出 PATH
+		$(call __py_vet_ruff)            # 静态检查（ruff）
+		$(call __py_guard_pytest)'       # 运行一次 pytest（过滤 bench）
 endef
 
 define _configure_cpp
@@ -834,21 +789,6 @@ define _vet_go
 		fi'
 endef
 
-define _vet_python
-	$(SHELL) -lc 'set -e; cd python; \
-		if command -v ruff >/dev/null 2>&1; then \
-			echo "[ruff] using CLI: $$(command -v ruff)"; \
-			ruff check --select F,B,UP,PERF mental1104; \
-		else \
-			echo "[ruff] CLI not found, try module via $(PYTHON)"; \
-			if ! $(PYTHON) -c "import pkgutil, sys; sys.exit(0 if pkgutil.find_loader(\"ruff\") else 1)"; then \
-				echo "[error] 未找到 ruff；macOS 可执行: brew install ruff；或: $(PYTHON) -m pip install --user ruff --break-system-packages"; \
-				exit 1; \
-			fi; \
-			$(PYTHON) -m ruff check --select F,B,UP,PERF mental1104; \
-		fi'
-endef
-
 define _vet_cpp
 	$(SHELL) -lc 'set -e; \
 		if ! command -v clang-tidy >/dev/null 2>&1; then \
@@ -1020,7 +960,7 @@ test-python:    | build-export-cpp ; $(call _test_python)              # 需导�
 install-python: ; $(call _install_python)                             # 系统安装，不强制前置 setup
 clean-python:   ; $(call _clean_python)
 coverage-python:; $(call _coverage_python)
-fmt-python:     ; $(call __py_guard_venv) ; $(call _fmt_python)
+fmt-python:     ; $(call _fmt_python)
 bench-python:   | build-export-cpp
 	$(call __py_guard_venv)
 	$(call _bench_python)
@@ -1572,6 +1512,113 @@ $(PY_VENV_PYTHON) -m coverage run --source=. -m pytest -c /dev/null -k "$$kexpr"
 $(PY_VENV_PYTHON) -m coverage report
 endef
 
+define __py_fmt_ensure_tool
+if ! "$(PY_VENV_PYTHON)" -c "import autopep8" >/dev/null 2>&1; then \
+  "$(PY_VENV_PIP)" install autopep8; \
+fi
+endef
+
+define __py_fmt_run
+cd python; \
+"$(PY_VENV_PYTHON)" -m autopep8 --in-place --recursive --max-line-length=120 --ignore=E402,E226,E24,W50,W690 .; \
+echo "[ok] python autopep8 fmt 完成。"
+endef
+
+define __py_bench_env
+export EXPORT_LAYER_LOG_LEVEL=INFO; \
+unset HTTP_PROXY HTTPS_PROXY NO_PROXY ALL_PROXY http_proxy https_proxy no_proxy all_proxy; \
+echo "[proxy] disabled for pytest (HTTP_PROXY/HTTPS_PROXY/NO_PROXY/ALL_PROXY 皆已清空)"; \
+export PYTHON="$(PY_VENV_PYTHON)";
+endef
+
+define __py_bench_check_pytest
+if ! command -v pytest >/dev/null 2>&1; then echo "[error] 未检测到 pytest；请先执行: make setup-python"; exit 1; fi;
+endef
+
+define __py_bench_export_lib
+EXP_LIB=""; \
+for ext in so dylib dll; do \
+  cand="$(EXPORT_CPP_BUILD_DIR)/libexport_json.$$ext"; \
+  if [[ -f "$$cand" ]]; then EXP_LIB="$$cand"; break; fi; \
+done; \
+if [[ -n "$$EXP_LIB" ]]; then export EXPORT_LAYER_CTYPE_LIB="$$EXP_LIB"; fi; \
+export PYTHONPATH="$(EXPORT_CPP_BUILD_DIR):$(REPO_ROOT)/export/python/src:$$PYTHONPATH";
+endef
+
+define __py_bench_select_and_run
+cd python; \
+PY_BIN="$(PY_VENV_PYTHON)"; \
+if ! "$$PY_BIN" -m pytest -q --help 2>/dev/null | grep -qi benchmark; then \
+  echo "[warn] 未检测到 pytest-benchmark 插件，回退到名称筛选"; \
+  kexpr="$(PYTEST_BENCH_K)"; \
+  [[ -n "$${FILTER:-}" ]] && kexpr="($${FILTER}) and ($$kexpr)"; \
+  [[ -n "$${FILE:-}" ]] && kexpr="($${FILE}) and ($$kexpr)"; \
+  "$$PY_BIN" -m pytest $(PYTEST_V) -k "$$kexpr"; \
+  exit 0; \
+fi; \
+bench_files=$$(find test_benchmark -type f -name "test_*.py" | sort); \
+if [ -n "$${FILE:-}" ]; then \
+  bench_files=$$(printf "%s\n" $$bench_files | grep -E "$${FILE}" || true); \
+elif [ -n "$${FILTER:-}" ]; then \
+  bench_files=$$(printf "%s\n" $$bench_files | grep -Ei "$${FILTER}" || true); \
+fi; \
+if [ -z "$$bench_files" ]; then \
+  echo "[warn] 未找到 test_benchmark/* 基准文件，回退到名称筛选"; \
+  kexpr="$(PYTEST_BENCH_K)"; \
+  [[ -n "$${FILTER:-}" ]] && kexpr="($${FILTER}) and ($$kexpr)"; \
+  [[ -n "$${FILE:-}" ]] && kexpr="($${FILE}) and ($$kexpr)"; \
+  "$$PY_BIN" -m pytest $(PYTEST_V) -k "$$kexpr" --benchmark-only; \
+  exit 0; \
+fi; \
+rm -rf "$(PY_BENCH_ARTIFACT_DIR)"; \
+mkdir -p "$(PY_BENCH_ARTIFACT_DIR)/plots"; \
+for file in $$bench_files; do \
+  slug=$$(echo "$$file" | sed "s@/@__@g" | sed "s/\\.py$$//"); \
+  json="$(PY_BENCH_ARTIFACT_DIR)/$${slug}.json"; \
+  title="Python $$file"; \
+  case "$$file" in \
+    test_benchmark/test_concurrency/*) extra_opts="$(PY_BENCHMARK_CONCURRENCY_OPTS)";; \
+    *) extra_opts="";; \
+  esac; \
+  echo "[bench-python] $$file -> $$json"; \
+  kexpr=""; \
+  [[ -n "$${FILTER:-}" ]] && kexpr="($${FILTER})"; \
+  [[ -n "$${FILE:-}" ]] && kexpr="$${kexpr:+($$kexpr) and }($${FILE})"; \
+  kargs=(); \
+  [[ -n "$$kexpr" ]] && kargs+=(-k "$$kexpr"); \
+  "$$PY_BIN" -m pytest $(PYTEST_V) "$$file" --benchmark-only --benchmark-json "$$json" $(PY_BENCHMARK_OPTS) $$extra_opts "$${kargs[@]}"; \
+"$$PY_BIN" tools/render_bench_plots.py \
+    --input "$$json" \
+    --test-type pytest-benchmark \
+    --chart case-matrix \
+    --output "$(PY_BENCH_ARTIFACT_DIR)/plots/$${slug}.png" \
+    --title "$$title"; \
+done; \
+echo "[bench-python] 图表输出目录：$(PY_BENCH_ARTIFACT_DIR)/plots"
+endef
+
+define __py_guard_pytest
+$(call __py_test_env_flags)      # 清空代理、设定日志
+$(call __py_test_plugins)        # 加载/安装 pytest 需要的插件
+$(call __py_test_check_pytest)   # 校验 pytest 可用
+$(call __py_test_export_lib)     # 导出 C++ 桥接库及 PYTHONPATH
+PY_RUNNER="$(PY_VENV_PYTHON) -m pytest"; \
+PYTEST_ARGS=""; \
+KEXPR_DEFAULT="not bench and not benchmark"; \
+$(call __py_test_run_pytest)
+endef
+
+define __py_vet_ruff
+echo "[info] 运行 ruff 静态检查 (F,B,UP,PERF)"; \
+if ! "$(PY_VENV_PYTHON)" -c "import ruff" >/dev/null 2>&1; then \
+  echo "[ruff] 未找到 ruff，尝试安装到 venv"; \
+  "$(PY_VENV_PIP)" install ruff; \
+fi; \
+cd python; \
+"$(PY_VENV_PYTHON)" -m ruff check --select F,B,UP,PERF mental1104; \
+echo "[ok] vet-python 完成。"
+endef
+
 define __export_cpp_use_venv
 if [[ -x "$(PY_VENV_PYTHON)" ]]; then \
   export VIRTUAL_ENV="$(PY_VENV)"; \
@@ -1593,4 +1640,12 @@ endef
 define __export_cpp_build
 $(CMAKE) --build $(EXPORT_CPP_BUILD_DIR); \
 echo "[ok] export/cpp built (pybind11 optional)";
+endef
+define __py_bench_plugins
+export PYTEST_DISABLE_PLUGIN_AUTOLOAD=1; \
+export PYTEST_PLUGINS=pytest_benchmark.plugin; \
+if ! "$(PY_VENV_PIP)" show pytest-benchmark >/dev/null 2>&1; then \
+  echo "[info] 安装 pytest-benchmark 到 venv …"; \
+  "$(PY_VENV_PIP)" install pytest-benchmark; \
+fi;
 endef
