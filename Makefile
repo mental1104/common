@@ -283,52 +283,6 @@ define _bench_report
 		echo "[bench] 图库：$(BENCH_GALLERY)"'
 endef
 
-
-define _build_cpp_submodules
-	$(SHELL) -lc 'set -e; \
-		if [[ ! -f .gitmodules ]]; then \
-			echo "[cpp-submods] 未检测到 .gitmodules，跳过子模块构建。"; exit 0; \
-		fi; \
-		paths=$$(git config -f .gitmodules --get-regexp '^submodule\..*\.path' 2>/dev/null \
-			| while read -r _ p; do echo $$p; done \
-			| grep -E "^$(CPP_SRC_DIR)/lib/" || true); \
-		echo "[cpp-submods] 待构建列表:"; echo "$$paths" | sed "s/^/  - /"; \
-		declare -a fails=(); declare -a built=(); \
-		for p in $$paths; do \
-			if [[ ! -d "$$p" ]]; then echo "  - 跳过 $$p（目录不存在）"; continue; fi; \
-			if [[ ! -f "$$p/CMakeLists.txt" ]]; then echo "  - 跳过 $$p（无 CMakeLists.txt）"; continue; fi; \
-			name=$$(basename "$$p"); \
-			b="$$p/build"; mkdir -p "$$b"; \
-			extra_opts=""; \
-			case "$$name" in \
-				rapidjson) extra_opts="-DRAPIDJSON_BUILD_TESTS=OFF -DRAPIDJSON_BUILD_EXAMPLES=OFF -DRAPIDJSON_BUILD_DOC=OFF";; \
-				*)         extra_opts="-DBUILD_TESTING=OFF";; \
-			esac; \
-			echo "  - 构建 $$p -> $$b  (opts: $$extra_opts)"; \
-			( \
-				set -e; \
-				$(CMAKE) -S "$$p" -B "$$b" -DCMAKE_BUILD_TYPE="$(CPP_BUILD_TYPE)" $$extra_opts; \
-				$(CMAKE) --build "$$b" --parallel $(JOBS) || $(CMAKE) --build "$$b" -- -j $(JOBS); \
-			) && { built+=("$$p"); echo "    -> OK: $$p"; } \
-			  || { echo "    -> FAIL: $$p（已记录，继续后续模块）"; fails+=("$$p"); }; \
-		done; \
-		echo "[cpp-submods] 汇总：$${#built[@]} 成功，$${#fails[@]} 失败。"; \
-		if (( $${#fails[@]} > 0 )); then echo "  失败清单："; for f in "$${fails[@]}"; do echo "    - $$f"; done; fi; \
-		exit 0;'
-endef
-
-define _clean_cpp_submodules
-	$(SHELL) -lc 'set -e; \
-		if [[ ! -f .gitmodules ]]; then exit 0; fi; \
-		echo "[clean-submods] 清理 $(CPP_SRC_DIR)/lib/* 子模块的 build/ …"; \
-		paths=$$(git config -f .gitmodules --get-regexp path | awk '\''{print $$2}'\'' | grep -E "^$(CPP_SRC_DIR)/lib/" || true); \
-		for p in $$paths; do \
-			b="$$p/build"; \
-			if [[ -d "$$b" ]]; then echo "  - rm -rf $$b"; rm -rf "$$b"; fi; \
-		done; \
-		echo "[clean-submods] 完成。"'
-endef
-
 define _setup_go
 	$(SHELL) -lc 'set -e; \
 		$(call __go_guard_tool)           # 检查 go 命令存在 \
@@ -380,127 +334,61 @@ endef
 
 define _setup_rust
 	$(SHELL) -lc 'set -e; \
-		if ! command -v cargo >/dev/null 2>&1; then echo "[error] 未找到 cargo"; exit 1; fi; \
-		cd "$(RUST_DIR)"; \
-		if [[ -f rust-toolchain.toml ]]; then rustup toolchain install stable || true; rustup override set stable || true; fi; \
-		cargo fetch; \
-		echo "[ok] rust setup 完成。"'
+		$(call __rust_guard_cargo) ; \
+		$(call __rust_setup_toolchain) ; \
+		$(call __rust_fetch_deps)'           # cargo fetch 拉取依赖
 endef
 
 define _build_rust
-	$(SHELL) -lc 'set -e; cd "$(RUST_DIR)"; cargo build --release; echo "[ok] rust build 完成。"'
+	$(SHELL) -lc 'set -e; \
+		$(call __rust_build_run)'            # cargo build --release
 endef
 
 define _test_rust
-	$(SHELL) -lc 'set -e; unset HTTP_PROXY HTTPS_PROXY NO_PROXY ALL_PROXY http_proxy https_proxy no_proxy all_proxy; \
-		echo "[proxy] disabled for pytest (HTTP_PROXY/HTTPS_PROXY/NO_PROXY/ALL_PROXY 皆已清空)"; \
-		cd "$(RUST_DIR)"; \
-		file_pat="$${FILE:-}"; fn_pat="$${FILTER:-}"; \
-		if [[ -n "$$file_pat" ]]; then \
-			mapfile -t bins < <(find tests -maxdepth 1 -type f -name "*.rs" 2>/dev/null | grep -E "$$file_pat" | sed "s#.*/##" | sed "s/\\.rs$$//"); \
-			if [[ $${#bins[@]} -gt 0 ]]; then \
-				for b in "$${bins[@]}"; do \
-					args=(test --all-features $(CARGO_TEST_V) --test "$$b"); \
-					[[ -n "$$fn_pat" ]] && args+=("$$fn_pat"); \
-					cargo "$${args[@]}"; \
-				done; \
-				exit 0; \
-			fi; \
-			echo "[warn] FILE=$$file_pat 未匹配到 tests/*.rs，回退全量"; \
-		fi; \
-		args=(test --all-features $(CARGO_TEST_V)); \
-		[[ -n "$$fn_pat" ]] && args+=("$$fn_pat"); \
-		cargo "$${args[@]}"'
+	$(SHELL) -lc 'set -e; \
+		$(call __rust_env_clear_proxy) ; \
+		$(call __rust_test_run)'             # cargo test（支持 FILE/FILTER）
 endef
 
 define _bench_rust
-	$(SHELL) -lc 'set -e; cd "$(RUST_DIR)"; \
-		file_pat="$${FILE:-}"; fn_pat="$${FILTER:-}"; \
-		if [[ -n "$$file_pat" ]]; then \
-			mapfile -t bins < <(find benches -maxdepth 1 -type f -name "*.rs" 2>/dev/null | grep -E "$$file_pat" | sed "s#.*/##" | sed "s/\\.rs$$//"); \
-			if [[ $${#bins[@]} -gt 0 ]]; then \
-				for b in "$${bins[@]}"; do \
-					args=(bench $(CARGO_TEST_V) --bench "$$b"); \
-					[[ -n "$$fn_pat" ]] && args+=("$$fn_pat"); \
-					cargo "$${args[@]}"; \
-				done; \
-				exit 0; \
-			fi; \
-			echo "[warn] FILE=$$file_pat 未匹配到 benches/*.rs，回退全量"; \
-		fi; \
-		args=(bench $(CARGO_TEST_V)); \
-		[[ -n "$$fn_pat" ]] && args+=("$$fn_pat"); \
-		cargo "$${args[@]}"'
+	$(SHELL) -lc 'set -e; \
+		$(call __rust_bench_run)'            # cargo bench（支持 FILE/FILTER）
 endef
 
 define _fmt_rust
-	$(SHELL) -lc 'set -e; cd "$(RUST_DIR)"; cargo fmt --all'
+	$(SHELL) -lc 'set -e; \
+		$(call __rust_fmt_run)'              # cargo fmt --all
 endef
 
 define _clippy_rust
-	$(SHELL) -lc 'set -e; cd "$(RUST_DIR)"; cargo clippy --all-targets --all-features -- -D warnings'
+	$(SHELL) -lc 'set -e; \
+		$(call __rust_clippy_run)'           # cargo clippy --all-targets --all-features
 endef
 
 define _example_rust
-	$(SHELL) -lc 'set -e; cd "$(RUST_DIR)"; cargo run --example contains'
+	$(SHELL) -lc 'set -e; \
+		$(call __rust_example_run)'          # cargo run --example contains
 endef
 
 define _clean_rust
 	$(SHELL) -lc 'set -e; \
-		cd "$(RUST_DIR)"; \
-		cargo clean; \
-		cd - >/dev/null; \
-		rm -rf "$(RUST_DIR)/coverage" \
-		       "$(RUST_DIR)/flamegraph.svg" \
-		       "$(RUST_DIR)"/perf.data* || true; \
-		find "$(RUST_DIR)" -type f -name "*.profraw" -delete || true; \
-		find "$(RUST_DIR)" -type f -name "*.profdata" -delete || true; \
-		echo "[ok] rust clean 完成。"'
+		$(call __rust_clean_run)'            # 清理构建、覆盖率与 perf 产物
 endef
 
 define _install_rust
 	$(SHELL) -lc 'set -e; \
-		if ! command -v cargo >/dev/null 2>&1; then echo "[error] 未找到 cargo"; exit 1; fi; \
-		cd "$(RUST_DIR)"; \
-		if grep -q "\[\[bin\]\]" Cargo.toml || [ -f src/main.rs ]; then \
-			echo "[rust] cargo install --path . --locked --force"; \
-			cargo install --path . --locked --force; \
-			echo "[ok] rust install 完成（可执行文件路径见 cargo install 输出）。"; \
-		else \
-			echo "[warn] 当前 crate 未声明二进制入口，执行 cargo build --release 代替 install"; \
-			cargo build --release; \
-			echo "[ok] rust 库 crate 构建完成（无可执行文件可安装）。"; \
-		fi'
+		$(call __rust_guard_cargo) ; \
+		$(call __rust_install_run)'          # cargo install 或构建库 crate
 endef
 
 define _coverage_rust
 	$(SHELL) -lc 'set -e; \
-		cd "$(RUST_DIR)"; \
-		rustup component add llvm-tools-preview >/dev/null 2>&1 || true; \
-		if ! command -v cargo-llvm-cov >/dev/null 2>&1; then cargo install cargo-llvm-cov; fi; \
-		mkdir -p coverage/html coverage; \
-		IGNORE="(^|/)(tests?|benches?|examples)/"; \
-		echo "[info] 生成 HTML 与 LCOV 报告（仅统计源码，忽略 tests/benches/examples）…"; \
-		cargo llvm-cov --all-features --ignore-filename-regex "$$IGNORE" \
-			--html --output-dir coverage/html; \
-		cargo llvm-cov --all-features --ignore-filename-regex "$$IGNORE" \
-			--lcov --output-path coverage/lcov.info; \
-		echo "[ok] HTML: coverage/html/index.html"; \
-		echo "[ok] LCOV: coverage/lcov.info"; \
-		FAIL_ARG=""; \
-		if [[ -n "$${RUST_COVER_FAIL_UNDER:-}" ]]; then FAIL_ARG="--fail-under-lines $$RUST_COVER_FAIL_UNDER"; fi; \
-		echo "[info] 覆盖率汇总（最后打印）"; \
-		cargo llvm-cov --all-features --ignore-filename-regex "$$IGNORE" \
-			--summary-only $$FAIL_ARG; \
-	'
+		$(call __rust_coverage_run)'         # cargo llvm-cov 生成 HTML/LCOV 并打印汇总
 endef
 
 define _vet_rust
 	$(SHELL) -lc 'set -e; \
-		cd rust/mental1104; \
-		echo "[info] 运行 cargo clippy..."; \
-		cargo clippy --all-targets --all-features || true; \
-		echo "[ok] vet-rust 检查完成（忽略警告）。"'
+		$(call __rust_vet_run)'              # 运行 clippy（忽略警告退出码）
 endef
 
 define _vet_go
@@ -525,41 +413,7 @@ endef
 
 define _guard_rust
 	$(SHELL) -lc 'set -euo pipefail; \
-		cd "$(RUST_DIR)"; \
-		MODE_VAL="$${MODE:-all}"; \
-		case "$$MODE_VAL" in mem|race|miri|all) ;; *) echo "[error] MODE 仅支持 mem|race|miri|all"; exit 2;; esac; \
-		echo "[info] rust guard MODE=$$MODE_VAL"; \
-		if [ "$$MODE_VAL" = "all" ]; then MODES="mem race"; else MODES="$$MODE_VAL"; fi; \
-		NEED_NIGHTLY=0; for m in $$MODES; do case "$$m" in mem|race|miri) NEED_NIGHTLY=1;; esac; done; \
-		if [ $$NEED_NIGHTLY -eq 1 ]; then \
-			if ! rustup toolchain list | grep -q "^nightly"; then \
-				echo "[error] 未检测到 nightly 工具链。请先运行: rustup toolchain install nightly"; exit 3; \
-			fi; \
-		fi; \
-		for m in $$MODES; do \
-			if [ "$$m" = "mem" ]; then \
-				echo "[mem] AddressSanitizer 开始"; \
-				export RUSTFLAGS="-Zsanitizer=address"; \
-				export RUSTDOCFLAGS="-Zsanitizer=address"; \
-				export ASAN_OPTIONS="detect_leaks=1:halt_on_error=1:malloc_context_size=20"; \
-				cargo +nightly test --tests -Zbuild-std || { echo "[fail][memory] 内存问题"; exit 1; }; \
-				echo "[ok] mem 通过"; \
-			elif [ "$$m" = "race" ]; then \
-				echo "[race] ThreadSanitizer 开始"; \
-				export RUSTFLAGS="-Zsanitizer=thread"; \
-				export RUSTDOCFLAGS="-Zsanitizer=thread"; \
-				export TSAN_OPTIONS="halt_on_error=1:report_signal_unsafe=0"; \
-				cargo +nightly test --tests -Zbuild-std || { echo "[fail][race] 并发竞态问题"; exit 1; }; \
-				echo "[ok] race 通过"; \
-			else \
-				echo "[miri] 开始"; \
-				if ! cargo +nightly miri --version >/dev/null 2>&1; then \
-					echo "[error] 未安装 miri。请执行: rustup +nightly component add miri"; exit 4; \
-				fi; \
-				cargo +nightly miri test || { echo "[fail][miri] 未定义行为"; exit 1; }; \
-				echo "[ok] miri 通过"; \
-			fi; \
-		done'
+		$(call __rust_guard_run)'             # 运行 mem/race/miri 诊断
 endef
 
 .PHONY: _docker-up-all-if-needed _docker-down-all-if-needed
@@ -723,8 +577,6 @@ setup-docker: $(ENV_MK)
 clean-docker:
 	$(call __docker_down_all)
 	@rm -f "$(ENV_STAMP)" "$(ENV_MK)" || true
-clean-docker:
-	$(call __docker_down_all)
 
 # =================== 聚合入口（Python + Go + C++ + Rust + Docker） ===================
 
@@ -1593,6 +1445,174 @@ fi; if grep -q "DATA RACE" "$$log"; then echo "[fail][concurrency] 并发竞态�
 echo "[ok] guard-go 通过"
 endef
 
+define __rust_guard_cargo
+if ! command -v cargo >/dev/null 2>&1; then echo "[error] 未找到 cargo"; exit 1; fi
+endef
+
+define __rust_setup_toolchain
+cd "$(RUST_DIR)"; \
+if [[ -f rust-toolchain.toml ]]; then rustup toolchain install stable || true; rustup override set stable || true; fi
+endef
+
+define __rust_fetch_deps
+cd "$(RUST_DIR)"; \
+cargo fetch; \
+echo "[ok] rust setup 完成。"
+endef
+
+define __rust_build_run
+cd "$(RUST_DIR)"; \
+cargo build --release; \
+echo "[ok] rust build 完成。"
+endef
+
+define __rust_env_clear_proxy
+unset HTTP_PROXY HTTPS_PROXY NO_PROXY ALL_PROXY http_proxy https_proxy no_proxy all_proxy; \
+echo "[proxy] disabled for cargo test (HTTP_PROXY/HTTPS_PROXY/NO_PROXY/ALL_PROXY 皆已清空)"
+endef
+
+define __rust_test_run
+cd "$(RUST_DIR)"; \
+file_pat="$${FILE:-}"; fn_pat="$${FILTER:-}"; \
+if [[ -n "$$file_pat" ]]; then \
+  mapfile -t bins < <(find tests -maxdepth 1 -type f -name "*.rs" 2>/dev/null | grep -E "$$file_pat" | sed "s#.*/##" | sed "s/\\.rs$$//"); \
+  if [[ $${#bins[@]} -gt 0 ]]; then \
+    for b in "$${bins[@]}"; do \
+      args=(test --all-features $(CARGO_TEST_V) --test "$$b"); \
+      [[ -n "$$fn_pat" ]] && args+=("$$fn_pat"); \
+      cargo "$${args[@]}"; \
+    done; \
+    exit 0; \
+  fi; \
+  echo "[warn] FILE=$$file_pat 未匹配到 tests/*.rs，回退全量"; \
+fi; \
+args=(test --all-features $(CARGO_TEST_V)); \
+[[ -n "$$fn_pat" ]] && args+=("$$fn_pat"); \
+cargo "$${args[@]}"
+endef
+
+define __rust_bench_run
+cd "$(RUST_DIR)"; \
+file_pat="$${FILE:-}"; fn_pat="$${FILTER:-}"; \
+if [[ -n "$$file_pat" ]]; then \
+  mapfile -t bins < <(find benches -maxdepth 1 -type f -name "*.rs" 2>/dev/null | grep -E "$$file_pat" | sed "s#.*/##" | sed "s/\\.rs$$//"); \
+  if [[ $${#bins[@]} -gt 0 ]]; then \
+    for b in "$${bins[@]}"; do \
+      args=(bench $(CARGO_TEST_V) --bench "$$b"); \
+      [[ -n "$$fn_pat" ]] && args+=("$$fn_pat"); \
+      cargo "$${args[@]}"; \
+    done; \
+    exit 0; \
+  fi; \
+  echo "[warn] FILE=$$file_pat 未匹配到 benches/*.rs，回退全量"; \
+fi; \
+args=(bench $(CARGO_TEST_V)); \
+[[ -n "$$fn_pat" ]] && args+=("$$fn_pat"); \
+cargo "$${args[@]}"
+endef
+
+define __rust_fmt_run
+cd "$(RUST_DIR)"; \
+cargo fmt --all
+endef
+
+define __rust_clippy_run
+cd "$(RUST_DIR)"; \
+cargo clippy --all-targets --all-features -- -D warnings
+endef
+
+define __rust_example_run
+cd "$(RUST_DIR)"; \
+cargo run --example contains
+endef
+
+define __rust_clean_run
+cd "$(RUST_DIR)"; \
+cargo clean; \
+rm -rf coverage flamegraph.svg perf.data* || true; \
+find . -type f -name "*.profraw" -delete || true; \
+find . -type f -name "*.profdata" -delete || true; \
+echo "[ok] rust clean 完成。"
+endef
+
+define __rust_install_run
+cd "$(RUST_DIR)"; \
+if grep -q "\[\[bin\]\]" Cargo.toml || [ -f src/main.rs ]; then \
+  echo "[rust] cargo install --path . --locked --force"; \
+  cargo install --path . --locked --force; \
+  echo "[ok] rust install 完成（可执行文件路径见 cargo install 输出）。"; \
+else \
+  echo "[warn] 当前 crate 未声明二进制入口，执行 cargo build --release 代替 install"; \
+  cargo build --release; \
+  echo "[ok] rust 库 crate 构建完成（无可执行文件可安装）。"; \
+fi
+endef
+
+define __rust_coverage_run
+cd "$(RUST_DIR)"; \
+rustup component add llvm-tools-preview >/dev/null 2>&1 || true; \
+if ! command -v cargo-llvm-cov >/dev/null 2>&1; then cargo install cargo-llvm-cov; fi; \
+mkdir -p coverage/html coverage; \
+IGNORE="(^|/)(tests?|benches?|examples)/"; \
+echo "[info] 生成 HTML 与 LCOV 报告（仅统计源码，忽略 tests/benches/examples）…"; \
+cargo llvm-cov --all-features --ignore-filename-regex "$$IGNORE" \
+  --html --output-dir coverage/html; \
+cargo llvm-cov --all-features --ignore-filename-regex "$$IGNORE" \
+  --lcov --output-path coverage/lcov.info; \
+echo "[ok] HTML: coverage/html/index.html"; \
+echo "[ok] LCOV: coverage/lcov.info"; \
+FAIL_ARG=""; \
+if [[ -n "$${RUST_COVER_FAIL_UNDER:-}" ]]; then FAIL_ARG="--fail-under-lines $$RUST_COVER_FAIL_UNDER"; fi; \
+echo "[info] 覆盖率汇总（最后打印）"; \
+cargo llvm-cov --all-features --ignore-filename-regex "$$IGNORE" \
+  --summary-only $$FAIL_ARG
+endef
+
+define __rust_vet_run
+cd "$(RUST_DIR)"; \
+echo "[info] 运行 cargo clippy..."; \
+cargo clippy --all-targets --all-features || true; \
+echo "[ok] vet-rust 检查完成（忽略警告）。"
+endef
+
+define __rust_guard_run
+cd "$(RUST_DIR)"; \
+MODE_VAL="$${MODE:-all}"; \
+case "$$MODE_VAL" in mem|race|miri|all) ;; *) echo "[error] MODE 仅支持 mem|race|miri|all"; exit 2;; esac; \
+echo "[info] rust guard MODE=$$MODE_VAL"; \
+if [ "$$MODE_VAL" = "all" ]; then MODES="mem race"; else MODES="$$MODE_VAL"; fi; \
+NEED_NIGHTLY=0; for m in $$MODES; do case "$$m" in mem|race|miri) NEED_NIGHTLY=1;; esac; done; \
+if [ $$NEED_NIGHTLY -eq 1 ]; then \
+  if ! rustup toolchain list | grep -q "^nightly"; then \
+    echo "[error] 未检测到 nightly 工具链。请先运行: rustup toolchain install nightly"; exit 3; \
+  fi; \
+fi; \
+for m in $$MODES; do \
+  if [ "$$m" = "mem" ]; then \
+    echo "[mem] AddressSanitizer 开始"; \
+    export RUSTFLAGS="-Zsanitizer=address"; \
+    export RUSTDOCFLAGS="-Zsanitizer=address"; \
+    export ASAN_OPTIONS="detect_leaks=1:halt_on_error=1:malloc_context_size=20"; \
+    cargo +nightly test --tests -Zbuild-std || { echo "[fail][memory] 内存问题"; exit 1; }; \
+    echo "[ok] mem 通过"; \
+  elif [ "$$m" = "race" ]; then \
+    echo "[race] ThreadSanitizer 开始"; \
+    export RUSTFLAGS="-Zsanitizer=thread"; \
+    export RUSTDOCFLAGS="-Zsanitizer=thread"; \
+    export TSAN_OPTIONS="halt_on_error=1:report_signal_unsafe=0"; \
+    cargo +nightly test --tests -Zbuild-std || { echo "[fail][race] 并发竞态问题"; exit 1; }; \
+    echo "[ok] race 通过"; \
+  else \
+    echo "[miri] 开始"; \
+    if ! cargo +nightly miri --version >/dev/null 2>&1; then \
+      echo "[error] 未安装 miri。请执行: rustup +nightly component add miri"; exit 4; \
+    fi; \
+    cargo +nightly miri test || { echo "[fail][miri] 未定义行为"; exit 1; }; \
+    echo "[ok] miri 通过"; \
+  fi; \
+done
+endef
+
 define __export_cpp_use_venv
 if [[ -x "$(PY_VENV_PYTHON)" ]]; then \
   export VIRTUAL_ENV="$(PY_VENV)"; \
@@ -1662,4 +1682,49 @@ define _git_fetch_submodules
 		else \
 			echo "[git] 未检测到 .git 或 .gitmodules，跳过子模块拉取。"; \
 		fi'
+endef
+
+define _build_cpp_submodules
+	$(SHELL) -lc 'set -e; \
+		if [[ ! -f .gitmodules ]]; then \
+			echo "[cpp-submods] 未检测到 .gitmodules，跳过子模块构建。"; exit 0; \
+		fi; \
+		paths=$$(git config -f .gitmodules --get-regexp '^submodule\..*\.path' 2>/dev/null \
+			| while read -r _ p; do echo $$p; done \
+			| grep -E "^$(CPP_SRC_DIR)/lib/" || true); \
+		echo "[cpp-submods] 待构建列表:"; echo "$$paths" | sed "s/^/  - /"; \
+		declare -a fails=(); declare -a built=(); \
+		for p in $$paths; do \
+			if [[ ! -d "$$p" ]]; then echo "  - 跳过 $$p（目录不存在）"; continue; fi; \
+			if [[ ! -f "$$p/CMakeLists.txt" ]]; then echo "  - 跳过 $$p（无 CMakeLists.txt）"; continue; fi; \
+			name=$$(basename "$$p"); \
+			b="$$p/build"; mkdir -p "$$b"; \
+			extra_opts=""; \
+			case "$$name" in \
+				rapidjson) extra_opts="-DRAPIDJSON_BUILD_TESTS=OFF -DRAPIDJSON_BUILD_EXAMPLES=OFF -DRAPIDJSON_BUILD_DOC=OFF";; \
+				*)         extra_opts="-DBUILD_TESTING=OFF";; \
+			esac; \
+			echo "  - 构建 $$p -> $$b  (opts: $$extra_opts)"; \
+			( \
+				set -e; \
+				$(CMAKE) -S "$$p" -B "$$b" -DCMAKE_BUILD_TYPE="$(CPP_BUILD_TYPE)" $$extra_opts; \
+				$(CMAKE) --build "$$b" --parallel $(JOBS) || $(CMAKE) --build "$$b" -- -j $(JOBS); \
+			) && { built+=("$$p"); echo "    -> OK: $$p"; } \
+			  || { echo "    -> FAIL: $$p（已记录，继续后续模块）"; fails+=("$$p"); }; \
+		done; \
+		echo "[cpp-submods] 汇总：$${#built[@]} 成功，$${#fails[@]} 失败。"; \
+		if (( $${#fails[@]} > 0 )); then echo "  失败清单："; for f in "$${fails[@]}"; do echo "    - $$f"; done; fi; \
+		exit 0;'
+endef
+
+define _clean_cpp_submodules
+	$(SHELL) -lc 'set -e; \
+		if [[ ! -f .gitmodules ]]; then exit 0; fi; \
+		echo "[clean-submods] 清理 $(CPP_SRC_DIR)/lib/* 子模块的 build/ …"; \
+		paths=$$(git config -f .gitmodules --get-regexp path | awk '\''{print $$2}'\'' | grep -E "^$(CPP_SRC_DIR)/lib/" || true); \
+		for p in $$paths; do \
+			b="$$p/build"; \
+			if [[ -d "$$b" ]]; then echo "  - rm -rf $$b"; rm -rf "$$b"; fi; \
+		done; \
+		echo "[clean-submods] 完成。"'
 endef
