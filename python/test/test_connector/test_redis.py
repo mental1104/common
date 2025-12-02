@@ -198,3 +198,8 @@ class TestRedisLock:
 
         assert bloom.exists(exists_key) is True
         assert bloom.exists(miss_key) is False
+
+        # 清理测试数据与布隆 key
+        client.delete(exists_key, miss_key)
+        clear_keys(client, prefix)
+        client.delete(bloom.filter_key)
