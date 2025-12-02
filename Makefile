@@ -51,7 +51,6 @@ SUDO := $(if $(filter 0,$(UID)),,sudo)
 SUDO_MSG := $(if $(filter 0,$(UID)),,@echo "[info] 当前非root，将使用sudo执行；可能会提示输入管理员密码。")
 UNAME_S := $(shell uname -s)
 IS_UBUNTU := $(shell sh -lc 'u=$$(uname -s); if [ "$$u" = Linux ] && [ -r /etc/os-release ]; then . /etc/os-release; [ "$$ID" = ubuntu ] && echo 1; fi')
-BREAK_FLAG := $(if $(IS_UBUNTU),--break-system-packages,)
 JOBS ?= $(shell sh -lc 'command -v nproc >/dev/null 2>&1 && nproc || sysctl -n hw.ncpu 2>/dev/null || echo 4')
 IS_DARWIN := $(if $(filter Darwin,$(UNAME_S)),1,)
 SKIP_DOCKER_ON_DARWIN ?= 1
@@ -177,150 +176,64 @@ define _git_fetch_submodules
 		fi'
 endef
 
-_setup_python:
+define _setup_python
 	$(SHELL) -lc 'set -e; \
-		script_file=$$(mktemp); \
-		trap "rm -f \"$$script_file\"" EXIT; \
-		cat <<-'"'"'__SETUP_PYTHON__'"'"' >"$$script_file"
+		$(call __py_script_prelude)
 	set -e
 	# 平台信息
 	echo "[info] 平台: $(UNAME_S)$(if $(IS_UBUNTU), (ubuntu),)"
-	# 创建或重建虚拟环境
-	if [[ -e "$(PY_VENV_PYTHON)" && ! -x "$(PY_VENV_PYTHON)" ]]; then rm -rf "$(PY_VENV)"; fi
-	if [[ ! -x "$(PY_VENV_PYTHON)" ]]; then
-	  echo "[venv] 创建 $(PY_VENV)"
-	  $(PYTHON) -m venv "$(PY_VENV)"
-	else
-	  echo "[venv] 已存在: $(PY_VENV)"
-	fi
-	chmod u+x "$(PY_VENV)"/bin/python* "$(PY_VENV)"/bin/pip* 2>/dev/null || true
-	export VIRTUAL_ENV="$(PY_VENV)"; export PATH="$(PY_VENV)/bin:$$PATH"
-	# 升级 pip/setuptools/wheel
-	echo "[venv] 升级 pip/setuptools/wheel"
-	"$(PY_VENV_PIP)" install --no-build-isolation --upgrade pip setuptools wheel $(BREAK_FLAG)
-	# 安装本地 export/python (editable，可选)
-	if [[ -d export/python ]]; then
-	  echo "[pip] 安装 mental1104_export_layer (editable)"
-	  cd export/python; "$(PY_VENV_PIP)" install --no-build-isolation -e . $(BREAK_FLAG)
-	  cd "$(REPO_ROOT)"
-	else
-	  echo "[warn] 未找到 export/python，跳过 mental1104_export_layer 安装"
-	fi
-	# 安装 python/requirements.txt 依赖
-	if [[ -f python/requirements.txt ]]; then
-	  echo "[pip] 安装依赖到 venv: python/requirements.txt (no build isolation)"
-	  EXPORT_ABS_DIR="$(REPO_ROOT)/export/python"
-	  if [[ ! -d "$$EXPORT_ABS_DIR" ]]; then echo "[err] 缺少 export/python 目录：$$EXPORT_ABS_DIR"; exit 1; fi
-	  REQ_FILE="$(REPO_ROOT)/python/requirements.txt"
-	  REQ_BAK="$$REQ_FILE.bak.setup"
-	  restore_req(){ [[ -f "$$REQ_BAK" ]] && mv "$$REQ_BAK" "$$REQ_FILE"; }
-	  trap restore_req EXIT
-	  if grep -q "file://../export/python" "$$REQ_FILE"; then
-	    cp "$$REQ_FILE" "$$REQ_BAK"
-	    python3 - "$$REQ_FILE" "$$EXPORT_ABS_DIR" <<-'PY'
-	from pathlib import Path; import sys
-	req=Path(sys.argv[1]); target=Path(sys.argv[2]).resolve()
-	req.write_text(req.read_text().replace("file://../export/python", f"file://{target}"))
-	PY
-	  fi
-	  cd python
-	  "$(PY_VENV_PIP)" install --no-build-isolation -r requirements.txt $(BREAK_FLAG)
-	  restore_req
-	  trap - EXIT
-	else
-	  echo "[info] 未找到 python/requirements.txt，跳过依赖安装。"
-	fi
-	cd "$(REPO_ROOT)"
-	# 生成 __init__（可选）
-	if [[ -f python/generate_init.py ]]; then
-	  echo "[info] 执行 python/generate_init.py …"
-	  "$(PY_VENV_PYTHON)" python/generate_init.py
-	else
-	  echo "[info] 未找到 python/generate_init.py，跳过。"
-	fi
-	# 兼容性修复：为使用 | 联合类型的文件注解的源码注入 __future__ import annotations
-	echo "[compat] 扫描并修复使用 | 联合类型注解的源码（兼容 Py3.9）…"
-	files=$$(grep -R -l -E ":\s*[^#]*\|[^=]*" python --exclude-dir=.venv || true)
-	inserted=0
-	for f in $$files; do
-	  [ -f "$$f" ] || continue
-	  if grep -q "^from __future__ import annotations$$" "$$f"; then continue; fi
-	  tmp="$$f.tmp.$$RANDOM"
-	  awk "BEGIN{in_doc=0;doc_done=0;ins=0} NR==1 && substr(\$$0,1,2)==\"#!\" {ins=NR+1} NR<=2 && match(\$$0,/(coding[:=])/){if(NR>=ins) ins=NR+1} doc_done==0{line=\$$0;gsub(/^[[:space:]]+/ ,\"\", line); if(in_doc==0){ if(line ~ /^([rRuUbBfF]{0,2})?\"\"\"/){ in_doc=1; if(gsub(/\"\"\"/ ,\"&\")>=2){ in_doc=0; doc_done=1; if(NR>=ins) ins=NR } } else if (line!=\"\" && substr(line,1,1)!=\"#\"){ doc_done=1 } } else { if(index(\$$0, \"\\\"\\\"\\\"\")>0){ in_doc=0; doc_done=1; if(NR>=ins) ins=NR } }} { lines[NR]=\$$0 } END{ if(ins==0) ins=0; for(i=1;i<=NR;i++){ print lines[i]; if(i==ins) print \"from __future__ import annotations\" } if(NR==0) print \"from __future__ import annotations\" }" "$$f" > "$$tmp" && mv "$$tmp" "$$f" && inserted=$$((inserted+1))
-	done
-	cnt=$$(printf "%s\n" $$files | sed "/^$$/d" | wc -l | tr -d " ")
-	echo "[compat] files_found=$$cnt, inserted=$$inserted"
-	# 构建 wheel（不安装本体）
-	echo "[info] 构建本地 wheel（不安装本体）…"
-	mkdir -p python/dist
-	"$(PY_VENV_PYTHON)" -m pip wheel --no-deps -w python/dist python/
-	echo "[ok] setup 完成（venv 安装依赖 + 构建 wheel，不安装本体）。"
-	echo "[hint] 如需使用此 venv，请执行: source $(PY_VENV)/bin/activate"
-	__SETUP_PYTHON__
-	bash "$$script_file"'
+	$(call __py_bootstrap_venv)          # 创建或复用 venv 并导出 PATH
+	$(call __py_upgrade_build_tools)     # 升级 pip/setuptools/wheel
+	$(call __py_install_export_layer)    # 可选安装 export/python 可编辑包
+	$(call __py_install_requirements)    # 安装 python/requirements.txt 依赖
+	$(call __py_generate_init)           # 可选生成 __init__
+	$(call __py_fix_future_annotations)  # 为联合类型注入 __future__ import annotations
+	$(call __py_build_wheel)             # 构建 wheel（不安装本体）
+	$(call __py_script_finalize)'
+endef
 
 define _test_python
 	$(SUDO_MSG)
 	$(SHELL) -lc 'set -e; \
-		if [[ ! -x "$(PY_VENV_PYTHON)" ]]; then echo "[error] 未找到项目 venv: $(PY_VENV_PYTHON)，请先执行 make setup-python"; exit 1; fi; \
-		export VIRTUAL_ENV="$(PY_VENV)"; export PATH="$(PY_VENV)/bin:$$PATH"; \
-		export EXPORT_LAYER_LOG_LEVEL=INFO; \
-		unset HTTP_PROXY HTTPS_PROXY NO_PROXY ALL_PROXY http_proxy https_proxy no_proxy all_proxy; \
-		export PYTEST_DISABLE_PLUGIN_AUTOLOAD=0; \
-		export PYTEST_PLUGINS=pytest_benchmark.plugin,pytest_asyncio.plugin,pytest_mock; \
-		if ! "$(PY_VENV_PIP)" show pytest-benchmark >/dev/null 2>&1; then \
-			echo "[info] 安装 pytest-benchmark 到 venv …"; \
-			"$(PY_VENV_PIP)" install pytest-benchmark $(BREAK_FLAG); \
-		fi; \
-		echo "[proxy] disabled for pytest (HTTP_PROXY/HTTPS_PROXY/NO_PROXY/ALL_PROXY 皆已清空)"; \
-		PY_BIN="$(PY_VENV_PYTHON)"; \
-		if ! "$$PY_BIN" -m pytest --version >/dev/null 2>&1; then echo "[warn] 未检测到 pytest；请先执行: make setup-python"; exit 1; fi; \
-		EXP_LIB=""; \
-		for ext in so dylib dll; do \
-			cand="$(EXPORT_CPP_BUILD_DIR)/libexport_json.$$ext"; \
-			if [[ -f "$$cand" ]]; then EXP_LIB="$$cand"; break; fi; \
-		done; \
-		if [[ -n "$$EXP_LIB" ]]; then export EXPORT_LAYER_CTYPE_LIB="$$EXP_LIB"; fi; \
-		export PYTHONPATH="$(EXPORT_CPP_BUILD_DIR):$$PYTHONPATH"; \
-		cd python; \
-		kexpr="not bench and not benchmark"; \
-		[[ -n "$${FILTER:-}" ]] && kexpr="($${FILTER}) and $$kexpr"; \
-		[[ -n "$${FILE:-}" ]] && kexpr="($${FILE}) and $$kexpr"; \
-		"$$PY_BIN" -m pytest $(PYTEST_V) -k "$$kexpr"'
+		$(call __py_guard_venv)              # 确认 venv 存在并导出 PATH
+		$(call __py_test_env_flags)          # 设定日志级别并清空代理
+		$(call __py_test_plugins)            # 配置 pytest 插件并确保 pytest-benchmark 就绪
+		$(call __py_test_check_pytest)       # 校验 pytest 可用
+		$(call __py_test_export_lib)         # 如果存在则导出 C++ 桥接库及 PYTHONPATH
+		PYTEST_ARGS="$(PYTEST_V)"; \
+		$(call __py_test_run_pytest)'        # 进入 python 目录按过滤条件运行 pytest
 endef
 
 define _install_python
 	$(SHELL) -lc 'set -e; \
-		echo "[info] $(PIP3) install python/ --upgrade $(BREAK_FLAG) $(PIP_MIRROR_OPTS)"; \
-		$(SUDO) $(PIP3) install python/ --upgrade $(BREAK_FLAG) $(PIP_MIRROR_OPTS); \
-		echo "[ok] 安装完成。"'
+		$(call __py_install_system)'      # 安装到系统 Python（备份/改写 requirements 中的相对 file:// 再恢复）
 endef
 
 define _clean_python
 	$(SHELL) -lc 'set -e; \
-		echo "[info] 清理 Python 缓存与构建产物…"; \
-		rm -rf python/build python/dist python/*.egg-info .pytest_cache .mypy_cache python/.coverage htmlcov python/.ruff_cache python/.pytest_cache python/.benchmarks python/memray.bin; \
-		find python -type d -name "__pycache__" -exec rm -rf {} +; \
-		find python -type f -name "*.py[co]" -delete; \
-		find python -type d -name ".pytest_cache" -exec rm -rf {} +; \
-		if [[ -d "python/.venv" ]]; then \
-			echo "[info] 移除 Python venv: python/.venv"; \
-			rm -rf python/.venv; \
-		fi; \
+		$(call __py_clean_artifacts)    # 删除构建产物与缓存文件
+		$(call __py_clean_caches)       # 清理 __pycache__ / *.pyc / .pytest_cache
+		$(call __py_clean_venv)         # 如存在则移除 python/.venv
 		echo "[ok] clean 完成。"'
 endef
 
 define _coverage_python
 	$(SHELL) -lc 'set -e; \
-		echo "[info] 运行python单元测试覆盖率"; \
-		cd python && $(PYTHON) -m coverage run --source=. -m pytest && coverage report;'
+		$(call __py_guard_venv)         # 确认 venv 存在并导出 PATH
+		$(call __py_test_env_flags)     # 同测试运行的环境变量设置
+		$(call __py_test_plugins)       # 预装并声明所需 pytest 插件
+		$(call __py_test_check_pytest)  # 校验 pytest 可用
+		$(call __py_test_export_lib)    # 导出 C++ 桥接库及 PYTHONPATH
+		$(call __py_coverage_run)'      # 使用 coverage 包裹 pytest
 endef
 
 define _fmt_python
 	$(SHELL) -lc 'set -e; \
-		if ! $(PYTHON) -c "import autopep8" >/dev/null 2>&1; then $(PYTHON) -m pip install --user autopep8 $(BREAK_FLAG); fi; \
+		if [[ ! -x "$(PY_VENV_PYTHON)" ]]; then echo "[err] 未找到项目 venv，请先执行 make setup-python"; exit 1; fi; \
+		export VIRTUAL_ENV="$(PY_VENV)"; export PATH="$(PY_VENV)/bin:$$PATH"; \
+		if ! "$(PY_VENV_PYTHON)" -c "import autopep8" >/dev/null 2>&1; then "$(PY_VENV_PIP)" install autopep8; fi; \
 		cd python; \
-		$(PYTHON) -m autopep8 --in-place --recursive --max-line-length=120 --ignore=E402,E226,E24,W50,W690 .; \
+		"$(PY_VENV_PYTHON)" -m autopep8 --in-place --recursive --max-line-length=120 --ignore=E402,E226,E24,W50,W690 .; \
 		echo "[ok] python autopep8 fmt 完成。"'
 endef
 
@@ -1071,18 +984,11 @@ guard-rust-miri:   ; $(MAKE) --no-print-directory guard-rust MODE=miri
 .PHONY: build-export-cpp clean-export-cpp
 build-export-cpp:
 	$(SHELL) -lc 'set -e; \
-		if [[ -x "$(PY_VENV_PYTHON)" ]]; then \
-			export VIRTUAL_ENV="$(PY_VENV)"; \
-			export PATH="$(PY_VENV)/bin:$$PATH"; \
-		fi; \
-		pybind_dir="$$( $(PY_VENV_PYTHON) -m pybind11 --cmakedir 2>/dev/null || true)"; \
-		extra=""; \
-		[[ -n "$$pybind_dir" ]] && extra="-Dpybind11_DIR=$$pybind_dir"; \
-		cd export/cpp; \
-		$(CMAKE) -S . -B $(EXPORT_CPP_BUILD_DIR) -DEXPORT_BUILD_PYBIND11=ON -DPYBIND11_FINDPYTHON=ON -DCMAKE_BUILD_TYPE=$(CPP_BUILD_TYPE) $$extra; \
-		$(CMAKE) --build $(EXPORT_CPP_BUILD_DIR); \
-		echo "[ok] export/cpp built (pybind11 optional)"; \
-	'
+		$(call __export_cpp_use_venv)     # 如有 venv 则导出 PATH 以查找 pybind11 cmake 配置
+		$(call __export_cpp_pybind_dir)   # 发现 pybind11_DIR 供 CMake 使用
+		$(call __export_cpp_configure)    # 运行 cmake 配置 export/cpp
+		$(call __export_cpp_build)'       # 构建 export/cpp
+
 clean-export-cpp:
 	$(SHELL) -lc 'rm -rf $(EXPORT_CPP_BUILD_DIR); echo "[ok] cleaned export/cpp build"'
 
@@ -1107,15 +1013,16 @@ install-rust: ; $(call _install_rust)
 coverage-rust:; $(call _coverage_rust)
 
 # =================== 直达入口（Python） ===================
-.PHONY: setup-python _setup_python build-python test-python install-python clean-python coverage-python fmt-python bench-python
-setup-python: _setup_python
-build-python:   | setup-python
-test-python:    | build-export-cpp ; $(call _test_python)
-install-python: ; $(call _install_python)
+.PHONY: setup-python build-python test-python install-python clean-python coverage-python fmt-python bench-python
+setup-python:   ; $(call _setup_python)
+build-python:   ; $(call __py_guard_venv) ; $(call __py_build_wheel)   # 依赖已就绪的 venv，单独构建 wheel
+test-python:    | build-export-cpp ; $(call _test_python)              # 需导出 C++ 桥接库，pytest 内部自检 venv
+install-python: ; $(call _install_python)                             # 系统安装，不强制前置 setup
 clean-python:   ; $(call _clean_python)
 coverage-python:; $(call _coverage_python)
-fmt-python:     ; $(call _fmt_python)
-bench-python:
+fmt-python:     ; $(call __py_guard_venv) ; $(call _fmt_python)
+bench-python:   | build-export-cpp
+	$(call __py_guard_venv)
 	$(call _bench_python)
 	@$(MAKE) --no-print-directory bench-report
 
@@ -1432,3 +1339,258 @@ help:
 	@echo "提示：仅扫描 images/ 下的 docker-compose.yaml；docker 缺失或单服务失败均不阻塞。"
 .PHONY: bench-report
 bench-report: ; $(call _bench_report)
+
+# =================== 私有函数（仅内部调用） ===================
+define __py_bootstrap_venv
+# 创建或重建虚拟环境
+if [[ -e "$(PY_VENV_PYTHON)" && ! -x "$(PY_VENV_PYTHON)" ]]; then rm -rf "$(PY_VENV)"; fi
+if [[ ! -x "$(PY_VENV_PYTHON)" ]]; then
+  echo "[venv] 创建 $(PY_VENV)"
+  $(PYTHON) -m venv "$(PY_VENV)"
+else
+  echo "[venv] 已存在: $(PY_VENV)"
+fi
+chmod u+x "$(PY_VENV)"/bin/python* "$(PY_VENV)"/bin/pip* 2>/dev/null || true
+export VIRTUAL_ENV="$(PY_VENV)"; export PATH="$(PY_VENV)/bin:$$PATH"
+endef
+
+define __py_upgrade_build_tools
+# 升级 pip/setuptools/wheel
+echo "[venv] 升级 pip/setuptools/wheel"
+"$(PY_VENV_PIP)" install --no-build-isolation --upgrade pip setuptools wheel
+endef
+
+define __py_install_export_layer
+# 安装本地 export/python (editable，可选)
+if [[ -d export/python ]]; then
+  echo "[pip] 安装 mental1104_export_layer (editable)"
+  cd export/python; "$(PY_VENV_PIP)" install --no-build-isolation -e .
+  cd "$(REPO_ROOT)"
+else
+  echo "[warn] 未找到 export/python，跳过 mental1104_export_layer 安装"
+fi
+endef
+
+define __py_install_requirements
+# 安装 python/requirements.txt 依赖
+if [[ -f python/requirements.txt ]]; then
+  echo "[pip] 安装依赖到 venv: python/requirements.txt (no build isolation)"
+  EXPORT_ABS_DIR="$(REPO_ROOT)/export/python"
+  if [[ ! -d "$$EXPORT_ABS_DIR" ]]; then echo "[err] 缺少 export/python 目录：$$EXPORT_ABS_DIR"; exit 1; fi
+  REQ_FILE="$(REPO_ROOT)/python/requirements.txt"
+  REQ_BAK="$$REQ_FILE.bak.setup"
+  restore_req(){ [[ -f "$$REQ_BAK" ]] && mv "$$REQ_BAK" "$$REQ_FILE"; }
+  trap restore_req EXIT
+  if grep -q "file://../export/python" "$$REQ_FILE"; then
+    cp "$$REQ_FILE" "$$REQ_BAK"
+    python3 - "$$REQ_FILE" "$$EXPORT_ABS_DIR" <<-'PY'
+from pathlib import Path; import sys
+req=Path(sys.argv[1]); target=Path(sys.argv[2]).resolve()
+req.write_text(req.read_text().replace("file://../export/python", f"file://{target}"))
+PY
+  fi
+  cd python
+  "$(PY_VENV_PIP)" install --no-build-isolation -r requirements.txt
+  restore_req
+  trap - EXIT
+else
+  echo "[info] 未找到 python/requirements.txt，跳过依赖安装。"
+fi
+cd "$(REPO_ROOT)"
+endef
+
+define __py_generate_init
+# 生成 __init__（可选）
+if [[ -f python/generate_init.py ]]; then
+  echo "[info] 执行 python/generate_init.py …"
+  "$(PY_VENV_PYTHON)" python/generate_init.py
+else
+  echo "[info] 未找到 python/generate_init.py，跳过。"
+fi
+endef
+
+define __py_fix_future_annotations
+# 兼容性修复：为使用 | 联合类型注解的源码注入 __future__ import annotations
+echo "[compat] 扫描并修复使用 | 联合类型注解的源码（兼容 Py3.9）…"
+files=$$(grep -R -l -E ":\s*[^#]*\|[^=]*" python --exclude-dir=.venv || true)
+inserted=0
+for f in $$files; do
+  [ -f "$$f" ] || continue
+  if grep -q "^from __future__ import annotations$$" "$$f"; then continue; fi
+  tmp="$$f.tmp.$$RANDOM"
+  awk "BEGIN{in_doc=0;doc_done=0;ins=0} NR==1 && substr(\$$0,1,2)==\"#!\" {ins=NR+1} NR<=2 && match(\$$0,/(coding[:=])/){if(NR>=ins) ins=NR+1} doc_done==0{line=\$$0;gsub(/^[[:space:]]+/ ,\"\", line); if(in_doc==0){ if(line ~ /^([rRuUbBfF]{0,2})?\"\"\"/){ in_doc=1; if(gsub(/\"\"\"/ ,\"&\")>=2){ in_doc=0; doc_done=1; if(NR>=ins) ins=NR } } else if (line!=\"\" && substr(line,1,1)!=\"#\"){ doc_done=1 } } else { if(index(\$$0, \"\\\"\\\"\\\"\")>0){ in_doc=0; doc_done=1; if(NR>=ins) ins=NR } }} { lines[NR]=\$$0 } END{ if(ins==0) ins=0; for(i=1;i<=NR;i++){ print lines[i]; if(i==ins) print \"from __future__ import annotations\" } if(NR==0) print \"from __future__ import annotations\" }" "$$f" > "$$tmp" && mv "$$tmp" "$$f" && inserted=$$((inserted+1))
+done
+cnt=$$(printf "%s\n" $$files | sed "/^$$/d" | wc -l | tr -d " ")
+echo "[compat] files_found=$$cnt, inserted=$$inserted"
+endef
+
+define __py_build_wheel
+# 构建 wheel（不安装本体）
+echo "[info] 构建本地 wheel（不安装本体）…"
+mkdir -p python/dist
+REQ_FILE="$(REPO_ROOT)/python/requirements.txt"; \
+REQ_BAK="$$REQ_FILE.bak.build"; \
+EXPORT_ABS_DIR="$(REPO_ROOT)/export/python"; \
+restore_req(){ [[ -f "$$REQ_BAK" ]] && mv "$$REQ_BAK" "$$REQ_FILE"; }; \
+trap restore_req EXIT; \
+if [[ -f "$$REQ_FILE" && -d "$$EXPORT_ABS_DIR" ]]; then \
+  if grep -q "file://../export/python" "$$REQ_FILE"; then \
+    cp "$$REQ_FILE" "$$REQ_BAK"; \
+    python3 - "$$REQ_FILE" "$$EXPORT_ABS_DIR" <<-'PY'
+from pathlib import Path; import sys
+req=Path(sys.argv[1]); target=Path(sys.argv[2]).resolve()
+req.write_text(req.read_text().replace("file://../export/python", f"file://{target}"))
+PY
+  fi; \
+fi; \
+"$(PY_VENV_PYTHON)" -m pip wheel --no-deps -w python/dist python/; \
+restore_req; trap - EXIT
+echo "[ok] setup 完成（venv 安装依赖 + 构建 wheel，不安装本体）。"
+echo "[hint] 如需使用此 venv，请执行: source $(PY_VENV)/bin/activate"
+endef
+
+define __py_guard_venv
+if [[ ! -x "$(PY_VENV_PYTHON)" || ! -x "$(PY_VENV_PIP)" ]]; then echo "[error] 未找到项目 venv: $(PY_VENV)，请先执行 make setup-python"; exit 1; fi; \
+export VIRTUAL_ENV="$(PY_VENV)"; export PATH="$(PY_VENV)/bin:$$PATH";
+endef
+
+define __py_test_env_flags
+export EXPORT_LAYER_LOG_LEVEL=INFO; \
+unset HTTP_PROXY HTTPS_PROXY NO_PROXY ALL_PROXY http_proxy https_proxy no_proxy all_proxy; \
+echo "[proxy] disabled for pytest (HTTP_PROXY/HTTPS_PROXY/NO_PROXY/ALL_PROXY 皆已清空)";
+endef
+
+define __py_test_plugins
+export PYTEST_DISABLE_PLUGIN_AUTOLOAD=0; \
+export PYTEST_PLUGINS=pytest_benchmark.plugin,pytest_asyncio.plugin,pytest_mock; \
+if ! "$(PY_VENV_PIP)" show pytest-benchmark >/dev/null 2>&1; then \
+  echo "[info] 安装 pytest-benchmark 到 venv …"; \
+  "$(PY_VENV_PIP)" install pytest-benchmark; \
+fi;
+endef
+
+define __py_test_check_pytest
+if ! "$(PY_VENV_PYTHON)" -m pytest --version >/dev/null 2>&1; then echo "[warn] 未检测到 pytest；请先执行: make setup-python"; exit 1; fi;
+endef
+
+define __py_test_export_lib
+EXP_LIB=""; \
+for ext in so dylib dll; do \
+  cand="$(EXPORT_CPP_BUILD_DIR)/libexport_json.$$ext"; \
+  if [[ -f "$$cand" ]]; then EXP_LIB="$$cand"; break; fi; \
+done; \
+if [[ -n "$$EXP_LIB" ]]; then export EXPORT_LAYER_CTYPE_LIB="$$EXP_LIB"; fi; \
+export PYTHONPATH="$(EXPORT_CPP_BUILD_DIR):$$PYTHONPATH";
+endef
+
+define __py_test_run_pytest
+run_cmd="$(PY_VENV_PYTHON) -m pytest"; \
+if [[ -n "$${PY_RUNNER:-}" ]]; then run_cmd="$$PY_RUNNER"; fi; \
+cd python; \
+kexpr="$${KEXPR_DEFAULT:-not bench and not benchmark}"; \
+[[ -n "$${FILTER:-}" ]] && kexpr="($${FILTER}) and $$kexpr"; \
+[[ -n "$${FILE:-}" ]] && kexpr="($${FILE}) and $$kexpr"; \
+py_args="$${PYTEST_ARGS:-}"; \
+eval "$$run_cmd $$py_args -k \"$$kexpr\""
+endef
+
+define __py_script_prelude
+script_file=$$(mktemp); \
+trap "rm -f \"$$script_file\"" EXIT; \
+cat <<-'"'"'__SETUP_PYTHON__'"'"' >"$$script_file"
+endef
+
+define __py_script_finalize
+__SETUP_PYTHON__
+bash "$$script_file"
+endef
+
+define __py_install_system
+wheel=$$(ls python/dist/*.whl 2>/dev/null | tail -n1); \
+SYS_BREAK_FLAG="$(if $(IS_UBUNTU),--break-system-packages,)"; \
+echo "[info] $(PIP3) install --upgrade pip setuptools wheel $(PIP_MIRROR_OPTS) $$SYS_BREAK_FLAG"; \
+$(SUDO) $(PIP3) install --upgrade pip setuptools wheel $(PIP_MIRROR_OPTS) $$SYS_BREAK_FLAG; \
+EXPORT_ABS_DIR="$(REPO_ROOT)/export/python"; \
+if [[ -n "$$wheel" ]]; then \
+  if [[ -d "$$EXPORT_ABS_DIR" ]]; then \
+    echo "[info] $(PIP3) install $$EXPORT_ABS_DIR --no-build-isolation --no-deps $(PIP_MIRROR_OPTS) $$SYS_BREAK_FLAG"; \
+    PIP_NO_BUILD_ISOLATION=1 PIP_NO_DEPS=1 $(SUDO) $(PIP3) install "$$EXPORT_ABS_DIR" --no-build-isolation --no-deps $(PIP_MIRROR_OPTS) $$SYS_BREAK_FLAG; \
+  fi; \
+  echo "[info] $(PIP3) install $$wheel --no-deps $(PIP_MIRROR_OPTS) $$SYS_BREAK_FLAG"; \
+  PIP_NO_BUILD_ISOLATION=1 PIP_NO_DEPS=1 $(SUDO) $(PIP3) install "$$wheel" --no-deps $(PIP_MIRROR_OPTS) $$SYS_BREAK_FLAG; \
+else \
+  echo "[info] $(PIP3) install python/ --upgrade $(PIP_MIRROR_OPTS) $$SYS_BREAK_FLAG (no wheel found)"; \
+  REQ_FILE="$(REPO_ROOT)/python/requirements.txt"; \
+  REQ_BAK="$$REQ_FILE.bak.install"; \
+  restore_req(){ [[ -f "$$REQ_BAK" ]] && mv "$$REQ_BAK" "$$REQ_FILE"; }; \
+  trap restore_req EXIT; \
+  if [[ -f "$$REQ_FILE" && -d "$$EXPORT_ABS_DIR" ]]; then \
+    if grep -q "file://../export/python" "$$REQ_FILE"; then \
+      cp "$$REQ_FILE" "$$REQ_BAK"; \
+      python3 - "$$REQ_FILE" "$$EXPORT_ABS_DIR" <<-'PY'
+from pathlib import Path; import sys
+req=Path(sys.argv[1]); target=Path(sys.argv[2]).resolve()
+req.write_text(req.read_text().replace("file://../export/python", f"file://{target}"))
+PY
+    fi; \
+  fi; \
+  if [[ -d "$$EXPORT_ABS_DIR" ]]; then \
+    echo "[info] $(PIP3) install $$EXPORT_ABS_DIR --no-build-isolation --no-deps $(PIP_MIRROR_OPTS) $$SYS_BREAK_FLAG"; \
+    PIP_NO_BUILD_ISOLATION=1 PIP_NO_DEPS=1 $(SUDO) $(PIP3) install "$$EXPORT_ABS_DIR" --no-build-isolation --no-deps $(PIP_MIRROR_OPTS) $$SYS_BREAK_FLAG; \
+  fi; \
+  PIP_NO_BUILD_ISOLATION=1 PIP_NO_DEPS=1 $(SUDO) $(PIP3) install python/ --upgrade --no-build-isolation --no-deps $(PIP_MIRROR_OPTS) $$SYS_BREAK_FLAG; \
+  restore_req; trap - EXIT; \
+fi; \
+echo "[ok] 安装完成（已安装到系统 Python）。"
+endef
+
+define __py_clean_artifacts
+echo "[info] 清理 Python 缓存与构建产物…"; \
+rm -rf python/build python/dist python/*.egg-info .pytest_cache .mypy_cache python/.coverage htmlcov python/.ruff_cache python/.pytest_cache python/.benchmarks python/memray.bin;
+endef
+
+define __py_clean_caches
+find python -type d -name "__pycache__" -exec rm -rf {} +; \
+find python -type f -name "*.py[co]" -delete; \
+find python -type d -name ".pytest_cache" -exec rm -rf {} +;
+endef
+
+define __py_clean_venv
+if [[ -d "python/.venv" ]]; then \
+  echo "[info] 移除 Python venv: python/.venv"; \
+  rm -rf python/.venv; \
+fi
+endef
+
+define __py_coverage_run
+echo "[info] 运行python单元测试覆盖率"; \
+cd python; \
+kexpr="not bench and not benchmark"; \
+[[ -n "$${FILTER:-}" ]] && kexpr="($${FILTER}) and $$kexpr"; \
+[[ -n "$${FILE:-}" ]] && kexpr="($${FILE}) and $$kexpr"; \
+$(PY_VENV_PYTHON) -m coverage run --source=. -m pytest -c /dev/null -k "$$kexpr"; \
+$(PY_VENV_PYTHON) -m coverage report
+endef
+
+define __export_cpp_use_venv
+if [[ -x "$(PY_VENV_PYTHON)" ]]; then \
+  export VIRTUAL_ENV="$(PY_VENV)"; \
+  export PATH="$(PY_VENV)/bin:$$PATH"; \
+fi
+endef
+
+define __export_cpp_pybind_dir
+pybind_dir="$$( $(PY_VENV_PYTHON) -m pybind11 --cmakedir 2>/dev/null || true)"; \
+extra=""; \
+[[ -n "$$pybind_dir" ]] && extra="-Dpybind11_DIR=$$pybind_dir";
+endef
+
+define __export_cpp_configure
+cd export/cpp; \
+$(CMAKE) -S . -B $(EXPORT_CPP_BUILD_DIR) -DEXPORT_BUILD_PYBIND11=ON -DPYBIND11_FINDPYTHON=ON -DCMAKE_BUILD_TYPE=$(CPP_BUILD_TYPE) $$extra;
+endef
+
+define __export_cpp_build
+$(CMAKE) --build $(EXPORT_CPP_BUILD_DIR); \
+echo "[ok] export/cpp built (pybind11 optional)";
+endef
