@@ -257,7 +257,7 @@ define _test_python
 		export EXPORT_LAYER_LOG_LEVEL=INFO; \
 		unset HTTP_PROXY HTTPS_PROXY NO_PROXY ALL_PROXY http_proxy https_proxy no_proxy all_proxy; \
 		export PYTEST_DISABLE_PLUGIN_AUTOLOAD=0; \
-		export PYTEST_PLUGINS=pytest_benchmark.plugin; \
+		export PYTEST_PLUGINS=pytest_benchmark.plugin,pytest_asyncio.plugin,pytest_mock; \
 		if ! "$(PY_VENV_PIP)" show pytest-benchmark >/dev/null 2>&1; then \
 			echo "[info] 安装 pytest-benchmark 到 venv …"; \
 			"$(PY_VENV_PIP)" install pytest-benchmark $(BREAK_FLAG); \
