@@ -4,11 +4,12 @@ SHELL := /bin/bash
 
 # === 自动加载 .env 到 Make 环境（全局生效） =================
 REPO_ROOT := $(abspath $(dir $(firstword $(MAKEFILE_LIST))))
-ENV_SRC   ?= $(REPO_ROOT)/.env
-ENV_HAVE  := $(wildcard $(ENV_SRC))
+ENV_SRC    ?= $(REPO_ROOT)/.env
+ENV_STAMP  ?= $(REPO_ROOT)/.env.active
+ENV_HAVE   := $(wildcard $(ENV_SRC))
 
-# 仅当 .env 存在时才定义导入目标与包含；否则将 ENV_MK 设为 /dev/null 以免触发任何配方
-ifeq ($(strip $(ENV_HAVE)),)
+# 仅当 .env 与激活标记同时存在时才导入；否则将 ENV_MK 设为 /dev/null 以免触发任何配方
+ifeq ($(strip $(ENV_HAVE)$(wildcard $(ENV_STAMP))),)
   ENV_MK := /dev/null
 else
   ENV_MK := $(abspath $(ENV_SRC)).mk
@@ -40,7 +41,9 @@ env-print:
 env-expose:
 	@[ -f "$(ENV_MK)" ] && sed -E 's/^export[[:space:]]+([^=[:space:]]+)[[:space:]]*=[[:space:]]*(.*)$/export \1=\2/' "$(ENV_MK)" || true
 env-clean:
-	@[ "$(ENV_MK)" != "/dev/null" ] && rm -f "$(ENV_MK)" || true; echo "[ok] 已移除导入文件：$(ENV_MK)"
+	@[ -f "$(ENV_STAMP)" ] && rm -f "$(ENV_STAMP)" || true; \
+	@[ "$(ENV_MK)" != "/dev/null" ] && rm -f "$(ENV_MK)" || true; \
+	echo "[ok] 已移除导入文件与激活标记：$(ENV_MK) $(ENV_STAMP)"
 # ============================================================
 
 .DEFAULT_GOAL := setup
@@ -138,44 +141,6 @@ MODE ?= all
 
 # =================== 函数/宏（Defines） ===================
 
-define _git_fetch_submodules
-	$(SHELL) -lc 'set -e; \
-		cleanup_path(){ \
-			local target="$$1"; \
-			[ -z "$$target" ] && return 0; \
-			if [[ -e "$$target" ]]; then \
-				if command -v chflags >/dev/null 2>&1; then \
-					chflags -R nouchg "$$target" >/dev/null 2>&1 || true; \
-				fi; \
-				chmod -R u+w "$$target" >/dev/null 2>&1 || true; \
-				rm -rf "$$target" || true; \
-			fi; \
-		}; \
-		if [[ -d .git && -f .gitmodules ]]; then \
-			echo "[git] 拉取 .gitmodules 中的所有子模块 …"; \
-			git submodule sync --recursive >/dev/null 2>&1 || true; \
-			if ! git submodule update --init --recursive --depth=1; then \
-				echo "[git-fix] 检测到子模块锁/元数据异常，执行一次自动修复…"; \
-				git config -f .gitmodules --get-regexp path | awk '\''{print $$2}'\'' > /tmp/submods.list || true; \
-				while read p; do \
-					[[ -z "$$p" ]] && continue; \
-					echo "  - fix: $$p"; \
-					git submodule deinit -f -- "$$p" || true; \
-					cleanup_path ".git/modules/$$p"; \
-					cleanup_path "$$p"; \
-				done </tmp/submods.list; \
-				git submodule sync --recursive; \
-				if ! git submodule update --init --recursive --depth=1; then \
-					echo "[git] 子模块仍无法自动恢复，请手动执行: git submodule update --init --recursive"; \
-					exit 1; \
-				fi; \
-			fi; \
-			echo "[git] 子模块就绪。"; \
-		else \
-			echo "[git] 未检测到 .git 或 .gitmodules，跳过子模块拉取。"; \
-		fi'
-endef
-
 define _setup_python
 	$(SHELL) -lc 'set -e; \
 		$(call __py_script_prelude)
@@ -259,219 +224,55 @@ endef
 
 define _configure_cpp
 	$(SHELL) -lc 'set -e; \
-		mkdir -p "$(CPP_BUILD_DIR)"; \
-		pybind_dir=""; \
-		if [[ -x "$(PY_VENV_PYTHON)" ]]; then \
-			pybind_dir="$$( "$(PY_VENV_PYTHON)" -m pybind11 --cmakedir 2>/dev/null || true)"; \
-		fi; \
-		extra=""; \
-		[[ -n "$$pybind_dir" ]] && extra="-Dpybind11_DIR=$$pybind_dir"; \
-		$(CMAKE) -S "$(CPP_SRC_DIR)" -B "$(CPP_BUILD_DIR)" -DCMAKE_BUILD_TYPE="$(CPP_BUILD_TYPE)" -DPYBIND11_FINDPYTHON=ON $$extra; \
-		echo "[ok] 顶层 cmake 配置完成（$(CPP_BUILD_TYPE)）"'
+		$(call __cpp_configure_env)   # 处理 pybind11 路径、创建 build 目录
+		$(call __cpp_configure_run)'  # 调用 cmake 配置
 endef
 
 define _build_cpp
 	$(SHELL) -lc 'set -e; \
-		if $(CMAKE) --build "$(CPP_BUILD_DIR)" --parallel $(JOBS); then :; \
-		else $(CMAKE) --build "$(CPP_BUILD_DIR)" -- -j $(JOBS); fi; \
-		echo "[ok] 顶层 C++ 构建完成（-j $(JOBS)）"'
+		$(call __cpp_build_run)'      # 构建顶层 C++ 工程
 endef
 
 define _test_cpp
 	$(SHELL) -lc 'set -e; \
-		unset HTTP_PROXY HTTPS_PROXY NO_PROXY ALL_PROXY http_proxy https_proxy no_proxy all_proxy; \
-		echo "[proxy] disabled for pytest (HTTP_PROXY/HTTPS_PROXY/NO_PROXY/ALL_PROXY 皆已清空)"; \
-		if [[ -n "$(CPP_LOG_LEVEL)" ]]; then \
-			export MENTAL1104_LOG_LEVEL="$(CPP_LOG_LEVEL)"; \
-			echo "[log] MENTAL1104_LOG_LEVEL=$(CPP_LOG_LEVEL)"; \
-		fi; \
-		cd "$(CPP_BUILD_DIR)"; \
-		ctest_pat="$${FILE:-}"; \
-		gtest_filter="$${FILTER:-}"; \
-		if [[ -z "$$ctest_pat" && -n "$(CPP_TEST_FILES)$(CPP_TEST_DIRS)" ]]; then \
-			files=""; \
-			[[ -n "$(CPP_TEST_FILES)" ]] && files+=" $(CPP_TEST_FILES)"; \
-			if [[ -n "$(CPP_TEST_DIRS)" ]]; then \
-				while IFS= read -r f; do files+=" $$f"; done < <(find $(CPP_TEST_DIRS) -type f -name "*.cpp" | sort); \
-			fi; \
-			names=$$(for f in $$files; do b=$$(basename "$$f"); echo $${b%.cpp}; done | sort -u | paste -sd"|" -); \
-			[[ -n "$$names" ]] && ctest_pat="^($$names)$$"; \
-		elif [[ -z "$$ctest_pat" && -n "$(CPP_TEST)" ]]; then \
-			files=""; unknown=""; \
-			for tok in $(CPP_TEST); do \
-				if [[ -f "$$tok" ]]; then files+=" $$tok"; continue; fi; \
-				if [[ -d "$$tok" ]]; then \
-					while IFS= read -r f; do files+=" $$f"; done < <(find "$$tok" -type f -name "*.cpp" | sort); \
-					continue; \
-				fi; \
-				unknown="$$tok"; \
-			done; \
-			if [[ -n "$$files" ]]; then \
-				names=$$(for f in $$files; do b=$$(basename "$$f"); echo $${b%.cpp}; done | sort -u | paste -sd"|" -); \
-				[[ -n "$$names" ]] && ctest_pat="^($$names)$$"; \
-			elif [[ -z "$$ctest_pat" && -n "$$unknown" ]]; then \
-				ctest_pat="$$unknown"; \
-			fi; \
-		fi; \
-		args=(--output-on-failure -LE bench -j $(JOBS)); \
-		[[ -n "$(CTEST_V)" ]] && args+=($(CTEST_V)); \
-		[[ -n "$$ctest_pat" ]] && args+=(-R "$$ctest_pat"); \
-		if [[ -n "$$gtest_filter" ]]; then \
-			echo "[ctest] GTEST_FILTER=$$gtest_filter $(CTEST) $${args[*]}"; \
-			GTEST_FILTER="$$gtest_filter" $(CTEST) "$${args[@]}"; \
-		else \
-			echo "[ctest] $(CTEST) $${args[*]}"; \
-			$(CTEST) "$${args[@]}"; \
-		fi'
+		$(call __cpp_test_env)        # 清空代理、设置日志级别
+		$(call __cpp_test_patterns)   # 解析 ctest/gtest 过滤条件
+		$(call __cpp_test_run)'       # 运行 ctest（排除 bench）
 endef
 
 define _coverage_cpp
 	$(SHELL) -lc 'set -e; \
-		cd cpp/build; \
-		ctest --output-on-failure || true; \
-		if command -v gcovr >/dev/null 2>&1; then \
-			echo "[info] 使用 gcovr 汇总覆盖率（已排除 lib/ 与 thirdparty/）"; \
-			gcovr -r .. --object-directory . \
-			      --exclude "(^|.*/)(test|external|gtest|lib|thirdparty|overlay)/" \
-			      --exclude "/usr/include/.*" \
-			      --txt --print-summary; \
-		else \
-			echo "[info] 未检测到 gcovr，回退到 lcov"; \
-			if ! command -v lcov >/dev/null 2>&1; then \
-				echo "[error] 未安装 lcov；请安装 gcovr 或 lcov 任一工具"; exit 1; \
-			fi; \
-			lcov --directory . --capture --output-file coverage.info \
-			     --ignore-errors mismatch,negative,inconsistent \
-			     --no-external --rc geninfo_unexecuted_blocks=1; \
-			lcov --remove coverage.info \
-			     "*/test/*" "*/external/*" "*/gtest/*" "*/lib/*" "*/thirdparty/*" "/usr/*" "/overlay/*" \
-			     -o coverage.filtered.info || true; \
-			lcov --list coverage.filtered.info || lcov --list coverage.info; \
-			echo "[ok] 生成：cpp/build/coverage.info（过滤版：coverage.filtered.info）"; \
-		fi'
+		$(call __cpp_coverage_run)'  # 运行 ctest + gcovr/lcov 汇总覆盖率
 endef
 
 define _install_cpp
 	$(SUDO_MSG)
 	$(SHELL) -lc 'set -e; \
-		echo "[info] 安装到前缀: $(PREFIX)"; \
-		$(SUDO) $(CMAKE) --install "$(CPP_BUILD_DIR)" --prefix "$(PREFIX)"; \
-		echo "[ok] 安装完成。"'
+		$(call __cpp_install_run)'    # 安装到前缀
 endef
 
 define _uninstall_cpp
 	$(SUDO_MSG)
 	$(SHELL) -lc 'set -e; \
-		manifest="$(CPP_BUILD_DIR)/install_manifest.txt"; \
-		if [ ! -f "$$manifest" ]; then \
-			echo "[error] 未找到 $$manifest，请先执行 make install-cpp"; exit 1; \
-		fi; \
-		echo "[info] 从 $$manifest 卸载已安装文件"; \
-		while IFS= read -r f; do \
-			[ -z "$$f" ] && continue; \
-			if [ -e "$$f" ]; then \
-				echo "[rm] $$f"; \
-				$(SUDO) rm -f "$$f"; \
-			else \
-				echo "[warn] 跳过缺失文件: $$f"; \
-			fi; \
-		done < "$$manifest"; \
-		echo "[ok] 卸载完成。"'
+		$(call __cpp_uninstall_run)'  # 依据 manifest 卸载
 endef
 
 define _clean_cpp
 	$(SHELL) -lc 'set -e; \
-		echo "[info] 清理顶层 C++ 构建目录: $(CPP_BUILD_DIR)"; \
-		rm -rf "$(CPP_BUILD_DIR)"; \
-		echo "[ok] clean 完成。"'
+		$(call __cpp_clean_build)'    # 删除顶层 C++ build 目录
 endef
 
 define _fmt_cpp
 	$(SHELL) -lc 'set -e; \
-		if ! command -v clang-format >/dev/null 2>&1; then echo "[error] 未找到 clang-format"; exit 1; fi; \
-		find cpp \
-		  \( -path "cpp/lib" -o -path "cpp/lib/*" -o -path "cpp/thirdparty" -o -path "cpp/thirdparty/*" \) -prune -o \
-		  -type f -regex ".*\.\(h\|hh\|hpp\|hxx\|c\|cc\|cpp\|cxx\)" -print0 | xargs -0 -n 50 clang-format -i; \
-		echo "[ok] cpp fmt 完成（已排除 cpp/lib 与 cpp/thirdparty）"'
+		$(call __cpp_fmt_check_tool)  # 确认 clang-format 存在
+		$(call __cpp_fmt_run)'        # 运行 clang-format（排除 lib/thirdparty）
 endef
 
 define _bench_cpp
 	$(SHELL) -lc 'set -e; \
-		if [[ -n "$(CPP_LOG_LEVEL)" ]]; then \
-			export MENTAL1104_LOG_LEVEL="$(CPP_LOG_LEVEL)"; \
-			echo "[log] MENTAL1104_LOG_LEVEL=$(CPP_LOG_LEVEL)"; \
-		fi; \
-		if [[ ! -d "$(CPP_BUILD_DIR)" ]]; then echo "[info] 未发现 $(CPP_BUILD_DIR)，请先执行: make build-cpp"; exit 1; fi; \
-		shopt -s nullglob; \
-		binaries=($(CPP_BUILD_DIR)/bin/bench_*); \
-		shopt -u nullglob; \
-		file_pat="$${FILE:-}"; \
-		bench_filter="$${FILTER:-}"; \
-		if [[ -n "$(CPP_BENCH_FILES)" ]]; then \
-			declare -A want=(); \
-			for f in $(CPP_BENCH_FILES); do b=$$(basename "$$f"); b=$${b%.cpp}; want["$$b"]=1; done; \
-			filtered=(); \
-			for exe in "$${binaries[@]}"; do \
-				base=$$(basename "$$exe"); \
-				[[ -n "$${want[$$base]}" ]] && filtered+=("$${exe}"); \
-			done; \
-			binaries=("$${filtered[@]}"); \
-		fi; \
-		if [[ -n "$$file_pat" ]]; then \
-			filtered=(); \
-			for exe in "$${binaries[@]}"; do \
-				base=$$(basename "$$exe"); \
-				if [[ "$$base" =~ $$file_pat ]]; then filtered+=("$${exe}"); fi; \
-			done; \
-			binaries=("$${filtered[@]}"); \
-		fi; \
-		if [[ $${#binaries[@]} -eq 0 ]]; then \
-			echo "[warn] 未找到 bench_* 可执行文件，回退到 ctest"; \
-			cd "$(CPP_BUILD_DIR)"; \
-			args=(--output-on-failure -L bench -j $(JOBS)); \
-			[[ -n "$(CTEST_V)" ]] && args+=($(CTEST_V)); \
-			[[ -n "$$file_pat" ]] && args+=(-R "$$file_pat"); \
-			echo "[ctest] $(CTEST) $${args[*]}"; \
-			$(CTEST) "$${args[@]}"; \
-			exit 0; \
-		fi; \
-		rm -rf "$(CPP_BENCH_ARTIFACT_DIR)"; \
-		mkdir -p "$(CPP_BENCH_ARTIFACT_DIR)/plots"; \
-		for exe in "$${binaries[@]}"; do \
-			name=$$(basename "$$exe"); \
-			json="$(CPP_BENCH_ARTIFACT_DIR)/$${name}.json"; \
-			echo "[bench-cpp] $$name -> $$json"; \
-			args=( \
-				--benchmark_out="$$json" \
-				--benchmark_out_format=json \
-				--benchmark_min_time=0.2 \
-				--benchmark_repetitions=5 \
-				--benchmark_display_aggregates_only=true \
-				--benchmark_time_unit=ms \
-			); \
-			[[ -n "$$bench_filter" ]] && args+=(--benchmark_filter="$$bench_filter"); \
-			if ! "$$exe" "$${args[@]}"; then \
-				if [[ -n "$$bench_filter" ]]; then \
-					echo "[bench-cpp][skip] $$name 无匹配项 (FILTER=$$bench_filter)"; \
-					rm -f "$$json"; \
-					continue; \
-				else \
-					echo "[bench-cpp][fail] $$name 运行失败"; \
-					exit 1; \
-				fi; \
-			fi; \
-			if [[ ! -s "$$json" ]]; then \
-				echo "[bench-cpp][skip] $$name 未生成有效输出"; \
-				continue; \
-			fi; \
-			$(PYTHON) python/tools/render_bench_plots.py \
-				--input "$$json" \
-				--test-type google-benchmark \
-				--chart case-matrix \
-				--output "$(CPP_BENCH_ARTIFACT_DIR)/plots/$${name}.png" \
-				--title "C++ $$name"; \
-		done; \
-		echo "[bench-cpp] 图表输出目录：$(CPP_BENCH_ARTIFACT_DIR)/plots"'
+		$(call __cpp_bench_env)        # 日志级别/构建目录检查
+		$(call __cpp_bench_collect)    # 收集 bench_* 可执行文件并过滤
+		$(call __cpp_bench_run)'       # 运行基准并生成图表
 endef
 
 define _bench_report
@@ -791,54 +592,12 @@ endef
 
 define _vet_cpp
 	$(SHELL) -lc 'set -e; \
-		if ! command -v clang-tidy >/dev/null 2>&1; then \
-			echo "[error] 未找到 clang-tidy（如：sudo apt install clang-tidy）"; exit 1; \
-		fi; \
-		if [[ ! -f "$(CPP_BUILD_DIR)/compile_commands.json" ]]; then \
-			echo "[hint] 先生成编译数据库：cmake -S cpp -B $(CPP_BUILD_DIR) -DCMAKE_EXPORT_COMPILE_COMMANDS=ON && cmake --build $(CPP_BUILD_DIR)"; \
-			exit 1; \
-		fi; \
-		echo "[info] clang-tidy 目录: $(VET_DIR)"; \
-		find "$(VET_DIR)" -type f \( -name "*.cpp" -o -name "*.cc" -o -name "*.cxx" \) -print0 \
-		| xargs -0 -r clang-tidy -p "$(CPP_BUILD_DIR)" --quiet \
-			--checks="-*,bugprone-*,performance-*,clang-analyzer-*" \
-			--warnings-as-errors="*" \
-			-header-filter="^.*/cpp/include/mental1104/.*"; \
-		echo "[ok] vet-cpp 完成。"; \
-	'
+		$(call __cpp_vet_run)'         # 运行 clang-tidy 检查
 endef
 
 define _guard_cpp
-	$(SHELL) -lc 'set -e -o pipefail; MODE="${MODE:-mem}"; \
-		if [ "$$MODE" = "all" ]; then $(MAKE) guard-cpp MODE=mem; $(MAKE) guard-cpp MODE=race; exit 0; fi; \
-		if [ "$$MODE" = "heap" ]; then \
-			if ! command -v valgrind >/dev/null 2>&1; then echo "[error] 未安装 valgrind"; exit 1; fi; \
-			cmake -S cpp -B cpp/build -DCMAKE_BUILD_TYPE=Debug -DCMAKE_EXPORT_COMPILE_COMMANDS=ON; cmake --build cpp/build -j $(JOBS); \
-			echo "[info] 运行 massif 生成内存占用画像"; \
-			find cpp/build/bin -maxdepth 1 -type f -name "test_*" -executable | while read -r t; do \
-				out="`basename $$t`.massif"; echo "[info] massif $$t -> $$out"; valgrind --tool=massif --time-unit=ms --stacks=yes --massif-out-file="$$out" "$$t" || true; \
-			done; echo "[ok] guard-cpp[heap] 已生成 massif 报告"; exit 0; \
-		fi; \
-		if [ "$$MODE" = "race" ]; then \
-			B="cpp/build-tsan"; CFLAGS="-O1 -g -fno-omit-frame-pointer -fsanitize=thread"; \
-			TS="TSAN_OPTIONS=halt_on_error=1"; cmake -S cpp -B "$$B" -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_FLAGS="$$CFLAGS" -DCMAKE_EXE_LINKER_FLAGS="$$CFLAGS" -DCMAKE_EXPORT_COMPILE_COMMANDS=ON; \
-			cmake --build "$$B" -j $(JOBS); cd "$$B"; log="guard_tsan.log"; \
-			if ! env $$TS ctest --output-on-failure -j $(JOBS) -LE bench | tee "$$log"; then \
-				if grep -qiE "ThreadSanitizer|data race" "$$log"; then echo "[fail][concurrency] 并发竞态问题, 日志 $$B/$$log"; else echo "[fail][test] 非并发导致失败, 日志 $$B/$$log"; fi; exit 1; \
-			fi; if grep -qiE "ThreadSanitizer|data race" "$$log"; then echo "[fail][concurrency] 并发竞态问题, 日志 $$B/$$log"; exit 1; fi; \
-			echo "[ok] guard-cpp[race] 通过"; exit 0; \
-		fi; \
-		B="cpp/build-asan"; CFLAGS="-O1 -g -fno-omit-frame-pointer -fsanitize=address,undefined"; \
-		AA="ASAN_OPTIONS=detect_leaks=1:strict_string_checks=1:check_initialization_order=1:detect_stack_use_after_return=1:halt_on_error=1"; \
-		UA="UBSAN_OPTIONS=print_stacktrace=1:halt_on_error=1"; \
-		cmake -S cpp -B "$$B" -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_FLAGS="$$CFLAGS" -DCMAKE_EXE_LINKER_FLAGS="$$CFLAGS" -DCMAKE_EXPORT_COMPILE_COMMANDS=ON; \
-		cmake --build "$$B" -j $(JOBS); cd "$$B"; log="guard_asan.log"; \
-		if ! env $$AA $$UA ctest --output-on-failure -j $(JOBS) -LE bench | tee "$$log"; then \
-			if grep -qiE "AddressSanitizer|heap-use-after-free|use-after-free|stack-use-after-return|buffer-overflow|leak" "$$log"; then echo "[fail][memory] 内存读写或泄漏问题, 日志 $$B/$$log"; \
-			elif grep -qiE "UndefinedBehaviorSanitizer|runtime error" "$$log"; then echo "[fail][ub] 未定义行为问题, 日志 $$B/$$log"; \
-			else echo "[fail][test] 非内存导致失败, 日志 $$B/$$log"; fi; exit 1; \
-		fi; echo "[ok] guard-cpp[mem] 通过"; \
-	'
+	$(SHELL) -lc 'set -e -o pipefail; \
+		$(call __cpp_guard_run)'      # 按 MODE 运行 sanitizer / miri / massif 等诊断
 endef
 
 define _guard_go
@@ -893,16 +652,16 @@ endef
 .PHONY: _docker-up-all-if-needed _docker-down-all-if-needed
 _docker-up-all-if-needed:
 	@if [ -n "$(DOCKER_DISABLED)" ]; then \
-		echo "[skip] macOS 检测到，跳过 docker-up-all"; \
+		echo "[skip] macOS 检测到，跳过 setup-docker"; \
 	else \
-		$(MAKE) --no-print-directory docker-up-all; \
+		$(MAKE) --no-print-directory setup-docker; \
 	fi
 
 _docker-down-all-if-needed:
 	@if [ -n "$(DOCKER_DISABLED)" ]; then \
-		echo "[skip] macOS 检测到，跳过 docker-down-all"; \
+		echo "[skip] macOS 检测到，跳过 clean-docker"; \
 	else \
-		$(MAKE) --no-print-directory docker-down-all; \
+		$(MAKE) --no-print-directory clean-docker; \
 	fi
 
 # =================== 入口/目标（Targets） ===================
@@ -1043,173 +802,16 @@ COMPOSE_FILE_NAME  ?= docker-compose.yaml
 COMPOSE_DIRS := $(shell find $(REPO_ROOT)/images -type f -name $(COMPOSE_FILE_NAME) -exec dirname {} \; | sort -u)
 ENV_FILE_OPT := $(shell [ -f "$(ENV_SRC)" ] && printf -- '--env-file %s' "$(ENV_SRC)")
 
-.PHONY: docker-help docker-list docker-up-all docker-down-all docker-up docker-down docker-config docker-ps docker-logs docker-pull docker-net
-docker-help:
-	@echo "Targets:"
-	@awk 'BEGIN{FS":.*## "}/^docker-[a-zA-Z0-9_.-]+:.*## /{printf "  %-18s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
+.PHONY: setup-docker clean-docker
+setup-docker: $(ENV_MK)
+	@touch "$(ENV_STAMP)"
+	$(call __docker_up_all)
 
-docker-list:
-	@[ -n "$(COMPOSE_DIRS)" ] || { echo "[warn] images/ 未找到 $(COMPOSE_FILE_NAME)"; exit 0; }
-	@printf "%s\n" $(COMPOSE_DIRS)
-
-docker-up-all: $(ENV_MK)
-	@if ! command -v docker >/dev/null 2>&1; then echo "[warn] 未检测到 docker，跳过 docker-up-all"; exit 0; fi
-	@[ -n "$(COMPOSE_DIRS)" ] || { echo "[warn] images/ 未找到 $(COMPOSE_FILE_NAME)"; exit 0; }
-	@for d in $(COMPOSE_DIRS); do \
-		echo ">> UP $$d"; \
-		$(COMPOSE_BIN) \
-		  --project-directory "$(REPO_ROOT)" \
-		  $(ENV_FILE_OPT) \
-		  -f "$$d/$(COMPOSE_FILE_NAME)" up -d \
-		|| { echo "[warn] $$d 启动失败（已忽略）"; continue; }; \
-	done
-	@echo "[ok] docker-up-all 完成（出错已忽略）"
-
-docker-down-all:
-	@$(MAKE) --no-print-directory env-clean
-	@if ! command -v docker >/dev/null 2>&1; then echo "[warn] 未检测到 docker，跳过 docker-down-all"; exit 0; fi
-	@[ -n "$(COMPOSE_DIRS)" ] || { echo "[warn] images/ 未找到 $(COMPOSE_FILE_NAME)"; exit 0; }
-	@for d in $(COMPOSE_DIRS); do \
-		echo ">> DOWN $$d"; \
-		$(COMPOSE_BIN) \
-			--project-directory "$(REPO_ROOT)" \
-			$(ENV_FILE_OPT) \
-			-f "$$d/$(COMPOSE_FILE_NAME)" down --remove-orphans \
-			|| { echo "[warn] $$d 关闭失败（已忽略）"; continue; }; \
-	done
-	@echo "[ok] docker-down-all 完成（出错已忽略）"
-
-docker-up:
-	@set -Eeuo pipefail
-	if [[ -n "$(DIR)" ]]; then sel="$(DIR)"; \
-	elif [[ -n "$(NAME)" ]]; then \
-		sel=$$(for d in $(COMPOSE_DIRS); do [[ "$$(basename "$$d")" == "$(NAME)" ]] && echo "$$d"; done); \
-	else
-		echo "[err] 需要指定 DIR=... 或 NAME=..."; exit 2; \
-	fi
-	[[ -n "$$sel" ]] || { echo "[err] 未匹配到服务目录"; exit 2; }
-	for d in $$sel; do
-		f="$$d/$(COMPOSE_FILE_NAME)"
-		if [[ ! -f "$$f" ]]; then
-			echo "[skip] $$f 不存在"; continue
-		fi
-		echo ">> UP $$d"
-		$(COMPOSE_BIN) \
-		  --project-directory "$(REPO_ROOT)" \
-		  $(ENV_FILE_OPT) \
-		  -f "$$f" up -d || { echo "[warn] $$d 启动失败（已忽略）"; continue; }
-	done
-
-docker-down:
-	@set -Eeuo pipefail
-	if [[ -n "$(DIR)" ]]; then sel="$(DIR)"; \
-	elif [[ -n "$(NAME)" ]]; then \
-		sel=$$(for d in $(COMPOSE_DIRS); do [[ "$$(basename "$$d")" == "$(NAME)" ]] && echo "$$d"; done); \
-	else
-		echo "[err] 需要指定 DIR=... 或 NAME=..."; exit 2; \
-	fi
-	[[ -n "$$sel" ]] || { echo "[err] 未匹配到服务目录"; exit 2; }
-	for d in $$sel; do
-		f="$$d/$(COMPOSE_FILE_NAME)"
-		if [[ ! -f "$$f" ]]; then
-			echo "[skip] $$f 不存在"; continue
-		fi
-		echo ">> DOWN $$d"
-		$(COMPOSE_BIN) \
-		  --project-directory "$(REPO_ROOT)" \
-		  $(ENV_FILE_OPT) \
-		  -f "$$f" down --remove-orphans || { echo "[warn] $$d 关闭失败（已忽略）"; continue; }
-	done
-
-docker-config:
-	@[ -n "$(DIR)" ] || { echo "[err] 需指定 DIR=..."; exit 2; }
-	@$(COMPOSE_BIN) \
-	  --project-directory "$(REPO_ROOT)" \
-	  $(ENV_FILE_OPT) \
-	  -f "$(DIR)/$(COMPOSE_FILE_NAME)" config
-
-docker-ps:
-	@set -e
-	for d in $(COMPOSE_DIRS); do
-		echo "== $$d"; (cd "$$d" && $(COMPOSE_BIN) ps); echo
-	done
-
-docker-logs:
-	@set -e
-	if [ -n "$(DIR)" ]; then sel="$(DIR)"; \
-	elif [ -n "$(NAME)" ]; then \
-		sel=$$(for d in $(COMPOSE_DIRS); do [ "$$(basename "$$d")" = "$(NAME)" ] && echo "$$d"; done); \
-	else sel="$(COMPOSE_DIRS)"; fi
-	for d in $$sel; do
-		echo "== $$d"; (cd "$$d" && $(COMPOSE_BIN) logs $(ARGS)); echo
-	done
-
-docker-pull:
-	@set -e
-	for d in $(COMPOSE_DIRS); do
-		echo ">> PULL $$d"
-		(cd "$$d" && $(COMPOSE_BIN) pull) || { echo "[warn] $$d pull 失败（已忽略）"; continue; }
-	done
-	@echo "[ok] 全部镜像尝试拉取完毕（出错已忽略）"
-
-docker-net:
-	@set -e
-	NET_NAME="$(NET)"; [ -n "$$NET_NAME" ] || NET_NAME="shared_network"
-	if docker network inspect "$$NET_NAME" >/dev/null 2>&1; then
-		echo "[ok] 网络已存在：$$NET_NAME"
-	else
-		docker network create "$$NET_NAME"
-		echo "[ok] 已创建网络：$$NET_NAME"
-	fi
-
-# ---- Docker registry mirrors ----
-MIRRORS ?= https://mirror.gcr.io
-DOCKER_DAEMON_JSON ?= /etc/docker/daemon.json
-.PHONY: docker-mirror-help docker-mirror-apply docker-mirror-show
-docker-mirror-help:
-	@echo "用法："; \
-	echo "  make docker-mirror-apply MIRRORS='https://mirror.gcr.io, https://hub-mirror.c.163.com'"; \
-	echo "  make docker-mirror-show"
-docker-mirror-show:
-	@if [ -f "$(DOCKER_DAEMON_JSON)" ]; then \
-		echo "== $(DOCKER_DAEMON_JSON) =="; cat "$(DOCKER_DAEMON_JSON)"; echo; \
-	else \
-		echo "[info] 未找到 $(DOCKER_DAEMON_JSON)"; \
-	fi; \
-	echo "== docker info (Registry Mirrors) =="; \
-	docker info 2>/dev/null | sed -n '/Registry Mirrors/,$$p'
-docker-mirror-apply:
-	@set -euo pipefail; \
-	if docker info 2>/dev/null | grep -q "Docker Desktop"; then \
-		echo "[warn] 检测到 Docker Desktop；镜像站通常应在 Desktop 偏好设置中配置。"; \
-		echo "[warn] 本命令仅在独立 dockerd 生效。"; \
-	fi; \
-	mirrors_list="$(MIRRORS)"; mirrors_list="$${mirrors_list//,/ }"; \
-	json_elems=""; for x in $$mirrors_list; do [ -n "$$x" ] || continue; json_elems="$$json_elems\"$$x\","; done; \
-	mirrors_json="[$${json_elems%,}]"; \
-	[ "$$mirrors_json" != "[]" ] || { echo "[err] MIRRORS 为空"; exit 2; }; \
-	$(SUDO) mkdir -p "$(dir $(DOCKER_DAEMON_JSON))"; \
-	if [ -f "$(DOCKER_DAEMON_JSON)" ]; then ts="$$(date +%F_%H%M%S)"; $(SUDO) cp -a "$(DOCKER_DAEMON_JSON)" "$(DOCKER_DAEMON_JSON).$$ts.bak"; echo "[ok] 备份为 $(DOCKER_DAEMON_JSON).$$ts.bak"; fi; \
-	tmp="$$(mktemp)"; \
-	if command -v jq >/dev/null 2>&1; then \
-		orig="$$( [ -f "$(DOCKER_DAEMON_JSON)" ] && cat "$(DOCKER_DAEMON_JSON)" || echo '{}' )"; \
-		printf "%s" "$$orig" | jq --argjson mirrors "$$mirrors_json" \
-		   '.["registry-mirrors"] = $mirrors | .features = (.features // {}) | .features.buildkit = true' > "$$tmp"; \
-		echo "[ok] 已使用 jq 合并写入"; \
-	else \
-		cat > "$$tmp" <<-JSON \
-		{ \
-		  "registry-mirrors": $$mirrors_json, \
-		  "features": { "buildkit": true } \
-		} \
-JSON
-		echo "[ok] 未检测到 jq，写入最小配置"; \
-	fi; \
-	$(SUDO) install -m 0644 -o root -g root "$$tmp" "$(DOCKER_DAEMON_JSON)"; rm -f "$$tmp"; \
-	if command -v systemctl >/dev/null 2>&1; then $(SUDO) systemctl restart docker && echo "[ok] systemd 已重启 docker"; \
-	elif command -v service >/dev/null 2>&1; then $(SUDO) service docker restart && echo "[ok] SysV 已重启 docker"; \
-	else echo "[warn] 未找到 systemctl/service，请手动重启 dockerd"; fi; \
-	echo "== 生效确认（docker info）=="; docker info 2>/dev/null | sed -n '/Registry Mirrors/,$$p'
+clean-docker:
+	$(call __docker_down_all)
+	@rm -f "$(ENV_STAMP)" "$(ENV_MK)" || true
+clean-docker:
+	$(call __docker_down_all)
 
 # =================== 聚合入口（Python + Go + C++ + Rust + Docker） ===================
 
@@ -1259,11 +861,11 @@ help:
 	@echo "用法：make <target> [VERBOSE=1] [JOBS=N] [MODE=mem|race|miri|all]"
 	@echo ""
 	@echo "—— 聚合 ——"
-	@echo "  setup            生成/导入 .env -> 尝试 docker-up-all(images/) -> 各语言 setup（docker 出错不阻塞）"
+	@echo "  setup            生成/导入 .env -> 尝试 setup-docker(images/) -> 各语言 setup（docker 出错不阻塞）"
 	@echo "  build            编译全部子项目"
 	@echo "  test             运行全部单测"
 	@echo "  install          安装全部产物（可能使用sudo）"
-	@echo "  clean            尝试 docker-down-all(images/) -> 清理构建 -> 移除 env 导入文件（出错不阻塞）"
+	@echo "  clean            尝试 clean-docker(images/) -> 清理构建 -> 移除 env 导入文件（出错不阻塞）"
 	@echo "  coverage         汇总覆盖率（Python/Go/C++/Rust）"
 	@echo "  fmt              代码格式化（Go/C++/Rust；Python用 fmt-python）"
 	@echo "  bench            运行基准（Python/Go/C++/Rust）"
@@ -1619,6 +1221,320 @@ cd python; \
 echo "[ok] vet-python 完成。"
 endef
 
+define __cpp_configure_env
+mkdir -p "$(CPP_BUILD_DIR)"; \
+pybind_dir=""; \
+if [[ -x "$(PY_VENV_PYTHON)" ]]; then \
+  pybind_dir="$$( "$(PY_VENV_PYTHON)" -m pybind11 --cmakedir 2>/dev/null || true)"; \
+fi; \
+extra=""; \
+[[ -n "$$pybind_dir" ]] && extra="-Dpybind11_DIR=$$pybind_dir";
+endef
+
+define __cpp_configure_run
+$(CMAKE) -S "$(CPP_SRC_DIR)" -B "$(CPP_BUILD_DIR)" -DCMAKE_BUILD_TYPE="$(CPP_BUILD_TYPE)" -DPYBIND11_FINDPYTHON=ON $$extra; \
+echo "[ok] 顶层 cmake 配置完成（$(CPP_BUILD_TYPE)）"
+endef
+
+define __cpp_build_run
+if $(CMAKE) --build "$(CPP_BUILD_DIR)" --parallel $(JOBS); then :; \
+else $(CMAKE) --build "$(CPP_BUILD_DIR)" -- -j $(JOBS); fi; \
+echo "[ok] 顶层 C++ 构建完成（-j $(JOBS)）"
+endef
+
+define __cpp_test_env
+unset HTTP_PROXY HTTPS_PROXY NO_PROXY ALL_PROXY http_proxy https_proxy no_proxy all_proxy; \
+echo "[proxy] disabled for pytest (HTTP_PROXY/HTTPS_PROXY/NO_PROXY/ALL_PROXY 皆已清空)"; \
+if [[ -n "$(CPP_LOG_LEVEL)" ]]; then \
+  export MENTAL1104_LOG_LEVEL="$(CPP_LOG_LEVEL)"; \
+  echo "[log] MENTAL1104_LOG_LEVEL=$(CPP_LOG_LEVEL)"; \
+fi; \
+cd "$(CPP_BUILD_DIR)"
+endef
+
+define __cpp_test_patterns
+ctest_pat="$${FILE:-}"; \
+gtest_filter="$${FILTER:-}"; \
+if [[ -z "$$ctest_pat" && -n "$(CPP_TEST_FILES)$(CPP_TEST_DIRS)" ]]; then \
+  files=""; \
+  [[ -n "$(CPP_TEST_FILES)" ]] && files+=" $(CPP_TEST_FILES)"; \
+  if [[ -n "$(CPP_TEST_DIRS)" ]]; then \
+    while IFS= read -r f; do files+=" $$f"; done < <(find $(CPP_TEST_DIRS) -type f -name "*.cpp" | sort); \
+  fi; \
+  names=$$(for f in $$files; do b=$$(basename "$$f"); echo $${b%.cpp}; done | sort -u | paste -sd"|" -); \
+  [[ -n "$$names" ]] && ctest_pat="^($$names)$$"; \
+elif [[ -z "$$ctest_pat" && -n "$(CPP_TEST)" ]]; then \
+  files=""; unknown=""; \
+  for tok in $(CPP_TEST); do \
+    if [[ -f "$$tok" ]]; then files+=" $$tok"; continue; fi; \
+    if [[ -d "$$tok" ]]; then \
+      while IFS= read -r f; do files+=" $$f"; done < <(find "$$tok" -type f -name "*.cpp" | sort); \
+      continue; \
+    fi; \
+    unknown="$$tok"; \
+  done; \
+  if [[ -n "$$files" ]]; then \
+    names=$$(for f in $$files; do b=$$(basename "$$f"); echo $${b%.cpp}; done | sort -u | paste -sd"|" -); \
+    [[ -n "$$names" ]] && ctest_pat="^($$names)$$"; \
+  elif [[ -z "$$ctest_pat" && -n "$$unknown" ]]; then \
+    ctest_pat="$$unknown"; \
+  fi; \
+fi; \
+args=(--output-on-failure -LE bench -j $(JOBS)); \
+[[ -n "$(CTEST_V)" ]] && args+=($(CTEST_V)); \
+[[ -n "$$ctest_pat" ]] && args+=(-R "$$ctest_pat")
+endef
+
+define __cpp_test_run
+if [[ -n "$$gtest_filter" ]]; then \
+  echo "[ctest] GTEST_FILTER=$$gtest_filter $(CTEST) $${args[*]}"; \
+  GTEST_FILTER="$$gtest_filter" $(CTEST) "$${args[@]}"; \
+else \
+  echo "[ctest] $(CTEST) $${args[*]}"; \
+  $(CTEST) "$${args[@]}"; \
+fi
+endef
+
+define __cpp_install_run
+echo "[info] 安装到前缀: $(PREFIX)"; \
+$(SUDO) $(CMAKE) --install "$(CPP_BUILD_DIR)" --prefix "$(PREFIX)"; \
+echo "[ok] 安装完成。"
+endef
+
+define __cpp_fmt_check_tool
+if ! command -v clang-format >/dev/null 2>&1; then echo "[error] 未找到 clang-format"; exit 1; fi
+endef
+
+define __cpp_fmt_run
+find cpp \
+  \( -path "cpp/lib" -o -path "cpp/lib/*" -o -path "cpp/thirdparty" -o -path "cpp/thirdparty/*" \) -prune -o \
+  -type f -regex ".*\.\(h\|hh\|hpp\|hxx\|c\|cc\|cpp\|cxx\)" -print0 | xargs -0 -n 50 clang-format -i; \
+echo "[ok] cpp fmt 完成（已排除 cpp/lib 与 cpp/thirdparty）"
+endef
+
+define __cpp_bench_env
+if [[ -n "$(CPP_LOG_LEVEL)" ]]; then \
+  export MENTAL1104_LOG_LEVEL="$(CPP_LOG_LEVEL)"; \
+  echo "[log] MENTAL1104_LOG_LEVEL=$(CPP_LOG_LEVEL)"; \
+fi; \
+if [[ ! -d "$(CPP_BUILD_DIR)" ]]; then echo "[info] 未发现 $(CPP_BUILD_DIR)，请先执行: make build-cpp"; exit 1; fi; \
+shopt -s nullglob; \
+binaries=($(CPP_BUILD_DIR)/bin/bench_*); \
+shopt -u nullglob; \
+file_pat="$${FILE:-}"; \
+bench_filter="$${FILTER:-}";
+endef
+
+define __cpp_bench_collect
+if [[ -n "$(CPP_BENCH_FILES)" ]]; then \
+  declare -A want=(); \
+  for f in $(CPP_BENCH_FILES); do b=$$(basename "$$f"); b=$${b%.cpp}; want["$$b"]=1; done; \
+  filtered=(); \
+  for exe in "$${binaries[@]}"; do \
+    base=$$(basename "$$exe"); \
+    [[ -n "$${want[$$base]}" ]] && filtered+=("$${exe}"); \
+  done; \
+  binaries=("$${filtered[@]}"); \
+fi; \
+if [[ -n "$$file_pat" ]]; then \
+  filtered=(); \
+  for exe in "$${binaries[@]}"; do \
+    base=$$(basename "$$exe"); \
+    if [[ "$$base" =~ $$file_pat ]]; then filtered+=("$${exe}"); fi; \
+  done; \
+  binaries=("$${filtered[@]}"); \
+fi
+endef
+
+define __cpp_bench_run
+if [[ $${#binaries[@]} -eq 0 ]]; then \
+  echo "[warn] 未找到 bench_* 可执行文件，回退到 ctest"; \
+  cd "$(CPP_BUILD_DIR)"; \
+  args=(--output-on-failure -L bench -j $(JOBS)); \
+  [[ -n "$(CTEST_V)" ]] && args+=($(CTEST_V)); \
+  [[ -n "$$file_pat" ]] && args+=(-R "$$file_pat"); \
+  echo "[ctest] $(CTEST) $${args[*]}"; \
+  $(CTEST) "$${args[@]}"; \
+  exit 0; \
+fi; \
+rm -rf "$(CPP_BENCH_ARTIFACT_DIR)"; \
+mkdir -p "$(CPP_BENCH_ARTIFACT_DIR)/plots"; \
+for exe in "$${binaries[@]}"; do \
+  name=$$(basename "$$exe"); \
+  json="$(CPP_BENCH_ARTIFACT_DIR)/$${name}.json"; \
+  echo "[bench-cpp] $$name -> $$json"; \
+  args=( \
+    --benchmark_out="$$json" \
+    --benchmark_out_format=json \
+    --benchmark_min_time=0.2 \
+    --benchmark_repetitions=5 \
+    --benchmark_display_aggregates_only=true \
+    --benchmark_time_unit=ms \
+  ); \
+  [[ -n "$$bench_filter" ]] && args+=(--benchmark_filter="$$bench_filter"); \
+  if ! "$$exe" "$${args[@]}"; then \
+    if [[ -n "$$bench_filter" ]]; then \
+      echo "[bench-cpp][skip] $$name 无匹配项 (FILTER=$$bench_filter)"; \
+      rm -f "$$json"; \
+      continue; \
+    else \
+      echo "[bench-cpp][fail] $$name 运行失败"; \
+      exit 1; \
+    fi; \
+  fi; \
+  if [[ ! -s "$$json" ]]; then \
+    echo "[bench-cpp][skip] $$name 未生成有效输出"; \
+    continue; \
+  fi; \
+  $(PYTHON) python/tools/render_bench_plots.py \
+    --input "$$json" \
+    --test-type google-benchmark \
+    --chart case-matrix \
+    --output "$(CPP_BENCH_ARTIFACT_DIR)/plots/$${name}.png" \
+    --title "C++ $$name"; \
+done; \
+echo "[bench-cpp] 图表输出目录：$(CPP_BENCH_ARTIFACT_DIR)/plots"
+endef
+
+define __cpp_coverage_run
+cd cpp/build; \
+if [[ -n "$${RUN_CTEST_FOR_COVERAGE:-}" ]]; then \
+  echo "[info] RUN_CTEST_FOR_COVERAGE=1 -> 仅运行一次 ctest（排除 bench）"; \
+  ctest --output-on-failure -LE bench || true; \
+else \
+  echo "[info] 已依赖 test-cpp，跳过重复 ctest；如需重跑可设置 RUN_CTEST_FOR_COVERAGE=1"; \
+fi; \
+if command -v gcovr >/dev/null 2>&1; then \
+  echo "[info] 使用 gcovr 汇总覆盖率（已排除 lib/ 与 thirdparty/）"; \
+  gcovr -r .. --object-directory . \
+        --exclude "(^|.*/)(test|external|gtest|lib|thirdparty|overlay)/" \
+        --exclude "/usr/include/.*" \
+        --exclude-directories ".*/build-(asan|tsan|ubsan|msan).*" \
+        --gcov-ignore-parse-errors \
+        --txt --print-summary; \
+else \
+  echo "[info] 未检测到 gcovr，回退到 lcov"; \
+  if ! command -v lcov >/dev/null 2>&1; then \
+    echo "[error] 未安装 lcov；请安装 gcovr 或 lcov 任一工具"; exit 1; \
+  fi; \
+  BASE=".."; \
+  lcov --directory . --capture --output-file coverage.info --base-directory "$$BASE" \
+       --ignore-errors mismatch,negative,inconsistent,empty,unused \
+       --no-external --rc geninfo_unexecuted_blocks=1; \
+  lcov --remove coverage.info --base-directory "$$BASE" \
+       "*/test/*" "*/external/*" "*/gtest/*" "*/lib/*" "*/thirdparty/*" "/usr/*" "/overlay/*" \
+       -o coverage.filtered.info \
+       --ignore-errors empty,unused || true; \
+  if ! lcov --list coverage.filtered.info --base-directory "$$BASE" --ignore-errors empty,unused; then \
+    echo "[warn] lcov 未产生有效数据（可能未启用 --coverage 或过滤过严），已跳过"; \
+    exit 0; \
+  fi; \
+  echo "[ok] 生成：cpp/build/coverage.info（过滤版：coverage.filtered.info）"; \
+fi
+endef
+
+define __cpp_uninstall_run
+manifest="$(CPP_BUILD_DIR)/install_manifest.txt"; \
+if [ ! -f "$$manifest" ]; then \
+  echo "[error] 未找到 $$manifest，请先执行 make install-cpp"; exit 1; \
+fi; \
+echo "[info] 从 $$manifest 卸载已安装文件"; \
+while IFS= read -r f; do \
+  [ -z "$$f" ] && continue; \
+  if [ -e "$$f" ]; then \
+    echo "[rm] $$f"; \
+    $(SUDO) rm -f "$$f"; \
+  else \
+    echo "[warn] 跳过缺失文件: $$f"; \
+  fi; \
+done < "$$manifest"; \
+echo "[ok] 卸载完成。"
+endef
+
+define __cpp_clean_build
+echo "[info] 清理顶层 C++ 构建目录: $(CPP_BUILD_DIR)"; \
+rm -rf "$(CPP_BUILD_DIR)"; \
+echo "[ok] clean 完成。"
+endef
+
+define __cpp_vet_run
+if ! command -v clang-tidy >/dev/null 2>&1; then \
+  echo "[error] 未找到 clang-tidy（如：sudo apt install clang-tidy）"; exit 1; \
+fi; \
+if [[ ! -f "$(CPP_BUILD_DIR)/compile_commands.json" ]]; then \
+  echo "[hint] 先生成编译数据库：cmake -S cpp -B $(CPP_BUILD_DIR) -DCMAKE_EXPORT_COMPILE_COMMANDS=ON && cmake --build $(CPP_BUILD_DIR)"; \
+  exit 1; \
+fi; \
+echo "[info] clang-tidy 目录: $(VET_DIR)"; \
+find "$(VET_DIR)" -type f \( -name "*.cpp" -o -name "*.cc" -o -name "*.cxx" \) -print0 \
+| xargs -0 -r clang-tidy -p "$(CPP_BUILD_DIR)" --quiet \
+    --checks="-*,bugprone-*,performance-*,clang-analyzer-*" \
+    --warnings-as-errors="*" \
+    --header-filter="^.*/cpp/include/mental1104/.*"; \
+echo "[ok] vet-cpp 完成。"
+endef
+
+define __cpp_guard_run
+MODE="${MODE:-mem}"; \
+if [ "$$MODE" = "all" ]; then $(MAKE) guard-cpp MODE=mem; $(MAKE) guard-cpp MODE=race; exit 0; fi; \
+if [ "$$MODE" = "heap" ]; then \
+  if ! command -v valgrind >/dev/null 2>&1; then echo "[error] 未安装 valgrind"; exit 1; fi; \
+  cmake -S cpp -B cpp/build -DCMAKE_BUILD_TYPE=Debug -DCMAKE_EXPORT_COMPILE_COMMANDS=ON; cmake --build cpp/build -j $(JOBS); \
+  echo "[info] 运行 massif 生成内存占用画像"; \
+  find cpp/build/bin -maxdepth 1 -type f -name "test_*" -executable | while read -r t; do \
+    out="`basename $$t`.massif"; echo "[info] massif $$t -> $$out"; valgrind --tool=massif --time-unit=ms --stacks=yes --massif-out-file="$$out" "$$t" || true; \
+  done; echo "[ok] guard-cpp[heap] 已生成 massif 报告"; exit 0; \
+fi; \
+if [ "$$MODE" = "race" ]; then \
+  B="cpp/build-tsan"; CFLAGS="-O1 -g -fno-omit-frame-pointer -fsanitize=thread"; \
+  TS="TSAN_OPTIONS=halt_on_error=1"; cmake -S cpp -B "$$B" -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_FLAGS="$$CFLAGS" -DCMAKE_EXE_LINKER_FLAGS="$$CFLAGS" -DCMAKE_EXPORT_COMPILE_COMMANDS=ON; \
+  cmake --build "$$B" -j $(JOBS); cd "$$B"; log="guard_tsan.log"; \
+  if ! env $$TS ctest --output-on-failure -j $(JOBS) -LE bench | tee "$$log"; then \
+    if grep -qiE "ThreadSanitizer|data race" "$$log"; then echo "[fail][concurrency] 并发竞态问题, 日志 $$B/$$log"; else echo "[fail][test] 非并发导致失败, 日志 $$B/$$log"; fi; exit 1; \
+  fi; if grep -qiE "ThreadSanitizer|data race" "$$log"; then echo "[fail][concurrency] 并发竞态问题, 日志 $$B/$$log"; exit 1; fi; \
+  echo "[ok] guard-cpp[race] 通过"; exit 0; \
+fi; \
+B="cpp/build-asan"; CFLAGS="-O1 -g -fno-omit-frame-pointer -fsanitize=address,undefined"; \
+AA="ASAN_OPTIONS=detect_leaks=1:strict_string_checks=1:check_initialization_order=1:detect_stack_use_after_return=1:halt_on_error=1"; \
+UA="UBSAN_OPTIONS=print_stacktrace=1:halt_on_error=1"; \
+cmake -S cpp -B "$$B" -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_FLAGS="$$CFLAGS" -DCMAKE_EXE_LINKER_FLAGS="$$CFLAGS" -DCMAKE_EXPORT_COMPILE_COMMANDS=ON; \
+cmake --build "$$B" -j $(JOBS); cd "$$B"; log="guard_asan.log"; \
+if ! env $$AA $$UA ctest --output-on-failure -j $(JOBS) -LE bench | tee "$$log"; then \
+  if grep -qiE "AddressSanitizer|heap-use-after-free|use-after-free|stack-use-after-return|buffer-overflow|leak" "$$log"; then echo "[fail][memory] 内存读写或泄漏问题, 日志 $$B/$$log"; \
+  elif grep -qiE "UndefinedBehaviorSanitizer|runtime error" "$$log"; then echo "[fail][ub] 未定义行为问题, 日志 $$B/$$log"; \
+  else echo "[fail][test] 非内存导致失败, 日志 $$B/$$log"; fi; exit 1; \
+fi; echo "[ok] guard-cpp[mem] 通过"
+endef
+
+define __docker_up_all
+@if ! command -v docker >/dev/null 2>&1; then echo "[warn] 未检测到 docker，跳过 setup-docker"; exit 0; fi
+@[ -n "$(COMPOSE_DIRS)" ] || { echo "[warn] images/ 未找到 $(COMPOSE_FILE_NAME)"; exit 0; }
+@for d in $(COMPOSE_DIRS); do \
+	echo ">> UP $$d"; \
+	$(COMPOSE_BIN) \
+	  --project-directory "$(REPO_ROOT)" \
+	  $(ENV_FILE_OPT) \
+	  -f "$$d/$(COMPOSE_FILE_NAME)" up -d \
+	|| { echo "[warn] $$d 启动失败（已忽略）"; continue; }; \
+done
+@echo "[ok] setup-docker 完成（出错已忽略）"
+endef
+
+define __docker_down_all
+@$(MAKE) --no-print-directory env-clean
+@if ! command -v docker >/dev/null 2>&1; then echo "[warn] 未检测到 docker，跳过 clean-docker"; exit 0; fi
+@[ -n "$(COMPOSE_DIRS)" ] || { echo "[warn] images/ 未找到 $(COMPOSE_FILE_NAME)"; exit 0; }
+@for d in $(COMPOSE_DIRS); do \
+	echo ">> DOWN $$d"; \
+	$(COMPOSE_BIN) \
+		--project-directory "$(REPO_ROOT)" \
+		$(ENV_FILE_OPT) \
+		-f "$$d/$(COMPOSE_FILE_NAME)" down --remove-orphans \
+		|| { echo "[warn] $$d 关闭失败（已忽略）"; continue; }; \
+done
+@echo "[ok] clean-docker 完成（出错已忽略）"
+endef
+
 define __export_cpp_use_venv
 if [[ -x "$(PY_VENV_PYTHON)" ]]; then \
   export VIRTUAL_ENV="$(PY_VENV)"; \
@@ -1648,4 +1564,44 @@ if ! "$(PY_VENV_PIP)" show pytest-benchmark >/dev/null 2>&1; then \
   echo "[info] 安装 pytest-benchmark 到 venv …"; \
   "$(PY_VENV_PIP)" install pytest-benchmark; \
 fi;
+endef
+
+
+
+define _git_fetch_submodules
+	$(SHELL) -lc 'set -e; \
+		cleanup_path(){ \
+			local target="$$1"; \
+			[ -z "$$target" ] && return 0; \
+			if [[ -e "$$target" ]]; then \
+				if command -v chflags >/dev/null 2>&1; then \
+					chflags -R nouchg "$$target" >/dev/null 2>&1 || true; \
+				fi; \
+				chmod -R u+w "$$target" >/dev/null 2>&1 || true; \
+				rm -rf "$$target" || true; \
+			fi; \
+		}; \
+		if [[ -d .git && -f .gitmodules ]]; then \
+			echo "[git] 拉取 .gitmodules 中的所有子模块 …"; \
+			git submodule sync --recursive >/dev/null 2>&1 || true; \
+			if ! git submodule update --init --recursive --depth=1; then \
+				echo "[git-fix] 检测到子模块锁/元数据异常，执行一次自动修复…"; \
+				git config -f .gitmodules --get-regexp path | awk '\''{print $$2}'\'' > /tmp/submods.list || true; \
+				while read p; do \
+					[[ -z "$$p" ]] && continue; \
+					echo "  - fix: $$p"; \
+					git submodule deinit -f -- "$$p" || true; \
+					cleanup_path ".git/modules/$$p"; \
+					cleanup_path "$$p"; \
+				done </tmp/submods.list; \
+				git submodule sync --recursive; \
+				if ! git submodule update --init --recursive --depth=1; then \
+					echo "[git] 子模块仍无法自动恢复，请手动执行: git submodule update --init --recursive"; \
+					exit 1; \
+				fi; \
+			fi; \
+			echo "[git] 子模块就绪。"; \
+		else \
+			echo "[git] 未检测到 .git 或 .gitmodules，跳过子模块拉取。"; \
+		fi'
 endef
