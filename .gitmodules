@@ -35,3 +35,7 @@
 	path = cpp/lib/spdlog
 	url = https://github.com/gabime/spdlog.git
 	ignore = dirty
+[submodule "cpp/lib/async_simple"]
+	path = cpp/lib/async_simple
+	url = git@github.com:alibaba/async_simple.git
+	ignore = dirty

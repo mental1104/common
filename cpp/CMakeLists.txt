@@ -292,6 +292,23 @@ register_component(CJSON "lib/cJSON"
     INC_REL .
 )
 
+register_component(ASYNC_SIMPLE "lib/async_simple"
+    INC_REL .
+)
+
+# 若 async_simple 没有自带 CMakeLists，但头文件存在，则仍视为可用（仅头文件模式），并创建导入目标
+if (NOT HAVE_ASYNC_SIMPLE AND EXISTS "${CMAKE_SOURCE_DIR}/lib/async_simple/async_simple/Executor.h")
+  set(HAVE_ASYNC_SIMPLE TRUE)
+  set(_async_simple_inc "${CMAKE_SOURCE_DIR}/lib/async_simple")
+  message(STATUS "Component ASYNC_SIMPLE = AVAILABLE (headers only, no CMakeLists.txt) at ${_async_simple_inc}")
+  if (NOT TARGET ASYNC_SIMPLE::headers)
+    add_library(ASYNC_SIMPLE::headers INTERFACE IMPORTED)
+    set_target_properties(ASYNC_SIMPLE::headers PROPERTIES
+      INTERFACE_INCLUDE_DIRECTORIES "${_async_simple_inc}"
+    )
+  endif()
+endif()
+
 rpp_apply_cxx_utils_shim()
 
 get_property(_RPATHS GLOBAL PROPERTY COMPONENT_RPATH_DIRS)
@@ -323,6 +340,10 @@ set_target_properties(mental1104 PROPERTIES
   POSITION_INDEPENDENT_CODE ON
   OUTPUT_NAME "mental1104"
 )
+if (HAVE_ASYNC_SIMPLE AND TARGET ASYNC_SIMPLE::headers)
+  target_link_libraries(mental1104 PUBLIC ASYNC_SIMPLE::headers)
+  target_compile_definitions(mental1104 PUBLIC M1104_HAS_ASYNC_SIMPLE=1)
+endif()
 install(TARGETS mental1104
   ARCHIVE DESTINATION lib
   LIBRARY DESTINATION lib
@@ -409,6 +430,12 @@ function(add_optional_test SRC)
 	# 关键：所有测试默认链接到 libmental1104
 	if (TARGET mental1104)
 		target_link_libraries(${TEST_NAME} PRIVATE mental1104)
+	endif()
+
+	# 如果 async_simple 可用，显式为测试目标添加头路径与宏，避免 __has_include 失败
+	if (HAVE_ASYNC_SIMPLE AND TARGET ASYNC_SIMPLE::headers)
+		target_link_libraries(${TEST_NAME} PRIVATE ASYNC_SIMPLE::headers)
+		target_compile_definitions(${TEST_NAME} PRIVATE M1104_HAS_ASYNC_SIMPLE=1)
 	endif()
 
 	target_link_libraries(${TEST_NAME} PRIVATE

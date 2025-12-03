@@ -17,6 +17,13 @@
 
 namespace mental1104 {
 
+// 若 async_simple 可用，则提供一个可查询的标记
+#if defined(M1104_HAS_ASYNC_SIMPLE)
+constexpr bool kHasAsyncSimple = true;
+#else
+constexpr bool kHasAsyncSimple = false;
+#endif
+
 // 协程调度器抽象接口：为将来接入阿里协程池等预留
 class ICoroutineScheduler {
 public:

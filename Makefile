@@ -123,7 +123,7 @@ CMAKE ?= cmake
 CTEST ?= ctest
 CPP_SRC_DIR := cpp
 CPP_BUILD_DIR := $(CPP_SRC_DIR)/build
-CPP_BUILD_TYPE ?= Release
+CPP_BUILD_TYPE ?= Debug
 CPP_TEST ?=
 CPP_TEST_FILES ?=
 CPP_TEST_DIRS ?=
@@ -272,6 +272,9 @@ endef
 
 define _test_cpp
 	$(SHELL) -lc 'set -e; \
+		cache="$(CPP_BUILD_DIR)/CMakeCache.txt"; \
+		actual=""; [[ -f "$$cache" ]] && actual=$$(sed -n "s/^CMAKE_BUILD_TYPE:STRING=//p" "$$cache"); \
+		if [[ "$$actual" != "Debug" ]]; then echo "[error] $(CPP_BUILD_DIR) 不是 Debug 构建(实际: $$actual)。请先执行: make build-cpp-debug"; exit 1; fi; \
 		$(call __cpp_test_env)        # 清空代理、设置日志级别
 		$(call __cpp_test_patterns)   # 解析 ctest/gtest 过滤条件
 		$(call __cpp_test_run)'       # 运行 ctest（排除 bench）
@@ -279,6 +282,9 @@ endef
 
 define _coverage_cpp
 	$(SHELL) -lc 'set -e; \
+		cache="$(CPP_BUILD_DIR)/CMakeCache.txt"; \
+		actual=""; [[ -f "$$cache" ]] && actual=$$(sed -n "s/^CMAKE_BUILD_TYPE:STRING=//p" "$$cache"); \
+		if [[ "$$actual" != "Debug" ]]; then echo "[error] $(CPP_BUILD_DIR) 不是 Debug 构建(实际: $$actual)。请先执行: make build-cpp-debug"; exit 1; fi; \
 		$(call __cpp_coverage_run)'  # 运行 ctest + gcovr/lcov 汇总覆盖率
 endef
 
@@ -307,6 +313,9 @@ endef
 
 define _bench_cpp
 	$(SHELL) -lc 'set -e; \
+		cache="$(CPP_BUILD_DIR)/CMakeCache.txt"; \
+		actual=""; [[ -f "$$cache" ]] && actual=$$(sed -n "s/^CMAKE_BUILD_TYPE:STRING=//p" "$$cache"); \
+		if [[ "$$actual" != "Release" ]]; then echo "[error] $(CPP_BUILD_DIR) 不是 Release 构建(实际: $$actual)。请先执行: make build-cpp-release"; exit 1; fi; \
 		$(call __cpp_bench_env)        # 日志级别/构建目录检查
 		$(call __cpp_bench_collect)    # 收集 bench_* 可执行文件并过滤
 		$(call __cpp_bench_run)'       # 运行基准并生成图表
@@ -1214,6 +1223,8 @@ endef
 define __cpp_coverage_run
 cd cpp/build; \
 if [[ -n "$${RUN_CTEST_FOR_COVERAGE:-}" ]]; then \
+  # 预清理旧的 gcda，随后重跑 ctest 生成新数据
+  find . -name "*.gcda" -delete 2>/dev/null || true; \
   echo "[info] RUN_CTEST_FOR_COVERAGE=1 -> 仅运行一次 ctest（排除 bench）"; \
   ctest --output-on-failure -LE bench || true; \
 else \
@@ -1221,12 +1232,16 @@ else \
 fi; \
 if command -v gcovr >/dev/null 2>&1; then \
   echo "[info] 使用 gcovr 汇总覆盖率（已排除 lib/ 与 thirdparty/）"; \
-  gcovr -r .. --object-directory . \
-        --exclude "(^|.*/)(test|external|gtest|lib|thirdparty|overlay)/" \
+  if ! gcovr -r .. --object-directory . \
+        --exclude "(^|.*/)(test|bench|external|gtest|lib|thirdparty|overlay)/" \
         --exclude "/usr/include/.*" \
         --exclude-directories ".*/build-(asan|tsan|ubsan|msan).*" \
         --gcov-ignore-parse-errors \
-        --txt --print-summary; \
+        --txt --print-summary; then \
+    echo "[warn] gcovr 生成覆盖率失败（可能未开启 --coverage 编译）"; \
+    echo "[hint] 请尝试: make clean-cpp && make build-cpp-debug COVERAGE=ON"; \
+    exit 1; \
+  fi; \
 else \
   echo "[info] 未检测到 gcovr，回退到 lcov"; \
   if ! command -v lcov >/dev/null 2>&1; then \
@@ -1237,12 +1252,13 @@ else \
        --ignore-errors mismatch,negative,inconsistent,empty,unused \
        --no-external --rc geninfo_unexecuted_blocks=1; \
   lcov --remove coverage.info --base-directory "$$BASE" \
-       "*/test/*" "*/external/*" "*/gtest/*" "*/lib/*" "*/thirdparty/*" "/usr/*" "/overlay/*" \
+       "*/test/*" "*/bench/*" "*/external/*" "*/gtest/*" "*/lib/*" "*/thirdparty/*" "/usr/*" "/overlay/*" \
        -o coverage.filtered.info \
        --ignore-errors empty,unused || true; \
   if ! lcov --list coverage.filtered.info --base-directory "$$BASE" --ignore-errors empty,unused; then \
-    echo "[warn] lcov 未产生有效数据（可能未启用 --coverage 或过滤过严），已跳过"; \
-    exit 0; \
+    echo "[warn] lcov 未产生有效数据（可能未启用 --coverage 或过滤过严）"; \
+    echo "[hint] 请尝试: make clean-cpp && make build-cpp-debug COVERAGE=ON"; \
+    exit 1; \
   fi; \
   echo "[ok] 生成：cpp/build/coverage.info（过滤版：coverage.filtered.info）"; \
 fi
