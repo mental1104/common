@@ -1,4 +1,4 @@
-// include/mental1104/concurrency/coroutine_scheduler.h
+// include/mental1104/concurrency/coroutine/coroutine_scheduler.h
 #ifndef MENTAL1104_COROUTINE_SCHEDULER_H
 #define MENTAL1104_COROUTINE_SCHEDULER_H
 
@@ -12,8 +12,8 @@
 #include <queue>
 
 #include "mental1104/concurrency/executor.h"
-#include "mental1104/concurrency/task.h"
-#include "mental1104/concurrency/thread_util.h"  // 为 sleep_for_ms 等
+#include "mental1104/concurrency/coroutine/task.h"
+#include "mental1104/concurrency/thread/thread_util.h"  // 为 sleep_for_ms 等
 
 namespace mental1104 {
 

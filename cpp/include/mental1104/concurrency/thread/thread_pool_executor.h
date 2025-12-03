@@ -1,10 +1,10 @@
-// include/mental1104/concurrency/thread_pool_executor.h
+// include/mental1104/concurrency/thread/thread_pool_executor.h
 #ifndef MENTAL1104_THREAD_POOL_EXECUTOR_H
 #define MENTAL1104_THREAD_POOL_EXECUTOR_H
 
 #pragma once
 
-#include "mental1104/concurrency/thread_util.h"
+#include "mental1104/concurrency/thread/thread_util.h"
 #include "mental1104/concurrency/executor.h"
 
 namespace mental1104 {

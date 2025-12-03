@@ -1,4 +1,4 @@
-// include/mental1104/concurrency/thread_utils.h
+// include/mental1104/concurrency/thread/thread_util.h
 #ifndef MENTAL1104_THREAD_UTILS_H
 #define MENTAL1104_THREAD_UTILS_H
 

@@ -1,4 +1,4 @@
-// include/mental1104/concurrency/async_simple_scheduler.h
+// include/mental1104/concurrency/coroutine/async_simple_scheduler.h
 #ifndef MENTAL1104_ASYNC_SIMPLE_SCHEDULER_H
 #define MENTAL1104_ASYNC_SIMPLE_SCHEDULER_H
 
@@ -13,7 +13,7 @@
 #include <memory>
 #include <mutex>
 
-#include "mental1104/concurrency/coroutine_scheduler.h"
+#include "mental1104/concurrency/coroutine/coroutine_scheduler.h"
 
 namespace mental1104 {
 

@@ -9,8 +9,8 @@
 #include <thread>
 
 #include "async_simple/executors/SimpleExecutor.h"
-#include "mental1104/concurrency/async_simple_scheduler.h"
-#include "mental1104/concurrency/task.h"
+#include "mental1104/concurrency/coroutine/async_simple_scheduler.h"
+#include "mental1104/concurrency/coroutine/task.h"
 
 using namespace mental1104;
 

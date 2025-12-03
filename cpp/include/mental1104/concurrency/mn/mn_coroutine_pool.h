@@ -1,4 +1,4 @@
-// include/mental1104/concurrency/mn_coroutine_pool.h
+// include/mental1104/concurrency/mn/mn_coroutine_pool.h
 #ifndef MENTAL1104_MN_COROUTINE_POOL_H
 #define MENTAL1104_MN_COROUTINE_POOL_H
 
@@ -8,9 +8,9 @@
 
 #include <type_traits>
 
-#include "mental1104/concurrency/thread_util.h"
-#include "mental1104/concurrency/thread_pool_executor.h"
-#include "mental1104/concurrency/coroutine_scheduler.h"
+#include "mental1104/concurrency/thread/thread_util.h"
+#include "mental1104/concurrency/thread/thread_pool_executor.h"
+#include "mental1104/concurrency/coroutine/coroutine_scheduler.h"
 
 namespace mental1104 {
 
