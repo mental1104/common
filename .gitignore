@@ -1,7 +1,7 @@
 *.egg-info
 build
 a.out
-.env
+.env*
 __pycache__
 .benchmarks
 .coverage
@@ -37,6 +37,5 @@ rust/mental1104/Cargo.lock
 memray.bin
 build-asan
 
-.env.mk
 artifacts/
 .venv

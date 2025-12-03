@@ -21,6 +21,7 @@ from mental1104.schema.common_schema import JsonSerializable
 from mental1104.string.string_util import replace_space_with
 from mental1104.timed import async_timed, get_current_time, parse_time, timed
 from mental1104.utils.bench_tasks import CpuBoundTask, DatasetFactory, IoBoundTask
+from mental1104.utils.overload import dispatch_for
 from mental1104.utils.encryption import decrypt, encrypt, generate_salt
 from mental1104.utils.parse_json import JsonParserType, JsonUtil, dump_json, load_json
 from mental1104.utils.parse_yaml import YamlUtil, dump_yaml, parse_yaml
@@ -105,6 +106,7 @@ __all__ = [
     'deciprobe',
     'decrypt',
     'delay',
+    'dispatch_for',
     'dump_json',
     'dump_yaml',
     'encrypt',
@@ -139,16 +141,13 @@ __all__ = [
 ]
 
 # 惰性导入降低循环引用概率，但模块内部仍可能互相 import 导致循环
-
-
 def __getattr__(name):
     # PEP 562: lazy attribute access for risky modules & fallback
     try:
         modname = _EXPORT_MAP[name]
     except KeyError:
         raise AttributeError(f'module {__name__} has no attribute {name!r}') from None
-    import importlib
-    import types
+    import importlib, types
     mod = importlib.import_module(modname)
     obj = getattr(mod, name, None)
     if obj is None or isinstance(obj, types.ModuleType):
@@ -162,7 +161,6 @@ def __getattr__(name):
             raise AttributeError(f'{modname}.{name} has no attribute {name!r}') from None
     globals()[name] = obj  # cache：写回模块全局（由 globals() 返回的字典）以便下次直接取
     return obj
-
 
 def __dir__():
     return sorted(list(globals().keys()) + list(__all__))
