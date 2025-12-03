@@ -333,9 +333,9 @@ install(TARGETS mental1104
 enable_testing()
 
 set(TEST_DIR ${CMAKE_CURRENT_SOURCE_DIR}/test)
-file(GLOB TEST_FILES "${TEST_DIR}/*.cpp")
+file(GLOB_RECURSE TEST_FILES CONFIGURE_DEPENDS "${TEST_DIR}/*.cpp")
 list(LENGTH TEST_FILES _TEST_COUNT)
-message(STATUS "Collected ${_TEST_COUNT} test files under ${TEST_DIR}")
+message(STATUS "Collected ${_TEST_COUNT} test files under ${TEST_DIR} (recursive)")
 
 set(TEST_DEPS_test_redis_lock "HIREDIS;REDISPP")
 set(TEST_REQUIRE_LIBS_test_redis_lock "HIREDIS;REDISPP")
