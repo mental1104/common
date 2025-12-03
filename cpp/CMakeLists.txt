@@ -521,11 +521,11 @@ if (HAVE_GOOGLE_BENCHMARK)
   set(BENCH_DIR ${CMAKE_SOURCE_DIR}/bench)
   if (EXISTS "${BENCH_DIR}")
     file(GLOB BENCH_SRCS CONFIGURE_DEPENDS "${BENCH_DIR}/*.cpp")
-    if (BENCH_SRCS)
-      foreach(SRC ${BENCH_SRCS})
-        get_filename_component(BNAME "${SRC}" NAME_WE)
-        set(TGT "bench_${BNAME}")
-        add_executable(${TGT} "${SRC}")
+	if (BENCH_SRCS)
+	  foreach(SRC ${BENCH_SRCS})
+	    get_filename_component(BNAME "${SRC}" NAME_WE)
+	    set(TGT "bench_${BNAME}")
+	    add_executable(${TGT} "${SRC}")
         target_include_directories(${TGT} PRIVATE
           ${PROJECT_SOURCE_DIR}/include
         )
@@ -540,8 +540,6 @@ if (HAVE_GOOGLE_BENCHMARK)
         add_test(
           NAME ${TGT}
           COMMAND ${CMAKE_BINARY_DIR}/bin/${TGT}
-                  --benchmark_min_time=0.2
-                  --benchmark_repetitions=5
                   --benchmark_display_aggregates_only=true
                   --benchmark_time_unit=ms
         )
