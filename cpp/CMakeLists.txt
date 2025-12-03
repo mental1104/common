@@ -91,6 +91,8 @@ endif()
 list(FILTER THIRD_INCLUDE_DIRS EXCLUDE REGEX ".*/lib/redis-plus-plus/build/include(/.*)?$")
 
 set(_LIB_HDR_CANDS
+  "${THIRDROOT}/boost"
+  "${THIRDROOT}/boost/include"
   "${THIRDROOT}/rapidjson/include"
   "${THIRDROOT}/cJSON"
   "${THIRDROOT}/hiredis"

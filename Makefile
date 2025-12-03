@@ -346,7 +346,7 @@ build-cpp-release:
 build-cpp-debug:
 	$(MAKE) --no-print-directory build-cpp-core CPP_BUILD_TYPE=Debug
 
-build-cpp: build-cpp-release
+build-cpp: build-cpp-debug
 
 test-cpp:       ; $(call _test_cpp)
 install-cpp:    ; $(call _install_cpp)

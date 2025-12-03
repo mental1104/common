@@ -1,5 +1,5 @@
 // src/thread_utils.cpp
-#include "mental1104/concurrency/thread_util.h"
+#include "mental1104/concurrency/thread/thread_util.h"
 
 ThreadPool::ThreadPool(size_t numThreads) : stop(false) {
   for (size_t i = 0; i < numThreads; ++i) {

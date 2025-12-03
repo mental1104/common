@@ -3,7 +3,7 @@
 #include <thread>
 #include <gtest/gtest.h>
 
-#include "mental1104/concurrency/mn_coroutine_pool.h"
+#include "mental1104/concurrency/mn/mn_coroutine_pool.h"
 
 #if __cplusplus < 202002L
 #  error "test_mn_coroutine_pool must be compiled with C++20 or higher"
