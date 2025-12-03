@@ -191,6 +191,11 @@ define _install_python
 		$(call __py_install_system)'      # 安装到系统 Python（备份/改写 requirements 中的相对 file:// 再恢复）
 endef
 
+define _uninstall_python
+	$(SHELL) -lc 'set -e; \
+		$(call __py_uninstall_system)'    # 从系统 Python 卸载 mental1104 及 export 层
+endef
+
 define _clean_python
 	$(SHELL) -lc 'set -e; \
 		$(call __py_clean_artifacts)    # 删除构建产物与缓存文件
@@ -240,11 +245,12 @@ define _guard_python
 endef
 
 # =================== 直达入口（Python） ===================
-.PHONY: setup-python build-python test-python install-python clean-python coverage-python fmt-python bench-python
+.PHONY: setup-python build-python test-python install-python uninstall-python clean-python coverage-python fmt-python bench-python
 setup-python:   ; $(call _setup_python)
 build-python:   ; $(call __py_guard_venv) ; $(call __py_build_wheel)   # 依赖已就绪的 venv，单独构建 wheel
 test-python:    | build-export-cpp ; $(call _test_python)              # 需导出 C++ 桥接库，pytest 内部自检 venv
 install-python: ; $(call _install_python)                             # 系统安装，不强制前置 setup
+uninstall-python: ; $(call _uninstall_python)                         # 系统卸载 mental1104 包
 clean-python:   ; $(call _clean_python)
 coverage-python:; $(call _coverage_python)
 fmt-python:     ; $(call _fmt_python)
@@ -404,18 +410,24 @@ define _install_go
 		$(call __go_install_run)'        # go install ./...
 endef
 
+define _uninstall_go
+	$(SHELL) -lc 'set -e; \
+		$(call __go_uninstall_run)'      # 删除 GOBIN/GOPATH/bin 中的已安装可执行文件
+endef
+
 define _clean_go
 	$(SHELL) -lc 'set -e; \
 		$(call __go_clean_run)'          # 清理覆盖率、产物与缓存
 endef
 
 # =================== 直达入口（Go） ===================
-.PHONY: setup-go build-go test-go coverage-go install-go clean-go fmt-go bench-go
+.PHONY: setup-go build-go test-go coverage-go install-go uninstall-go clean-go fmt-go bench-go
 setup-go:    ; $(call _setup_go)
 build-go:    | setup-go ; $(call _build_go)
 test-go:     ; $(call _test_go)
 coverage-go: | test-go  ; $(call _coverage_go)
 install-go:  ; $(call _install_go)
+uninstall-go:; $(call _uninstall_go)
 clean-go:    ; $(call _clean_go)
 fmt-go:      ; $(call _fmt_go)
 bench-go:
@@ -471,6 +483,11 @@ define _install_rust
 		$(call __rust_install_run)'          # cargo install 或构建库 crate
 endef
 
+define _uninstall_rust
+	$(SHELL) -lc 'set -e; \
+		$(call __rust_uninstall_run)'        # cargo uninstall mental1104（忽略未安装）
+endef
+
 define _coverage_rust
 	$(SHELL) -lc 'set -e; \
 		$(call __rust_coverage_run)'         # cargo llvm-cov 生成 HTML/LCOV 并打印汇总
@@ -507,7 +524,7 @@ define _guard_rust
 endef
 
 # =================== 直达入口（Rust） ===================
-.PHONY: setup-rust build-rust test-rust bench-rust fmt-rust clippy-rust example-rust clean-rust install-rust coverage-rust
+.PHONY: setup-rust build-rust test-rust bench-rust fmt-rust clippy-rust example-rust clean-rust install-rust uninstall-rust coverage-rust
 setup-rust:   ; $(call _setup_rust)
 build-rust:   | setup-rust ; $(call _build_rust)
 test-rust:    ; $(call _test_rust)
@@ -519,6 +536,7 @@ clippy-rust:  ; $(call _clippy_rust)
 example-rust: ; $(call _example_rust)
 clean-rust:   ; $(call _clean_rust)
 install-rust: ; $(call _install_rust)
+uninstall-rust:; $(call _uninstall_rust)
 coverage-rust:; $(call _coverage_rust)
 
 .PHONY: _docker-up-all-if-needed _docker-down-all-if-needed
@@ -623,6 +641,9 @@ coverage: coverage-python coverage-go coverage-cpp coverage-rust
 fmt:      fmt-python fmt-go fmt-cpp fmt-rust
 bench:    bench-python bench-go bench-cpp bench-rust
 	@$(MAKE) --no-print-directory bench-report
+
+.PHONY: uninstall
+uninstall: uninstall-python uninstall-go uninstall-cpp uninstall-rust
 
 .PHONY: test-v test-cpp-v test-python-v test-go-v test-rust-v
 test-v:        ; $(MAKE) --no-print-directory test        VERBOSE=1
@@ -867,6 +888,17 @@ PY
   restore_req; trap - EXIT; \
 fi; \
 echo "[ok] 安装完成（已安装到系统 Python）。"
+endef
+
+define __py_uninstall_system
+SYS_BREAK_FLAG="$(if $(IS_UBUNTU),--break-system-packages,)"; \
+for pkg in mental1104_export_layer mental1104-export-layer mental1104; do \
+  if $(PIP3) show "$$pkg" >/dev/null 2>&1; then \
+    echo "[info] $(PIP3) uninstall -y $$pkg $$SYS_BREAK_FLAG"; \
+    $(SUDO) $(PIP3) uninstall -y "$$pkg" $$SYS_BREAK_FLAG || true; \
+  fi; \
+done; \
+echo "[ok] 系统 Python 已尝试卸载 mental1104 相关包"
 endef
 
 define __py_clean_artifacts
@@ -1463,6 +1495,26 @@ fi; if grep -q "DATA RACE" "$$log"; then echo "[fail][concurrency] 并发竞态�
 echo "[ok] guard-go 通过"
 endef
 
+define __go_uninstall_run
+cd "$(GO_DIR)"; \
+bin_dir="$(GOBIN)"; \
+if [ -z "$$bin_dir" ]; then bin_dir="$$( $(GO) env GOBIN )"; fi; \
+if [ -z "$$bin_dir" ]; then bin_dir="$$( $(GO) env GOPATH )/bin"; fi; \
+echo "[go] uninstall from $$bin_dir"; \
+if [ ! -d "$$bin_dir" ]; then echo "[warn] 未找到 bin 目录，跳过卸载"; exit 0; fi; \
+mapfile -t mains < <($(GO) list -f "{{if eq .Name \"main\"}}{{.Dir}}{{end}}" ./... | sed "/^$$/d"); \
+if [ $${#mains[@]} -eq 0 ]; then echo "[info] 未找到 package main，跳过卸载"; exit 0; fi; \
+for d in "$${mains[@]}"; do \
+  name=$$(basename "$$d"); \
+  target="$$bin_dir/$$name"; \
+  if [ -f "$$target" ]; then \
+    echo "[go] rm $$target"; \
+    rm -f "$$target"; \
+  fi; \
+done; \
+echo "[ok] go uninstall 完成（如上已删除对应可执行文件）"
+endef
+
 define __rust_guard_cargo
 if ! command -v cargo >/dev/null 2>&1; then echo "[error] 未找到 cargo"; exit 1; fi
 endef
@@ -1563,6 +1615,17 @@ else \
   echo "[warn] 当前 crate 未声明二进制入口，执行 cargo build --release 代替 install"; \
   cargo build --release; \
   echo "[ok] rust 库 crate 构建完成（无可执行文件可安装）。"; \
+fi
+endef
+
+define __rust_uninstall_run
+cd "$(RUST_DIR)"; \
+if command -v cargo >/dev/null 2>&1; then \
+  echo "[rust] cargo uninstall mental1104 （如未安装则忽略）"; \
+  cargo uninstall mental1104 >/dev/null 2>&1 || true; \
+  echo "[ok] rust uninstall 完成（若已安装则已移除 mental1104）"; \
+else \
+  echo "[warn] 未找到 cargo，跳过 rust uninstall"; \
 fi
 endef
 
