@@ -80,33 +80,77 @@ def dispatch_for(*decorator_args: Any) -> Any:
             # 2) Single instance (stateless pattern; adjust if you need per-call state)
             instance = cls()
 
+            # Build a trie per arity to avoid creating type tuples at call time.
+            trie_registry: Dict[int, Dict[Type[Any], Any]] = {}
+            arity_lookup: Dict[int, Callable[[tuple[Any, ...]], Callable[..., Any] | None]] = {}
+
+            def _make_trie_lookup(root: Dict[Type[Any], Any], arity: int):
+                if arity == 1:
+                    def _lookup(args: tuple[Any, ...]):
+                        return root.get(args[0].__class__)
+                elif arity == 2:
+                    def _lookup(args: tuple[Any, ...]):
+                        node = root.get(args[0].__class__)
+                        if node is None:
+                            return None
+                        return node.get(args[1].__class__)
+                elif arity == 3:
+                    def _lookup(args: tuple[Any, ...]):
+                        node = root.get(args[0].__class__)
+                        if node is None:
+                            return None
+                        node = node.get(args[1].__class__)
+                        if node is None:
+                            return None
+                        return node.get(args[2].__class__)
+                else:
+                    def _lookup(args: tuple[Any, ...]):
+                        node: Any = root
+                        last_index = len(args) - 1
+                        for idx, arg in enumerate(args):
+                            node = node.get(arg.__class__)
+                            if node is None:
+                                return None
+                            if idx == last_index:
+                                return node
+                        return None
+                return _lookup
+
+            for arity, arity_map in registry.items():
+                root: Dict[Type[Any], Any] = {}
+                for pat, fn in arity_map.items():
+                    node = root
+                    for t in pat[:-1]:
+                        node = node.setdefault(t, {})
+                    node[pat[-1]] = fn
+                trie_registry[arity] = root
+                arity_lookup[arity] = _make_trie_lookup(root, arity)
+
+            _arity_lookup_get = arity_lookup.get
+            _default = getattr(instance, "default", None)
+
             def dispatcher(*args: Any, **kwargs: Any) -> Any:
-                arity = len(args)
-                arity_map = registry.get(arity)
-                if arity_map is None:
+                lookup = _arity_lookup_get(len(args))
+                if lookup is None:
                     # no overloads registered for this arg count
-                    default = getattr(instance, "default", None)
-                    if default is not None:
-                        return default(*args, **kwargs)
+                    if _default is not None:
+                        return _default(*args, **kwargs)
                     raise TypeError(
                         f"No overloads for {entry_func.__name__} "
-                        f"with {arity} positional arguments"
+                        f"with {len(args)} positional arguments"
                     )
 
-                key = tuple(type(a) for a in args)  # exact type tuple
-                fn = arity_map.get(key)
+                fn = lookup(args)
                 if fn is not None:
-                    # attr was taken from cls.__dict__, so it's an unbound function
                     return fn(instance, *args, **kwargs)
 
                 # fallback to default(self, *args, **kwargs) if present
-                default = getattr(instance, "default", None)
-                if default is not None:
-                    return default(*args, **kwargs)
+                if _default is not None:
+                    return _default(*args, **kwargs)
 
                 raise TypeError(
                     f"No overload for {entry_func.__name__} "
-                    f"with types {key}"
+                    f"with argument types {[type(a) for a in args]}"
                 )
 
             # 3) Keep name/doc so tools still see the original symbol

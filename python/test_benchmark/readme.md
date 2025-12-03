@@ -78,6 +78,46 @@ Parameters: 500k queries, 100k existing keys, miss_ratio=0.999, capacity=1,000,0
 - Consider pipelined Bloom (as implemented) or local Bloom to avoid extra network commands.
 - Bloom helps as a “existence filter” to stop cache穿透; it is not an extra value cache layer.
 
+---
+
+# Dispatch Overload Benchmarks (dispatch_for vs singledispatch vs if/elif)
+
+File: `common/python/test_benchmark/test_dispatch_bench.py`
+
+## What we measured
+- Entry with three overloads: `(int, int)`, `(str, str)`, `(bytes, str)`; dataset 5k samples per type (1.5 万对参数/轮) with correctness checks.
+- Two variants per strategy:
+  - **Light logic**: tiny arithmetic/string ops.
+  - **Richer logic**: list extend, dict build/freq count, string slicing, etc., closer to daily code.
+- Strategies: hand-written `if/elif isinstance`, `functools.singledispatch`, custom `dispatch_for` (multi-arg exact match).
+- pytest-benchmark pedantic: 6 rounds, 1 iteration per round; the reported Mean is per-round (single full dataset).
+
+## Implementation/optimization
+- `dispatch_for` now builds per-arity type tries, avoiding runtime `(type(a), ...)` tuple creation and minimizing dict hops; keeps default fallback behavior.
+- No hot cache by default; tries already give stable lookup performance across patterns.
+
+## How to run
+From `common/python` (plugin autoload off to dodge duplicate plugins):
+```
+PYTHONPATH=.:common/python PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 \
+pytest -p pytest_benchmark.plugin -p pytest_asyncio.plugin -p anyio.pytest_plugin \
+  common/python/test_benchmark/test_dispatch_bench.py
+```
+
+## Observed results (latest run, Linux/CPython 3.12, pedantic 6x1)
+- Light logic (per round ≈1.5 万调用):
+  - `if_chain_baseline`: ~2.00 ms
+  - `singledispatch`: ~4.83 ms
+  - `dispatch_for`: ~6.70 ms
+- Richer logic:
+  - `if_chain_richer_logic`: ~11.11 ms
+  - `singledispatch_richer_logic`: ~14.25 ms
+  - `dispatch_for_richer_logic`: ~15.08 ms
+
+## Takeaways
+- When branch bodies are cheap, `dispatch_for` overhead dominates vs hand-written chains; performance now sits closer to `singledispatch` after trie fastpaths.
+- With more typical branch work, dispatch overhead is amortized and the three strategies are much closer; choose `dispatch_for` for multi-arg ergonomics or `if` chain for max hot-path speed.
+
 
 ```json
 {
