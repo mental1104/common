@@ -1235,6 +1235,9 @@ if command -v gcovr >/dev/null 2>&1; then \
   if ! gcovr -r .. --object-directory . \
         --exclude "(^|.*/)(test|bench|external|gtest|lib|thirdparty|overlay)/" \
         --exclude "/usr/include/.*" \
+        --exclude-directories ".*/lib/.*" \
+        --exclude-directories ".*/thirdparty/.*" \
+        --exclude-directories ".*/overlay/.*" \
         --exclude-directories ".*/build-(asan|tsan|ubsan|msan).*" \
         --gcov-ignore-parse-errors \
         --txt --print-summary; then \
