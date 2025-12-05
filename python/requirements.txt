@@ -22,4 +22,5 @@ ujson
 orjson
 semgrep
 pybind11
+pypdf
 mental1104_export_layer @ file://../export/python

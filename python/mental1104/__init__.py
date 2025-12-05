@@ -8,6 +8,7 @@
 
 # ---- Direct imports (safe modules; no mental1104 top-level imports) ----
 from mental1104.app.anki import AnkiApkgGenerator
+from mental1104.app.pdf import extract_page_range
 from mental1104.concurrency.types import MPStartMethod
 from mental1104.connector.postgres import Base, SessionAwareMixin, close_session, db_connection, ensure_database_exists, ensure_tables_exist, get_db_config, get_db_url, get_session, init_database, logger, open_session, setup, startup, with_session
 from mental1104.connector.redis_client.redis_bloom_kv import RedisBloom
@@ -21,8 +22,8 @@ from mental1104.schema.common_schema import JsonSerializable
 from mental1104.string.string_util import replace_space_with
 from mental1104.timed import async_timed, get_current_time, parse_time, timed
 from mental1104.utils.bench_tasks import CpuBoundTask, DatasetFactory, IoBoundTask
-from mental1104.utils.overload import dispatch_for
 from mental1104.utils.encryption import decrypt, encrypt, generate_salt
+from mental1104.utils.overload import dispatch_for
 from mental1104.utils.parse_json import JsonParserType, JsonUtil, dump_json, load_json
 from mental1104.utils.parse_yaml import YamlUtil, dump_yaml, parse_yaml
 from mental1104.utils.random import random_pick
@@ -113,6 +114,7 @@ __all__ = [
     'ensure_database_exists',
     'ensure_tables_exist',
     'export_csv_from_database',
+    'extract_page_range',
     'fetch_status',
     'file_iterator',
     'generate_salt',
