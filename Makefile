@@ -8,7 +8,11 @@ ENV_SRC    ?= $(REPO_ROOT)/.env
 ENV_STAMP  ?= $(REPO_ROOT)/.env.active
 ENV_MK     := $(abspath $(ENV_SRC)).mk
 ENV_HAVE   := $(wildcard $(ENV_SRC))
-ENV_KEYS   := $(if $(ENV_HAVE),$(shell awk 'BEGIN{FS="="} /^[[:space:]]*(#|$$)/{next} {k=$$1; sub(/^[[:space:]]*export[[:space:]]+/,"",k); sub(/[[:space:]]+/,"",k); print k}' $(ENV_SRC)))
+ifeq ($(strip $(ENV_HAVE)),)
+  ENV_KEYS :=
+else
+  ENV_KEYS := $(shell awk 'BEGIN{FS="="} /^[[:space:]]*(#|$$)/{next} {k=$$1; sub(/^[[:space:]]*export[[:space:]]+/,"",k); sub(/[[:space:]]+/,"",k); print k}' $(ENV_SRC))
+endif
 
 # 仅当 .env 与激活标记同时存在时才导入
 ifeq ($(and $(ENV_HAVE),$(wildcard $(ENV_STAMP))),)
