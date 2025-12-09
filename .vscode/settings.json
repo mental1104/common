@@ -4,5 +4,7 @@
   "python.analysis.extraPaths": [
     "${workspaceFolder}/export/python/src",
     "${workspaceFolder}/python"
-  ]
+  ],
+  "git.detectSubmodules": false,
+  "git.detectSubmodulesLimit": 0
 }
