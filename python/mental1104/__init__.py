@@ -143,13 +143,16 @@ __all__ = [
 ]
 
 # 惰性导入降低循环引用概率，但模块内部仍可能互相 import 导致循环
+
+
 def __getattr__(name):
     # PEP 562: lazy attribute access for risky modules & fallback
     try:
         modname = _EXPORT_MAP[name]
     except KeyError:
         raise AttributeError(f'module {__name__} has no attribute {name!r}') from None
-    import importlib, types
+    import importlib
+    import types
     mod = importlib.import_module(modname)
     obj = getattr(mod, name, None)
     if obj is None or isinstance(obj, types.ModuleType):
@@ -163,6 +166,7 @@ def __getattr__(name):
             raise AttributeError(f'{modname}.{name} has no attribute {name!r}') from None
     globals()[name] = obj  # cache：写回模块全局（由 globals() 返回的字典）以便下次直接取
     return obj
+
 
 def __dir__():
     return sorted(list(globals().keys()) + list(__all__))
