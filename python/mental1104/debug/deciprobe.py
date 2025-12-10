@@ -1,4 +1,5 @@
 # deciprobe.py —— Python 3.8+
+from __future__ import annotations
 """
 增强版 deciprobe：在原有 if / while / for / return 的基础上，新增：
 - break / continue：在执行点打印

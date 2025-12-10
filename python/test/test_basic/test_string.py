@@ -1,3 +1,4 @@
+from __future__ import annotations
 from mental1104 import replace_space_with
 
 

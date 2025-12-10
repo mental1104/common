@@ -1,0 +1,21 @@
+from __future__ import annotations
+
+from argparse import ArgumentParser
+
+from devtool.commands import register
+from devtool.commands.common import base_env
+from devtool.commands.ops import go as go_ops
+
+
+@register("setup-go")
+def configure(subparsers: ArgumentParser):
+    parser = subparsers.add_parser("setup-go", help="Setup Go modules")
+    parser.add_argument("-v", "--verbose", action="store_true", help="Verbose output")
+    parser.add_argument("--jobs", type=int, help="Parallelism hint")
+    parser.set_defaults(_runner=run)
+    return run
+
+
+def run(args):
+    env = base_env(verbose=args.verbose, jobs=args.jobs)
+    go_ops.setup(env)

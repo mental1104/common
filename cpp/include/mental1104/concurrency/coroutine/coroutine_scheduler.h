@@ -11,9 +11,9 @@
 #include <mutex>
 #include <queue>
 
-#include "mental1104/concurrency/executor.h"
 #include "mental1104/concurrency/coroutine/task.h"
-#include "mental1104/concurrency/thread/thread_util.h"  // 为 sleep_for_ms 等
+#include "mental1104/concurrency/executor.h"
+#include "mental1104/concurrency/thread/thread_util.h" // 为 sleep_for_ms 等
 
 namespace mental1104 {
 
@@ -38,15 +38,11 @@ class BasicCoroutineScheduler : public ICoroutineScheduler {
 public:
   explicit BasicCoroutineScheduler(IExecutor &executor,
                                    std::size_t scheduler_workers = 1)
-      : executor_(executor),
-        stopping_(false),
-        pending_(0) {
+      : executor_(executor), stopping_(false), pending_(0) {
     start(scheduler_workers);
   }
 
-  ~BasicCoroutineScheduler() override {
-    stop();
-  }
+  ~BasicCoroutineScheduler() override { stop(); }
 
   void spawn_task(Task t) override {
     {
@@ -72,7 +68,8 @@ public:
 
 private:
   void start(std::size_t workers) {
-    if (workers == 0) workers = 1;
+    if (workers == 0)
+      workers = 1;
     for (std::size_t i = 0; i < workers; ++i) {
       executor_.execute([this] { scheduler_loop(); });
     }

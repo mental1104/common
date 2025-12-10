@@ -3,9 +3,9 @@
 #if defined(M1104_HAS_ASYNC_SIMPLE)
 
 #include <atomic>
-#include <memory>
-#include <coroutine>
 #include <chrono>
+#include <coroutine>
+#include <memory>
 #include <thread>
 
 #include "async_simple/executors/SimpleExecutor.h"
@@ -39,7 +39,8 @@ TEST(AsyncSimpleCoroutineScheduler, RunsTasks) {
   for (int i = 0; i < kTasks; ++i) {
     sched.spawn_task(make_increment_task(counter));
   }
-  std::cout << "[AsyncSimpleCoroutineSchedulerTest] spawned " << kTasks << " tasks.\n";                                                        
+  std::cout << "[AsyncSimpleCoroutineSchedulerTest] spawned " << kTasks
+            << " tasks.\n";
   sched.wait_all();
   EXPECT_EQ(counter.load(std::memory_order_relaxed), kTasks);
 }

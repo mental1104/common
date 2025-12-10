@@ -8,7 +8,7 @@
 #include <utility>
 
 #if defined(M1104_HAS_ASYNC_SIMPLE)
-#  include "async_simple/Executor.h"
+#include "async_simple/Executor.h"
 #endif
 
 #include "boost/asio/post.hpp"
@@ -18,18 +18,18 @@
 
 namespace mental1104 {
 
-// 用 boost::asio::thread_pool 实现 IExecutor；可选实现 async_simple::Executor 接口
+// 用 boost::asio::thread_pool 实现 IExecutor；可选实现 async_simple::Executor
+// 接口
 class BoostAsioExecutor
 #if defined(M1104_HAS_ASYNC_SIMPLE)
-    : public async_simple::Executor
-    , public IExecutor
+    : public async_simple::Executor,
+      public IExecutor
 #else
     : public IExecutor
 #endif
 {
 public:
-  explicit BoostAsioExecutor(std::size_t thread_count)
-      : pool_(thread_count) {}
+  explicit BoostAsioExecutor(std::size_t thread_count) : pool_(thread_count) {}
 
   void execute(std::function<void()> fn) override {
     boost::asio::post(pool_, std::move(fn));

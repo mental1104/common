@@ -1,198 +1,161 @@
 # mental1104 — 使用说明
 
-Python + C++ 混合工程，个人用的公共封装能力，为日常重复工作提效。
+Python + C++ 混合工程，使用统一的 `dev` 命令驱动（macOS/Linux：`./dev`，Windows：`dev`）。子命令按语言拆分，后续扩展只需新增文件。
 
-单文件 `Makefile` 驱动；支持子模块自动修复、并行构建、覆盖率与安装。
-
-
-## 快速开始（操作）
-
-> 默认目标：`make setup`。以下命令均在仓库根目录执行。
-
-### 1) 一次性准备
-```bash
-# 初始化 Python 依赖 + 生成代码 + 构建本地 wheel（不安装本体）
-# 同时：构建 C++ 子模块并完成顶层 cmake 配置
-make setup
-````
-
-### 2) 构建
+## 顶层入口（TL;DR）
 
 ```bash
-# Python（已随 setup 构建过，无需重复）
-# C++ 并行编译
-make build
+# 一次性准备：Python venv + 依赖 + wheel，Go/Rust/C++ 配置
+./dev setup
+
+# 构建 / 测试 / 安装 / 清理 / 覆盖率
+./dev build all
+./dev test all
+./dev install all
+./dev clean all
+./dev coverage all
+
+# 其他高频
+./dev fmt all
+./dev bench all          # 含基准图表与 gallery
+./dev vet all
+./dev guard all          # C++ ASAN/TSAN，Go race，Rust sanitizer/miri，Python ruff+pytest
+./dev setup-docker       # 启动 images/ 下的 compose，自动读取 .env
+./dev clean-docker       # 关闭 images/ 下的 compose
 ```
 
-### 3) 测试
+参数透传：在子命令后加 `--`，其后的内容直接交给底层工具，例如 `./dev test python -- -k "expr"` 或 `./dev test cpp -- --gtest_filter=Foo.*`。
 
-```bash
-# Python（pytest）
-# C++（ctest）
-make test
-```
-
-### 4) 安装（可选）
-
-```bash
-# 安装 Python 包与 C++ 产物
-# 说明：Python 侧会执行 “pip3 install python/ --upgrade”，可能提示输入 sudo 密码
-make install
-```
-
-### 5) 清理
-
-```bash
-# 清理仓库内构建/缓存产物（无需 sudo）
-make clean
-```
-
-### 6) 覆盖率（可选）
-
-```bash
-# Python 覆盖率（coverage）
-# C++ 覆盖率（gcovr/lcov，如已安装）
-make coverage
-```
-
----
-
-## 常用目标（命令速查）
+## 常用子命令速查
 
 ### 聚合
 
-* `make setup` ＝ `setup-python` + `setup-cpp`
-* `make build` ＝ `build-python` + `build-cpp`
-* `make test` ＝ `test-python` + `test-cpp`
-* `make install` ＝ `install-python` + `install-cpp`
-* `make clean` ＝ `clean-python` + `clean-cpp`
-* `make coverage` ＝ `coverage-python` + `coverage-cpp`
-* `make help` 打印帮助
+- `./dev setup`：生成 `.env.example`（若存在 `.env`）+ 各语言依赖准备。
+- `./dev build all`：Python wheel、Go build、C++（含子模块配置）、Rust release build。
+- `./dev test all`：pytest / go test / ctest / cargo test。
+- `./dev install all` / `./dev uninstall all`
+- `./dev clean all`：含 `.env.active`/`.env.mk` 清理。
+- `./dev coverage all`：pytest+coverage / go cover / ctest+gcovr（表格概要，自动回退 gcov） / cargo llvm-cov。
+- `./dev fmt all`
+- `./dev bench all`：完成后自动生成 `artifacts/bench/index.html`。
+- `./dev vet all`
+- `./dev guard all`
 
 ### Python
 
-* `make setup-python`：按 `python/requirements.txt` 将依赖安装到用户目录（`--user`）；执行 `python/generate_init.py`；构建 wheel 至 `python/dist/`（**不安装本体**）
-* `make test-python`：运行 `pytest python`
-* `make install-python`：`pip3 install python/ --upgrade`（可能使用 `sudo`）
-* `make clean-python`：清理 `python/build`、`python/dist`、`*.egg-info`、`__pycache__`、`.pytest_cache`、覆盖率产物
-* `make coverage-python`：`coverage run -m pytest && coverage report`
+- `./dev setup-python`：创建/复用 `python/.venv`，安装依赖，修正 `__future__ annotations`，构建 wheel。
+- `./dev build python`：在 venv 下构建 wheel。
+- `./dev test python [-- --pytest-opts]`：自动构建 export/cpp，清空代理并运行 pytest。
+- `./dev coverage python` / `./dev fmt python` / `./dev bench python` / `./dev clean python`
+- `./dev install python` / `./dev uninstall python`
+- `./dev vet python` / `./dev guard python`
+
+### Go
+
+- `./dev setup-go`（tidy + download）
+- `./dev build go`
+- `./dev test go` / `./dev coverage go` / `./dev fmt go` / `./dev bench go`
+- `./dev install go` / `./dev uninstall go` / `./dev clean go` / `./dev vet go` / `./dev guard go`
 
 ### C++
 
-* `make git-submodules`：拉取并自动修复子模块
-* `make setup-cpp`：逐个构建 `cpp/lib/*` 至自身 `build/`，再配置顶层
-* `make build-cpp`：并行编译顶层工程
-* `make test-cpp`：`ctest --output-on-failure`
-* `make install-cpp`：安装到 `PREFIX`（默认 `/usr/local`，可能使用 `sudo`）
-* `make clean-cpp`：删除 `cpp/build` 与 `cpp/lib/*/build`
-* `make coverage-cpp`：执行测试并输出覆盖率（如已安装 `gcovr/lcov`）
+- `./dev git-submodules`：自动修复/拉取子模块。
+- `./dev setup-cpp`：构建 `cpp/lib/*/build` 并执行顶层 cmake 配置。
+- `./dev build cpp [--config Debug|Release]`
+- `./dev test cpp [--filter <gtest>] [--file <ctest>]`
+- `./dev coverage cpp`（默认使用 gcovr，缺失时回退 lcov）
+- `./dev fmt cpp` / `./dev bench cpp` / `./dev install cpp` / `./dev uninstall cpp` / `./dev clean cpp`
+- `./dev build-export-cpp` / `./dev clean-export-cpp`：仅构建/清理 pybind 导出层
+- `./dev guard cpp --mode mem|race|heap|all`
+- 子模块体积控制：`SKIP_SUBMODULES="cpp/lib/boost"` 可跳过，`BUILD_SUBMODULES=all` 覆盖全部；默认只构建 cJSON/hiredis/redis-plus-plus。
 
-### 性能基准与可视化
+### Rust
 
-* `make bench`：逐语言执行性能基准（Python/Go/C++/Rust）。Python 端按文件逐个执行 `python/test_benchmark/**/*.py`，C++ 端运行 `cpp/build/bin/bench_*`，并收集 `pytest-benchmark`/`google-benchmark` 的 JSON 结果到 `artifacts/bench/<lang>/`。
-* 基准结束后自动调用 `mental1104.plot.BenchmarkPlotter` 生成只关注 `real_time_ms` 的“纵轴 = 各用例”图表（默认纵向堆叠），位于 `artifacts/bench/<lang>/plots/`。
-* 同步生成 `artifacts/bench/index.html` 图库，可直接在浏览器中一站式查看全部图表。如需局域网分享，可运行 `python -m http.server -d artifacts/bench 8080`。
-* 若只需要部分语言，可运行 `make bench-python` 或 `make bench-cpp`；图表仍会被纳入 gallery。
-* 更细粒度的对比可用 `python/tools/render_bench_plots.py`：例如 `python/tools/render_bench_plots.py --input artifacts/bench/cpp/bench_bench_json_gbench.json --test-type google-benchmark --chart comparison --metric real_time_ms --group-field arg --variant-field variant --filter stat=mean` 可直接比较同一数据规模下 cJSON 与 RapidJSON 的 real_time_ms。
+- `./dev setup-rust`
+- `./dev build rust` / `./dev test rust` / `./dev bench rust`
+- `./dev fmt rust` / `./dev clippy-rust` / `./dev example-rust`
+- `./dev install rust` / `./dev uninstall rust` / `./dev clean rust`
+- `./dev coverage rust`
+- `./dev guard rust --mode mem|race|miri|all`
 
----
+### 诊断/别名
 
-## 可配置参数（按需在命令行覆盖）
+- `./dev test -v ...` / `./dev bench -v ...`：等价于 `VERBOSE=1`。
+- `./dev build cpp --config Release` 等同历史的 `make build-cpp-release`。
+- 兼容旧 Makefile 目标：`build-*`/`test-*`/`coverage-*`/`fmt-*`/`install-*`/`uninstall-*` 等别名均已映射。
+- 覆盖率：C++ 使用 `gcovr --merge-mode-functions=separate` 输出概要表格；缺失时回退逐目录 `gcov -b -c`。
+
+## 可配置参数
+
+以下环境变量会被 `dev` 读取，均有默认值：
 
 | 变量               | 默认                                | 说明                                     |
 | ---------------- | --------------------------------- | -------------------------------------- |
-| `JOBS`           | 自动探测                              | C++ 并行度                                |
-| `CPP_BUILD_TYPE` | `Debug`                           | C++ 构建类型（`Release`/`RelWithDebInfo` 等） |
+| `JOBS`           | 自动探测                              | 并行度（cmake/ctest 等）                    |
+| `CPP_BUILD_TYPE` | `Debug`                           | C++ 构建类型                              |
 | `PREFIX`         | `/usr/local`                      | C++ 安装前缀                               |
 | `PYTHON`         | `python3`                         | Python 解释器                             |
 | `PIP3`           | `pip3`                            | pip 命令                                 |
-| `CMAKE`          | `cmake`                           | cmake 命令                               |
-| `CTEST`          | `ctest`                           | ctest 命令                               |
-| `SUDO`           | 非 root 时为 `sudo`                  | 安装目标默认会使用；可覆盖为空禁用                      |
-| `BREAK_FLAG`     | Ubuntu: `--break-system-packages` | 适配 PEP 668                             |
+| `CMAKE` / `CTEST`| `cmake` / `ctest`                 | C++ 工具链                               |
+| `GCOV`           | `gcov`                            | C++ 覆盖率工具（传给 gcovr/gcov）              |
+| `SUDO`           | 非 root 时为 `sudo`                  | 安装目标默认使用；可设为空禁用                       |
+| `BREAK_FLAG`     | Ubuntu: `--break-system-packages` | pip 系统安装时的兼容参数                         |
+| `COMPOSE_BIN`    | `docker compose`                  | docker compose 可执行（可填 docker-compose）      |
+| `COMPOSE_FILE_NAME` | `docker-compose.yaml`          | compose 文件名                             |
+| `SKIP_SUBMODULES`/`BUILD_SUBMODULES` | 空 / 默认核心组件 | 控制 C++ 子模块拉取和构建                        |
 
-**示例：Release 构建并安装到用户目录前缀（避免 sudo）**
+示例：Release 构建并安装到用户前缀（避免 sudo）
 
 ```bash
-make build-cpp CPP_BUILD_TYPE=Release JOBS=8
-make install-cpp PREFIX="$HOME/.local" SUDO=
+CPP_BUILD_TYPE=Release JOBS=8 ./dev build cpp
+PREFIX="$HOME/.local" SUDO= ./dev install cpp
 ```
-
----
 
 ## Docker（可选）
 
-仓库提供 `Dockerfile` 与 `docker-compose.yaml`，用于封装构建/运行环境。常见用法：
+仓库提供 `Dockerfile` 与 images/ 目录下的 compose：
 
 ```bash
-# 直接构建镜像
+./dev setup-docker      # 自动检测 docker-compose / docker compose；跳过缺失
+./dev clean-docker      # down --remove-orphans
+# 若需手动：
 docker build -t mental1104:dev .
-
-# 或使用 compose（如定义了服务）
-docker compose up -d
 ```
 
-> `INSTALLROOT/` 下的目录与 `install.sh`/`run.sh` 可用于镜像内组件/扩展安装，请结合自身环境按需使用。
+`INSTALLROOT/` + `install.sh`/`run.sh` 可在镜像内按需安装组件。
 
----
+说明：`setup-docker` 自动加载根目录 `.env`，按服务目录独立 project-name 启动；已有同名容器且在运行时会跳过，避免误停。
 
-## 常见问题（FAQ）
+## FAQ
 
-### 1. `make clean` 报 `Permission denied`
+1) `./dev clean` 报 Permission denied  
+   若历史上使用过 `sudo` 安装，仓库内可能残留 root 拥有的文件。一次性回收后再清理：
+   ```bash
+   sudo chown -R "$USER":"$USER" .
+   ./dev clean all
+   ```
 
-历史上若执行过带 `sudo` 的安装（尤其是 `make install-python`），可能在仓库内生成 root 拥有的 `python/build` 或 `python/*.egg-info`。一次性回收所有权后再清理：
+2) Ubuntu pip 提示 “externally managed environment”  
+   已自动添加 `--break-system-packages`。若不希望写入系统 Python，请使用虚拟环境或 `PIP3=... --user`。
 
-```bash
-sudo chown -R "$USER":"$USER" .
-make clean
-```
+3) `pytest` 不存在  
+   运行 `./dev setup-python`，会创建 `python/.venv` 并安装依赖。
 
-### 2. Ubuntu 上 pip 报 “externally managed environment”
+4) 子模块拉取失败或元数据损坏  
+   运行 `./dev git-submodules`，内置自动修复（deinit + 清理 + 重拉）。
 
-Makefile 已在 Ubuntu 环境自动带上 `--break-system-packages`。若不希望写入系统 Python，请使用虚拟环境或用户级安装（`python3 -m venv` / `pip --user`）。
-
-### 3. `pytest` 不存在
-
-执行：
-
-```bash
-make setup-python
-```
-
-该目标会按 `python/requirements.txt` 安装依赖。
-
-### 4. 子模块拉取失败或元数据损坏
-
-执行：
-
-```bash
-make git-submodules
-```
-
-Makefile 内置了自动修复流程（deinit + 清理 + 重拉）。
-
----
+5) 覆盖率报错 “function … on multiple lines” 或找不到 notes  
+   已在 `coverage-cpp` 中默认使用 `--merge-mode-functions=separate`；若 gcovr 缺失则回退 gcov，必要时先 `./dev build cpp --config Debug` 再跑覆盖率。
 
 ## 工作原理（简述）
 
-* **Python**
-  `setup-python`：仅安装依赖至用户目录（`--user`）→ 执行 `generate_init.py` → 构建 wheel 到 `python/dist/`；不安装本体。
-  `install-python`：将 `python/` 作为项目源安装（可能触发 `sudo`）。
-  `clean-python`：删除构建与缓存目录，保持仓库整洁。
-
-* **C++**
-  `setup-cpp`：对子模块分别在 `cpp/lib/*/build` 内独立构建，然后进行顶层 `cmake` 配置。
-  `build-cpp`/`test-cpp`：并行构建与 `ctest` 测试；`coverage-cpp` 在具备工具时输出覆盖率。
-  `install-cpp`：按 `PREFIX` 安装，默认 `/usr/local`。
-
----
+- **dev CLI**：Python `argparse` 分发；子命令各在 `devtool/commands/*.py` 中注册。
+- **命令执行**：统一经过 `devtool.context.sh`，日志格式 `[dev] (cwd)$ cmd`。
+- **语言侧逻辑**：从原 Makefile 迁移的 shell 片段直接嵌入各子命令，确保行为与历史一致（venv/bootstrap、pybind11 导出、ctest/gcovr/gcov、cargo llvm-cov 等）。
+- **环境变量**：`base_env` 自动加载 `.env`，测试/覆盖率会自动剥离 HTTP(S)_PROXY/ALL_PROXY，避免代理影响内部容器。
 
 ## 开发建议
 
-* Python 依赖维护于 `python/requirements.txt`，`pyproject.toml` 负责项目信息与打包配置。
-* C++ 头文件位于 `cpp/include/mental1104/`，单元测试位于 `cpp/test/`，第三方依赖在 `cpp/lib/` 与 `cpp/thirdparty/`。
-* 提交前请确保：`make test` 通过；必要时运行 `make coverage` 检查覆盖率；最终执行 `make clean` 保持仓库干净。
-
----
-
-```
+- Python 依赖维护于 `python/requirements.txt`，`pyproject.toml` 描述打包信息。
+- C++ 头文件位于 `cpp/include/mental1104/`，单测在 `cpp/test/`，第三方依赖于 `cpp/lib/`、`cpp/thirdparty/`。
+- 提交前请至少执行：`./dev test all`；必要时 `./dev coverage all`；结束前可 `./dev clean all` 保持仓库整洁。
