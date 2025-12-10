@@ -454,12 +454,17 @@ endef
 
 define __cpp_bench_collect
 if [[ -n "$(CPP_BENCH_FILES)" ]]; then \
-  declare -A want=(); \
-  for f in $(CPP_BENCH_FILES); do b=$$(basename "$$f"); b=$${b%.cpp}; want["$$b"]=1; done; \
+  wanted=(); \
+  for f in $(CPP_BENCH_FILES); do b=$$(basename "$$f"); b=$${b%.cpp}; wanted+=("$$b"); done; \
   filtered=(); \
   for exe in "$${binaries[@]}"; do \
     base=$$(basename "$$exe"); \
-    [[ -n "$${want[$$base]}" ]] && filtered+=("$${exe}"); \
+    for want in "$${wanted[@]}"; do \
+      if [[ "$$base" = "$$want" ]]; then \
+        filtered+=("$${exe}"); \
+        break; \
+      fi; \
+    done; \
   done; \
   binaries=("$${filtered[@]}"); \
 fi; \
@@ -603,11 +608,16 @@ if [[ ! -f "$(CPP_BUILD_DIR)/compile_commands.json" ]]; then \
   exit 1; \
 fi; \
 echo "[info] clang-tidy 目录: $(VET_DIR)"; \
+first_file=$$(find "$(VET_DIR)" -type f \( -name "*.cpp" -o -name "*.cc" -o -name "*.cxx" \) -print | head -n 1); \
+if [ -z "$$first_file" ]; then \
+  echo "[warn] 未找到待检查的 C++ 源文件，跳过 clang-tidy"; \
+  exit 0; \
+fi; \
 find "$(VET_DIR)" -type f \( -name "*.cpp" -o -name "*.cc" -o -name "*.cxx" \) -print0 \
-| xargs -0 -r clang-tidy -p "$(CPP_BUILD_DIR)" --quiet \
-    --checks="-*,bugprone-*,performance-*,clang-analyzer-*" \
-    --warnings-as-errors="*" \
-    --header-filter="^.*/cpp/include/mental1104/.*"; \
+| xargs -0 clang-tidy -p "$(CPP_BUILD_DIR)" --quiet \
+  --checks="-*,bugprone-*,performance-*,clang-analyzer-*" \
+  --warnings-as-errors="*" \
+  --header-filter="^.*/cpp/include/mental1104/.*"; \
 echo "[ok] vet-cpp 完成。"
 endef
 
@@ -618,7 +628,7 @@ if [ "$$MODE" = "heap" ]; then \
   if ! command -v valgrind >/dev/null 2>&1; then echo "[error] 未安装 valgrind"; exit 1; fi; \
   cmake -S cpp -B cpp/build -DCMAKE_BUILD_TYPE=Debug -DCMAKE_EXPORT_COMPILE_COMMANDS=ON; cmake --build cpp/build -j $(JOBS); \
   echo "[info] 运行 massif 生成内存占用画像"; \
-  find cpp/build/bin -maxdepth 1 -type f -name "test_*" -executable | while read -r t; do \
+  find cpp/build/bin -maxdepth 1 -type f -name "test_*" \( -perm -u+x -o -perm -g+x -o -perm -o+x \) | while read -r t; do \
     out="`basename $$t`.massif"; echo "[info] massif $$t -> $$out"; valgrind --tool=massif --time-unit=ms --stacks=yes --massif-out-file="$$out" "$$t" || true; \
   done; echo "[ok] guard-cpp[heap] 已生成 massif 报告"; exit 0; \
 fi; \
@@ -719,22 +729,28 @@ echo "[proxy] disabled for go (HTTP_PROXY/HTTPS_PROXY/NO_PROXY/ALL_PROXY 皆已�
 endef
 
 define __go_test_run
-cd "$(GO_DIR)"; \
-run_args=(); pkg_args=(./...); \
-[[ -n "$${FILTER:-}" ]] && run_args+=(-run "$${FILTER}"); \
-if [[ -n "$${FILE:-}" ]]; then \
-	mapfile -t dirs < <(find . -name "*_test.go" | grep -E "$${FILE}" | xargs -r -n1 dirname | sort -u); \
-	if [[ $${#dirs[@]} -gt 0 ]]; then \
-		pkg_args=(); \
-		for d in "$${dirs[@]}"; do pkg_args+=("$${d#./}"); done; \
-	else \
-		echo "[warn] FILE=$${FILE} 未匹配到 *_test.go，回退全量包"; \
+	cd "$(GO_DIR)"; \
+	run_args=(); pkg_args=(./...); \
+	[[ -n "$${FILTER:-}" ]] && run_args+=(-run "$${FILTER}"); \
+	if [[ -n "$${FILE:-}" ]]; then \
+		dirs_list=$$(find . -name "*_test.go" \
+			| { if [[ -n "$${FILE:-}" ]]; then grep -E "$${FILE}" || true; else cat; fi; } \
+			| while IFS= read -r path; do dirname "$$path"; done \
+			| sort -u); \
+		if [[ -n "$$dirs_list" ]]; then \
+			pkg_args=(); \
+			while IFS= read -r d; do \
+				[[ -z "$$d" ]] && continue; \
+				pkg_args+=("$${d#./}"); \
+			done <<< "$$dirs_list"; \
+		else \
+			echo "[warn] FILE=$${FILE} 未匹配到 *_test.go，回退全量包"; \
+		fi; \
 	fi; \
-fi; \
-echo "[go] test -count=1 $(GO_TEST_V) $${run_args[*]:-} $${pkg_args[*]}"; \
-GOWORK=$(GOWORK) GOTOOLCHAIN=$(GOTOOLCHAIN) GOPROXY="$(GOPROXY)" GOPRIVATE="$(GOPRIVATE)" \
-$(GO) test -count=1 $(GO_TEST_V) "$${run_args[@]}" "$${pkg_args[@]}"; \
-echo "[ok] go test 通过。"
+	echo "[go] test -count=1 $(GO_TEST_V) $${run_args[*]:-} $${pkg_args[*]}"; \
+	GOWORK=$(GOWORK) GOTOOLCHAIN=$(GOTOOLCHAIN) GOPROXY="$(GOPROXY)" GOPRIVATE="$(GOPRIVATE)" \
+	$(GO) test -count=1 $(GO_TEST_V) "$${run_args[@]}" "$${pkg_args[@]}"; \
+	echo "[ok] go test 通过。"
 endef
 
 define __go_coverage_run
@@ -757,20 +773,26 @@ cd "$(GO_DIR)"; go fmt ./... >/dev/null; echo "[ok] go fmt 完成。"
 endef
 
 define __go_bench_run
-cd "$(GO_DIR)"; \
-bench_pat="$${FILTER:-.}"; pkg_args=(./...); \
-if [[ -n "$${FILE:-}" ]]; then \
-	mapfile -t dirs < <(find . -name "*_test.go" | grep -E "$${FILE}" | xargs -r -n1 dirname | sort -u); \
-	if [[ $${#dirs[@]} -gt 0 ]]; then \
-		pkg_args=(); \
-		for d in "$${dirs[@]}"; do pkg_args+=("$${d#./}"); done; \
-	else \
-		echo "[warn] FILE=$${FILE} 未匹配到 *_test.go，回退全量包"; \
+	cd "$(GO_DIR)"; \
+	bench_pat="$${FILTER:-.}"; pkg_args=(./...); \
+	if [[ -n "$${FILE:-}" ]]; then \
+		dirs_list=$$(find . -name "*_test.go" \
+			| { if [[ -n "$${FILE:-}" ]]; then grep -E "$${FILE}" || true; else cat; fi; } \
+			| while IFS= read -r path; do dirname "$$path"; done \
+			| sort -u); \
+		if [[ -n "$$dirs_list" ]]; then \
+			pkg_args=(); \
+			while IFS= read -r d; do \
+				[[ -z "$$d" ]] && continue; \
+				pkg_args+=("$${d#./}"); \
+			done <<< "$$dirs_list"; \
+		else \
+			echo "[warn] FILE=$${FILE} 未匹配到 *_test.go，回退全量包"; \
+		fi; \
 	fi; \
-fi; \
-echo "[go] test $(GO_TEST_V) -bench=\"$$bench_pat\" -benchmem $${pkg_args[*]}"; \
-GOWORK=$(GOWORK) GOTOOLCHAIN=$(GOTOOLCHAIN) GOPROXY="$(GOPROXY)" GOPRIVATE="$(GOPRIVATE)" \
-$(GO) test $(GO_TEST_V) -bench="$$bench_pat" -benchmem "$${pkg_args[@]}"
+	echo "[go] test $(GO_TEST_V) -bench=\"$$bench_pat\" -benchmem $${pkg_args[*]}"; \
+	GOWORK=$(GOWORK) GOTOOLCHAIN=$(GOTOOLCHAIN) GOPROXY="$(GOPROXY)" GOPRIVATE="$(GOPRIVATE)" \
+	$(GO) test $(GO_TEST_V) -bench="$$bench_pat" -benchmem "$${pkg_args[@]}"
 endef
 
 define __go_install_run
@@ -824,7 +846,11 @@ if [ -z "$$bin_dir" ]; then bin_dir="$$( $(GO) env GOBIN )"; fi; \
 if [ -z "$$bin_dir" ]; then bin_dir="$$( $(GO) env GOPATH )/bin"; fi; \
 echo "[go] uninstall from $$bin_dir"; \
 if [ ! -d "$$bin_dir" ]; then echo "[warn] 未找到 bin 目录，跳过卸载"; exit 0; fi; \
-mapfile -t mains < <($(GO) list -f "{{if eq .Name \"main\"}}{{.Dir}}{{end}}" ./... | sed "/^$$/d"); \
+mains=(); \
+while IFS= read -r d; do \
+  [[ -z "$$d" ]] && continue; \
+  mains+=("$$d"); \
+done < <($(GO) list -f "{{if eq .Name \"main\"}}{{.Dir}}{{end}}" ./... | sed "/^$$/d"); \
 if [ $${#mains[@]} -eq 0 ]; then echo "[info] 未找到 package main，跳过卸载"; exit 0; fi; \
 for d in "$${mains[@]}"; do \
   name=$$(basename "$$d"); \
@@ -867,9 +893,11 @@ define __rust_test_run
 cd "$(RUST_DIR)"; \
 file_pat="$${FILE:-}"; fn_pat="$${FILTER:-}"; \
 if [[ -n "$$file_pat" ]]; then \
-  mapfile -t bins < <(find tests -maxdepth 1 -type f -name "*.rs" 2>/dev/null | grep -E "$$file_pat" | sed "s#.*/##" | sed "s/\\.rs$$//"); \
-  if [[ $${#bins[@]} -gt 0 ]]; then \
-    for b in "$${bins[@]}"; do \
+  bins_list=$$(find tests -maxdepth 1 -type f -name "*.rs" 2>/dev/null \
+    | { if [[ -n "$$file_pat" ]]; then grep -E "$$file_pat" || true; else cat; fi; } \
+    | sed "s#.*/##" | sed "s/\\.rs$$//"); \
+  if [[ -n "$$bins_list" ]]; then \
+    for b in $$bins_list; do \
       args=(test --all-features $(CARGO_TEST_V) --test "$$b"); \
       [[ -n "$$fn_pat" ]] && args+=("$$fn_pat"); \
       cargo "$${args[@]}"; \
@@ -887,9 +915,11 @@ define __rust_bench_run
 cd "$(RUST_DIR)"; \
 file_pat="$${FILE:-}"; fn_pat="$${FILTER:-}"; \
 if [[ -n "$$file_pat" ]]; then \
-  mapfile -t bins < <(find benches -maxdepth 1 -type f -name "*.rs" 2>/dev/null | grep -E "$$file_pat" | sed "s#.*/##" | sed "s/\\.rs$$//"); \
-  if [[ $${#bins[@]} -gt 0 ]]; then \
-    for b in "$${bins[@]}"; do \
+  bins_list=$$(find benches -maxdepth 1 -type f -name "*.rs" 2>/dev/null \
+    | { if [[ -n "$$file_pat" ]]; then grep -E "$$file_pat" || true; else cat; fi; } \
+    | sed "s#.*/##" | sed "s/\\.rs$$//"); \
+  if [[ -n "$$bins_list" ]]; then \
+    for b in $$bins_list; do \
       args=(bench $(CARGO_TEST_V) --bench "$$b"); \
       [[ -n "$$fn_pat" ]] && args+=("$$fn_pat"); \
       cargo "$${args[@]}"; \
