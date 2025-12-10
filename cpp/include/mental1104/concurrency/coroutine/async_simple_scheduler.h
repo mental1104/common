@@ -20,15 +20,18 @@ namespace mental1104 {
 // 使用 async_simple::Executor 适配 ICoroutineScheduler
 class AsyncSimpleCoroutineScheduler : public ICoroutineScheduler {
 public:
-  explicit AsyncSimpleCoroutineScheduler(std::shared_ptr<async_simple::Executor> exec)
+  explicit AsyncSimpleCoroutineScheduler(
+      std::shared_ptr<async_simple::Executor> exec)
       : exec_(std::move(exec)), pending_(0) {
     if (!exec_) {
-      throw std::invalid_argument("AsyncSimpleCoroutineScheduler requires a valid executor");
+      throw std::invalid_argument(
+          "AsyncSimpleCoroutineScheduler requires a valid executor");
     }
   }
 
   void spawn_task(Task t) override {
-    if (!t) return;
+    if (!t)
+      return;
     auto holder = std::make_shared<Task>(std::move(t));
     pending_.fetch_add(1, std::memory_order_relaxed);
     schedule_resume(std::move(holder));
@@ -36,7 +39,8 @@ public:
 
   void wait_all() override {
     std::unique_lock<std::mutex> lk(mu_);
-    cv_.wait(lk, [this] { return pending_.load(std::memory_order_acquire) == 0; });
+    cv_.wait(lk,
+             [this] { return pending_.load(std::memory_order_acquire) == 0; });
   }
 
 private:
@@ -59,7 +63,7 @@ private:
   std::condition_variable cv_;
 };
 
-}  // namespace mental1104
+} // namespace mental1104
 
 #endif // async_simple available
 

@@ -41,9 +41,7 @@ public:
     return *this;
   }
 
-  bool done() const {
-    return !handle_ || handle_.done();
-  }
+  bool done() const { return !handle_ || handle_.done(); }
 
   void resume() {
     if (handle_ && !handle_.done()) {
@@ -56,9 +54,7 @@ public:
   explicit operator bool() const noexcept { return handle_ != nullptr; }
 
   struct promise_type {
-    auto get_return_object() {
-      return Task{handle_type::from_promise(*this)};
-    }
+    auto get_return_object() { return Task{handle_type::from_promise(*this)}; }
     std::suspend_always initial_suspend() noexcept { return {}; }
     std::suspend_always final_suspend() noexcept { return {}; }
     void unhandled_exception() { std::terminate(); }

@@ -1,4 +1,5 @@
 # dispatch_for.py
+from __future__ import annotations
 import inspect
 import sys
 from typing import Any, Callable, Dict, Tuple, Type

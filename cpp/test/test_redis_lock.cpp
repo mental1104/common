@@ -12,10 +12,10 @@
 #include <thread>
 #include <vector>
 
+#include "mental1104/concurrency/thread/thread_util.h"
 #include "mental1104/log.h"
 #include "mental1104/random.h"
 #include "mental1104/redis_lock.h"
-#include "mental1104/concurrency/thread/thread_util.h"
 #include "mental1104/util.h"
 using namespace sw::redis;
 
