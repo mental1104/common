@@ -320,6 +320,14 @@ macro(m1104_register_components)
       INC_REL .
   )
 
+  if (HAVE_ASYNC_SIMPLE)
+    set(_async_simple_header "${CMAKE_SOURCE_DIR}/lib/async_simple/async_simple/Executor.h")
+    if (NOT EXISTS "${_async_simple_header}")
+      message(WARNING "async_simple component declared but header missing: ${_async_simple_header}; disabling ASYNC_SIMPLE")
+      set(HAVE_ASYNC_SIMPLE FALSE)
+    endif()
+  endif()
+
   if (NOT HAVE_ASYNC_SIMPLE AND EXISTS "${CMAKE_SOURCE_DIR}/lib/async_simple/async_simple/Executor.h")
     set(HAVE_ASYNC_SIMPLE TRUE)
     set(_async_simple_inc "${CMAKE_SOURCE_DIR}/lib/async_simple")
