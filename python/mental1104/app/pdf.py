@@ -1,5 +1,6 @@
 from pypdf import PdfReader, PdfWriter
 
+
 def extract_page_range(
     src_pdf: str,
     dst_pdf: str,
