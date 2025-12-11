@@ -1,14 +1,56 @@
-name: Linux Python & C++
+name: Linux
 
 on:
   push:
   pull_request:
 
+env:
+  PYTHONPATH: ${{ github.workspace }}
+  DATABASE_URL: postgresql://test:test@localhost:5432/app
+  REDIS_URL: redis://localhost:6379/0
+  PGUSER: test
+  PGPASSWORD: test
+  PGDATABASE: app
+  PGHOST: localhost
+  PGPORT: "5432"
+  REDIS_HOST: localhost
+  REDIS_PORT: "6379"
+  PULSAR_HOST: localhost
+  PULSAR_BROKER_PORT: "6650"
+  PULSAR_ADMIN_PORT: "8080"
+  PULSAR_TOKEN: "dummy"
+  PULSAR_SCHEMA_PATH: "/tmp/pulsar/schema"
+  PULSAR_DATA_PATH: "/tmp/pulsar/data"
+  # CLICKHOUSE_USER: default
+  # CLICKHOUSE_HOST: localhost
+  # CLICKHOUSE_PORT: "8123"
+  # CLICKHOUSE_DATABASE: default
+  # MONGO_HOST: localhost
+  # MONGO_PORT: "27017"
+  # GOPROXY: "direct"
+
 jobs:
   python-linux:
     runs-on: ubuntu-latest
-    env:
-      PYTHONPATH: ${{ github.workspace }}
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: app
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U test"
+          --health-interval=5s --health-timeout=5s --health-retries=5
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=5s --health-timeout=3s --health-retries=5
     defaults:
       run:
         shell: bash
@@ -28,6 +70,15 @@ jobs:
           from devtool.commands.ops import cpp as cpp_ops
           sys.exit(cpp_ops.git_submodules(base_env()) or 0)
           PY
+
+      - name: Wait for postgres/redis
+        run: |
+          for i in {1..30}; do
+            (echo > /dev/tcp/127.0.0.1/5432) && (echo > /dev/tcp/127.0.0.1/6379) && exit 0
+            sleep 1
+          done
+          echo "services not ready" >&2
+          exit 1
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -67,10 +118,28 @@ jobs:
 
   cpp-linux:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: app
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U test"
+          --health-interval=5s --health-timeout=5s --health-retries=5
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=5s --health-timeout=3s --health-retries=5
     env:
       CMAKE_BUILD_PARALLEL_LEVEL: 4
       GCOV: gcov
-      PYTHONPATH: ${{ github.workspace }}
     defaults:
       run:
         shell: bash
@@ -90,6 +159,15 @@ jobs:
           from devtool.commands.ops import cpp as cpp_ops
           sys.exit(cpp_ops.git_submodules(base_env()) or 0)
           PY
+
+      - name: Wait for postgres/redis
+        run: |
+          for i in {1..30}; do
+            (echo > /dev/tcp/127.0.0.1/5432) && (echo > /dev/tcp/127.0.0.1/6379) && exit 0
+            sleep 1
+          done
+          echo "services not ready" >&2
+          exit 1
 
       - name: Install toolchain
         run: |
