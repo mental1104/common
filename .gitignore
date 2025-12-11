@@ -4,6 +4,7 @@ build
 # Allow tracked CLI command package
 !devtool/commands/build/
 !devtool/commands/build/**
+
 a.out
 .env*
 __pycache__
@@ -26,6 +27,8 @@ target
 *.gcda
 *.lcov
 coverage/
+!devtool/commands/coverage/
+!devtool/commands/coverage/**
 flamegraph.svg
 perf.data*
 infer-out/
