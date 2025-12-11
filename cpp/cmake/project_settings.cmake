@@ -23,6 +23,11 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 message(STATUS "CXX_STANDARD = ${CMAKE_CXX_STANDARD}")
 
+# 统一使用动态运行时（/MD /MDd），避免与 gtest 等静态运行时冲突
+if (MSVC)
+  set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
+endif()
+
 # Ensure __cplusplus reports the correct value on MSVC (needed for C++20 feature checks)
 if (MSVC)
   add_compile_options(/Zc:__cplusplus)
