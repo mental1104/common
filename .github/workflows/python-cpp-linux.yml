@@ -18,7 +18,7 @@ env:
   PULSAR_HOST: localhost
   PULSAR_BROKER_PORT: "6650"
   PULSAR_ADMIN_PORT: "8080"
-  PULSAR_TOKEN: "dummy"
+  PULSAR_TOKEN: ""
   PULSAR_SCHEMA_PATH: "/tmp/pulsar/schema"
   PULSAR_DATA_PATH: "/tmp/pulsar/data"
   # CLICKHOUSE_USER: default
@@ -51,6 +51,15 @@ jobs:
         options: >-
           --health-cmd="redis-cli ping"
           --health-interval=5s --health-timeout=3s --health-retries=5
+      pulsar:
+        image: apachepulsar/pulsar:3.2.0
+        command: [ "bin/pulsar", "standalone", "-nss" ]
+        ports:
+          - 6650:6650
+          - 8080:8080
+        options: >-
+          --health-cmd="curl -sf http://localhost:8080/admin/v2/clusters"
+          --health-interval=10s --health-timeout=5s --health-retries=12
     defaults:
       run:
         shell: bash
@@ -71,11 +80,11 @@ jobs:
           sys.exit(cpp_ops.git_submodules(base_env()) or 0)
           PY
 
-      - name: Wait for postgres/redis
+      - name: Wait for postgres/redis/pulsar
         run: |
-          for i in {1..30}; do
-            (echo > /dev/tcp/127.0.0.1/5432) && (echo > /dev/tcp/127.0.0.1/6379) && exit 0
-            sleep 1
+          for i in {1..40}; do
+            (echo > /dev/tcp/127.0.0.1/5432) && (echo > /dev/tcp/127.0.0.1/6379) && (echo > /dev/tcp/127.0.0.1/8080) && exit 0
+            sleep 2
           done
           echo "services not ready" >&2
           exit 1
@@ -137,6 +146,15 @@ jobs:
         options: >-
           --health-cmd="redis-cli ping"
           --health-interval=5s --health-timeout=3s --health-retries=5
+      pulsar:
+        image: apachepulsar/pulsar:3.2.0
+        command: [ "bin/pulsar", "standalone", "-nss" ]
+        ports:
+          - 6650:6650
+          - 8080:8080
+        options: >-
+          --health-cmd="curl -sf http://localhost:8080/admin/v2/clusters"
+          --health-interval=10s --health-timeout=5s --health-retries=12
     env:
       CMAKE_BUILD_PARALLEL_LEVEL: 4
       GCOV: gcov
@@ -160,11 +178,11 @@ jobs:
           sys.exit(cpp_ops.git_submodules(base_env()) or 0)
           PY
 
-      - name: Wait for postgres/redis
+      - name: Wait for postgres/redis/pulsar
         run: |
-          for i in {1..30}; do
-            (echo > /dev/tcp/127.0.0.1/5432) && (echo > /dev/tcp/127.0.0.1/6379) && exit 0
-            sleep 1
+          for i in {1..40}; do
+            (echo > /dev/tcp/127.0.0.1/5432) && (echo > /dev/tcp/127.0.0.1/6379) && (echo > /dev/tcp/127.0.0.1/8080) && exit 0
+            sleep 2
           done
           echo "services not ready" >&2
           exit 1
