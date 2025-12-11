@@ -284,6 +284,11 @@ def test(env: Mapping[str, str], *, file_pattern: str | None, filter_expr: str |
 
 
 def coverage(env: Mapping[str, str]) -> None:
+    import platform
+
+    if platform.system().lower() == "windows":
+        print("[info] coverage-cpp not supported on Windows (gcov/lcov unavailable); skipping")
+        return
     env_np = strip_proxies(env)
     run([env_np["CTEST"], "--output-on-failure", "-LE", "bench"], env=env_np, cwd=CPP_BUILD_DIR)
     gcovr_bin = shutil.which("gcovr")

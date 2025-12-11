@@ -175,9 +175,6 @@ jobs:
       - name: Test C++
         run: python -m devtool.cli test-cpp
 
-      - name: Coverage C++
-        run: python -m devtool.cli coverage-cpp
-
       - name: Vet C++
         continue-on-error: true
         run: python -m devtool.cli vet-cpp
