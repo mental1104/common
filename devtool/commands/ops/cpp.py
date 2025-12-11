@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import platform
 import re
 import shutil
 import subprocess
@@ -234,6 +235,8 @@ def build_submodules(env: Mapping[str, str]) -> None:
 def configure(env: Mapping[str, str]) -> None:
     ensure_dir(CPP_BUILD_DIR)
     extra = []
+    if platform.system().lower() == "windows":
+        extra += ["-DENABLE_COVERAGE=OFF", "-DCOVERAGE=OFF"]
     venv_py = env.get("PY_VENV_PYTHON")
     if venv_py and Path(venv_py).exists():
         try:
