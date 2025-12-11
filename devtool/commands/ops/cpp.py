@@ -9,6 +9,7 @@ from typing import Mapping
 from devtool.commands.common import (
     BENCH_ARTIFACT_ROOT,
     BOOST_SPARSE_LIST,
+    BOOST_REQUIRED_SUBMODULES,
     CPP_BENCH_ARTIFACT_DIR,
     CPP_BUILD_DIR,
     CPP_SRC_DIR,
@@ -23,6 +24,7 @@ from devtool.context import is_windows
 
 _GITMODULE_PATH_RE = re.compile(r"^\s*path\s*=\s*(.+)$")
 _BOOST_SUBMODULE_PATH = ROOT / "cpp" / "lib" / "boost"
+_BOOST_REL_PATH = "cpp/lib/boost"
 
 
 def _gitmodule_paths() -> list[str]:
@@ -62,32 +64,30 @@ def git_submodules(env: Mapping[str, str]) -> None:
     env_np = strip_proxies(env)
     skip = _skip_list(env_np)
     run(["git", "submodule", "sync", "--recursive"], env=env_np, cwd=ROOT)
-    base_cmd = [
-        "git",
-        "submodule",
-        "update",
-        "--init",
-        "--recursive",
-        "--jobs",
-        env_np.get("JOBS", "1"),
-    ]
-    update_cmd = list(base_cmd) + ["--depth", "1", "--filter=blob:none"]
+    all_paths = _gitmodule_paths()
+    non_boost = [p for p in all_paths if p and p != _BOOST_REL_PATH]
     if skip:
-        all_paths = _gitmodule_paths()
-        targets = [p for p in all_paths if p and p not in skip]
-        if not targets:
-            print("[git] SKIP_SUBMODULES 覆盖全部子模块，已跳过")
-            return
-        update_cmd += ["--", *targets]
-        base_cmd += ["--", *targets]
-        print(f"[git] 跳过子模块: {', '.join(sorted(skip))}")
-    try:
-        run(update_cmd, env=env_np, cwd=ROOT)
-    except subprocess.CalledProcessError:
-        fallback_cmd = base_cmd
-        print("[warn] 子模块 partial clone 失败，正在回退为完整检出")
-        run(fallback_cmd, env=env_np, cwd=ROOT)
-    _apply_boost_sparse_checkout(env_np)
+        non_boost = [p for p in non_boost if p not in skip]
+    if non_boost:
+        base_cmd = [
+            "git",
+            "submodule",
+            "update",
+            "--init",
+            "--recursive",
+            "--jobs",
+            env_np.get("JOBS", "1"),
+        ]
+        update_cmd = list(base_cmd) + ["--depth", "1", "--filter=blob:none", "--", *non_boost]
+        try:
+            run(update_cmd, env=env_np, cwd=ROOT)
+        except subprocess.CalledProcessError:
+            print("[warn] 子模块 partial clone 失败，正在回退为完整检出（非 boost）")
+            run(base_cmd + ["--", *non_boost], env=env_np, cwd=ROOT)
+    if _BOOST_REL_PATH not in skip:
+        _update_boost_root(env_np)
+        _apply_boost_sparse_checkout(env_np)
+        _update_boost_modules(env_np)
 
 
 def _load_boost_sparse_patterns() -> list[str]:
@@ -122,6 +122,63 @@ def _apply_boost_sparse_checkout(env: Mapping[str, str]) -> None:
         )
     except subprocess.CalledProcessError as exc:
         print(f"[warn] Boost sparse-checkout 失败（{exc}），已回退为全量检出")
+
+
+def _load_boost_required_modules() -> list[str]:
+    if not BOOST_REQUIRED_SUBMODULES.exists():
+        return []
+    modules: list[str] = []
+    for raw in BOOST_REQUIRED_SUBMODULES.read_text().splitlines():
+        line = raw.split("#", 1)[0].strip()
+        if line:
+            modules.append(line)
+    return modules
+
+
+def _update_boost_root(env: Mapping[str, str]) -> None:
+    cmd = [
+        "git",
+        "submodule",
+        "update",
+        "--init",
+        "--depth",
+        "1",
+        "--filter=blob:none",
+        "--",
+        _BOOST_REL_PATH,
+    ]
+    try:
+        run(cmd, env=env, cwd=ROOT)
+    except subprocess.CalledProcessError:
+        print("[warn] Boost partial clone 失败，正在回退为完整检出")
+        run(["git", "submodule", "update", "--init", "--", _BOOST_REL_PATH], env=env, cwd=ROOT)
+
+
+def _update_boost_modules(env: Mapping[str, str]) -> None:
+    if env.get("BOOST_FULL_CHECKOUT", "").lower() in {"1", "true", "yes"}:
+        run(["git", "-C", str(_BOOST_SUBMODULE_PATH), "submodule", "update", "--init", "--recursive"], env=env)
+        return
+    modules = _load_boost_required_modules()
+    if not modules or not _BOOST_SUBMODULE_PATH.exists():
+        return
+    cmd = [
+        "git",
+        "-C",
+        str(_BOOST_SUBMODULE_PATH),
+        "submodule",
+        "update",
+        "--init",
+        "--depth",
+        "1",
+        "--filter=blob:none",
+        "--",
+        *modules,
+    ]
+    try:
+        run(cmd, env=env)
+    except subprocess.CalledProcessError:
+        print("[warn] Boost 内部子模块 partial clone 失败，正在回退为完整检出所需模块")
+        run(["git", "-C", str(_BOOST_SUBMODULE_PATH), "submodule", "update", "--init", "--", *modules], env=env)
 
 
 def build_submodules(env: Mapping[str, str]) -> None:

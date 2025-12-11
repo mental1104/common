@@ -40,6 +40,7 @@ RUST_DIR = ROOT / "rust" / "mental1104"
 BENCH_ARTIFACT_ROOT = ROOT / "artifacts" / "bench"
 CPP_BENCH_ARTIFACT_DIR = BENCH_ARTIFACT_ROOT / "cpp"
 BOOST_SPARSE_LIST = ROOT / "devtool" / "boost_sparse_checkout.txt"
+BOOST_REQUIRED_SUBMODULES = ROOT / "devtool" / "boost_required_submodules.txt"
 PY_VENV = PY_DIR / ".venv"
 PY_VENV_BIN = _venv_bin(PY_VENV)
 PY_VENV_PYTHON = PY_VENV_BIN / ("python.exe" if is_windows() else "python")
