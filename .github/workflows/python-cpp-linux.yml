@@ -199,3 +199,140 @@ jobs:
       - name: Guard C++
         continue-on-error: true
         run: ./dev guard-cpp
+
+  go-linux:
+    runs-on: ubuntu-latest
+    services: *common_services
+    defaults:
+      run:
+        shell: bash
+        working-directory: ${{ github.workspace }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: false
+          fetch-depth: 0
+
+      - name: Init submodules (sparse Boost)
+        run: |
+          python3 - <<'PY'
+          import sys
+          from devtool.commands.common import base_env
+          from devtool.commands.ops import cpp as cpp_ops
+          sys.exit(cpp_ops.git_submodules(base_env()) or 0)
+          PY
+
+      - name: Start Pulsar (standalone -nss)
+        run: |
+          docker rm -f pulsar || true
+          docker run -d --name pulsar \
+            -p ${PULSAR_BROKER_PORT}:${PULSAR_BROKER_PORT} -p ${PULSAR_ADMIN_PORT}:${PULSAR_ADMIN_PORT} \
+            apachepulsar/pulsar:3.2.0 \
+            bin/pulsar standalone -nss
+
+      - name: Wait for postgres/redis/pulsar
+        run: |
+          for i in {1..40}; do
+            (echo > /dev/tcp/127.0.0.1/${PGPORT}) && (echo > /dev/tcp/127.0.0.1/${REDIS_PORT}) && (echo > /dev/tcp/127.0.0.1/${PULSAR_ADMIN_PORT}) && exit 0
+            sleep 2
+          done
+          echo "services not ready" >&2
+          exit 1
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+
+      - name: Setup Go deps
+        run: ./dev setup-go
+
+      - name: Format Go
+        run: ./dev fmt-go
+
+      - name: Build Go
+        run: ./dev build-go
+
+      - name: Test Go
+        run: ./dev test-go
+
+      - name: Coverage Go
+        run: ./dev coverage-go
+
+      - name: Vet Go
+        continue-on-error: true
+        run: ./dev vet-go
+
+      - name: Guard Go
+        continue-on-error: true
+        run: ./dev guard-go
+
+  rust-linux:
+    runs-on: ubuntu-latest
+    services: *common_services
+    defaults:
+      run:
+        shell: bash
+        working-directory: ${{ github.workspace }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: false
+          fetch-depth: 0
+
+      - name: Init submodules (sparse Boost)
+        run: |
+          python3 - <<'PY'
+          import sys
+          from devtool.commands.common import base_env
+          from devtool.commands.ops import cpp as cpp_ops
+          sys.exit(cpp_ops.git_submodules(base_env()) or 0)
+          PY
+
+      - name: Start Pulsar (standalone -nss)
+        run: |
+          docker rm -f pulsar || true
+          docker run -d --name pulsar \
+            -p ${PULSAR_BROKER_PORT}:${PULSAR_BROKER_PORT} -p ${PULSAR_ADMIN_PORT}:${PULSAR_ADMIN_PORT} \
+            apachepulsar/pulsar:3.2.0 \
+            bin/pulsar standalone -nss
+
+      - name: Wait for postgres/redis/pulsar
+        run: |
+          for i in {1..40}; do
+            (echo > /dev/tcp/127.0.0.1/${PGPORT}) && (echo > /dev/tcp/127.0.0.1/${REDIS_PORT}) && (echo > /dev/tcp/127.0.0.1/${PULSAR_ADMIN_PORT}) && exit 0
+            sleep 2
+          done
+          echo "services not ready" >&2
+          exit 1
+
+      - name: Install Rust toolchain
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+          rustup component add rustfmt clippy
+
+      - name: Setup Rust
+        run: ./dev setup-rust
+
+      - name: Format Rust
+        run: ./dev fmt-rust
+
+      - name: Build Rust
+        run: ./dev build-rust
+
+      - name: Test Rust
+        run: ./dev test-rust
+
+      - name: Coverage Rust
+        run: ./dev coverage-rust
+
+      - name: Vet Rust
+        continue-on-error: true
+        run: ./dev vet-rust
+
+      - name: Guard Rust
+        continue-on-error: true
+        run: ./dev guard-rust

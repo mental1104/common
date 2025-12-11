@@ -4,11 +4,34 @@ on:
   push:
   pull_request:
 
+env:
+  PYTHONPATH: ${{ github.workspace }}
+  DATABASE_URL: postgresql://test:test@localhost:5432/app
+  REDIS_URL: redis://localhost:6379/0
+  PGUSER: test
+  PGPASSWORD: test
+  PGDATABASE: app
+  PGHOST: localhost
+  PGPORT: "5432"
+  REDIS_HOST: localhost
+  REDIS_PORT: "6379"
+  PULSAR_HOST: localhost
+  PULSAR_BROKER_PORT: "6650"
+  PULSAR_ADMIN_PORT: "8080"
+  PULSAR_TOKEN: ""
+  PULSAR_SCHEMA_PATH: "/tmp/pulsar/schema"
+  PULSAR_DATA_PATH: "/tmp/pulsar/data"
+  CLICKHOUSE_USER: default
+  CLICKHOUSE_HOST: localhost
+  CLICKHOUSE_PORT: "8123"
+  CLICKHOUSE_DATABASE: default
+  MONGO_HOST: localhost
+  MONGO_PORT: "27017"
+  GOPROXY: "direct"
+
 jobs:
   python-macos:
     runs-on: macos-latest
-    env:
-      PYTHONPATH: ${{ github.workspace }}
     defaults:
       run:
         shell: bash
@@ -70,7 +93,6 @@ jobs:
     env:
       CMAKE_BUILD_PARALLEL_LEVEL: 4
       GCOV: "llvm-cov gcov"
-      PYTHONPATH: ${{ github.workspace }}
     defaults:
       run:
         shell: bash
@@ -119,3 +141,104 @@ jobs:
       - name: Guard C++
         continue-on-error: true
         run: ./dev guard-cpp
+
+  go-macos:
+    runs-on: macos-latest
+    defaults:
+      run:
+        shell: bash
+        working-directory: ${{ github.workspace }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: false
+          fetch-depth: 0
+
+      - name: Init submodules (sparse Boost)
+        run: |
+          python3 - <<'PY'
+          import sys
+          from devtool.commands.common import base_env
+          from devtool.commands.ops import cpp as cpp_ops
+          sys.exit(cpp_ops.git_submodules(base_env()) or 0)
+          PY
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+
+      - name: Setup Go deps
+        run: ./dev setup-go
+
+      - name: Format Go
+        run: ./dev fmt-go
+
+      - name: Build Go
+        run: ./dev build-go
+
+      - name: Test Go
+        run: ./dev test-go
+
+      - name: Coverage Go
+        run: ./dev coverage-go
+
+      - name: Vet Go
+        continue-on-error: true
+        run: ./dev vet-go
+
+      - name: Guard Go
+        continue-on-error: true
+        run: ./dev guard-go
+
+  rust-macos:
+    runs-on: macos-latest
+    defaults:
+      run:
+        shell: bash
+        working-directory: ${{ github.workspace }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: false
+          fetch-depth: 0
+
+      - name: Init submodules (sparse Boost)
+        run: |
+          python3 - <<'PY'
+          import sys
+          from devtool.commands.common import base_env
+          from devtool.commands.ops import cpp as cpp_ops
+          sys.exit(cpp_ops.git_submodules(base_env()) or 0)
+          PY
+
+      - name: Install Rust toolchain
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+          rustup component add rustfmt clippy
+
+      - name: Setup Rust
+        run: ./dev setup-rust
+
+      - name: Format Rust
+        run: ./dev fmt-rust
+
+      - name: Build Rust
+        run: ./dev build-rust
+
+      - name: Test Rust
+        run: ./dev test-rust
+
+      - name: Coverage Rust
+        run: ./dev coverage-rust
+
+      - name: Vet Rust
+        continue-on-error: true
+        run: ./dev vet-rust
+
+      - name: Guard Rust
+        continue-on-error: true
+        run: ./dev guard-rust
