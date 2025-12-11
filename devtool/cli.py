@@ -10,14 +10,18 @@ import traceback
 from pathlib import Path
 from typing import Iterable
 
-from devtool.context import ROOT
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from devtool.context import ROOT as CTX_ROOT
 
 from devtool.commands import CONFIGURATORS
 
 
 _SKIP_FILES = {
-    (ROOT / "devtool" / "context.py").resolve(),
-    (ROOT / "devtool" / "commands" / "common.py").resolve(),
+    (CTX_ROOT / "devtool" / "context.py").resolve(),
+    (CTX_ROOT / "devtool" / "commands" / "common.py").resolve(),
 }
 
 
@@ -37,7 +41,7 @@ def _subprocess_location(tb) -> str:
         if path in _SKIP_FILES:
             continue
         try:
-            rel = path.relative_to(ROOT)
+            rel = path.relative_to(CTX_ROOT)
         except ValueError:
             continue
         chain.append(f"{rel}:{frame.lineno}({frame.name})")

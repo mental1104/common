@@ -9,6 +9,10 @@ jobs:
     runs-on: macos-latest
     env:
       PYTHONPATH: ${{ github.workspace }}
+    defaults:
+      run:
+        shell: bash
+        working-directory: ${{ github.workspace }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -53,6 +57,10 @@ jobs:
       CMAKE_BUILD_PARALLEL_LEVEL: 4
       GCOV: "llvm-cov gcov"
       PYTHONPATH: ${{ github.workspace }}
+    defaults:
+      run:
+        shell: bash
+        working-directory: ${{ github.workspace }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
