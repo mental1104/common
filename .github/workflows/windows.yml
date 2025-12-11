@@ -1,0 +1,202 @@
+name: Windows
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  python-windows:
+    runs-on: windows-latest
+    env:
+      PYTHON: python
+      PYTHONPATH: ${{ github.workspace }}
+      PYTHONUTF8: "1"
+      PYTHONIOENCODING: "utf-8"
+    defaults:
+      run:
+        shell: pwsh
+        working-directory: ${{ github.workspace }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: false
+          fetch-depth: 0
+
+      - name: Init submodules (sparse Boost)
+        run: python -c "import sys;from devtool.commands.common import base_env;from devtool.commands.ops import cpp as cpp_ops;sys.exit(cpp_ops.git_submodules(base_env()) or 0)"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~\AppData\Local\pip\Cache
+          key: pip-${{ runner.os }}-${{ hashFiles('python/requirements.txt') }}
+          restore-keys: |
+            pip-${{ runner.os }}-
+
+      - name: Setup Python
+        run: python -m devtool.cli setup-python
+
+      - name: Format Python
+        run: python -m devtool.cli fmt-python
+
+      - name: Build Python
+        run: python -m devtool.cli build-python
+
+      - name: Test Python
+        run: python -m devtool.cli test-python
+
+      - name: Coverage Python
+        run: python -m devtool.cli coverage-python
+
+      - name: Vet Python
+        continue-on-error: true
+        run: python -m devtool.cli vet-python
+
+      - name: Guard Python
+        continue-on-error: true
+        run: python -m devtool.cli guard-python
+
+  go-windows:
+    runs-on: windows-latest
+    env:
+      PYTHON: python
+    defaults:
+      run:
+        shell: pwsh
+        working-directory: ${{ github.workspace }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: false
+          fetch-depth: 0
+
+      - name: Init submodules (sparse Boost)
+        run: python -c "import sys;from devtool.commands.common import base_env;from devtool.commands.ops import cpp as cpp_ops;sys.exit(cpp_ops.git_submodules(base_env()) or 0)"
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+
+      - name: Setup Go deps
+        run: python -m devtool.cli setup-go
+
+      - name: Format Go
+        run: python -m devtool.cli fmt-go
+
+      - name: Build Go
+        run: python -m devtool.cli build-go
+
+      - name: Test Go
+        run: python -m devtool.cli test-go
+
+      - name: Coverage Go
+        run: python -m devtool.cli coverage-go
+
+      - name: Vet Go
+        continue-on-error: true
+        run: python -m devtool.cli vet-go
+
+      - name: Guard Go
+        continue-on-error: true
+        run: python -m devtool.cli guard-go
+
+  rust-windows:
+    runs-on: windows-latest
+    env:
+      PYTHON: python
+    defaults:
+      run:
+        shell: pwsh
+        working-directory: ${{ github.workspace }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: false
+          fetch-depth: 0
+
+      - name: Init submodules (sparse Boost)
+        run: python -c "import sys;from devtool.commands.common import base_env;from devtool.commands.ops import cpp as cpp_ops;sys.exit(cpp_ops.git_submodules(base_env()) or 0)"
+
+      - name: Install Rust toolchain
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+          rustup component add rustfmt clippy
+
+      - name: Setup Rust
+        run: python -m devtool.cli setup-rust
+
+      - name: Format Rust
+        run: python -m devtool.cli fmt-rust
+
+      - name: Build Rust
+        run: python -m devtool.cli build-rust
+
+      - name: Test Rust
+        run: python -m devtool.cli test-rust
+
+      - name: Coverage Rust
+        run: python -m devtool.cli coverage-rust
+
+      - name: Vet Rust
+        continue-on-error: true
+        run: python -m devtool.cli vet-rust
+
+      - name: Guard Rust
+        continue-on-error: true
+        run: python -m devtool.cli guard-rust
+
+  cpp-windows:
+    runs-on: windows-latest
+    env:
+      PYTHON: python
+      CMAKE_BUILD_PARALLEL_LEVEL: 4
+      PYTHONPATH: ${{ github.workspace }}
+      CMAKE_GENERATOR: "Visual Studio 17 2022"
+      PYTHONUTF8: "1"
+      PYTHONIOENCODING: "utf-8"
+    defaults:
+      run:
+        shell: pwsh
+        working-directory: ${{ github.workspace }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: false
+          fetch-depth: 0
+
+      - name: Init submodules (sparse Boost)
+        run: python -c "import sys;from devtool.commands.common import base_env;from devtool.commands.ops import cpp as cpp_ops;sys.exit(cpp_ops.git_submodules(base_env()) or 0)"
+
+      - name: Setup C++
+        run: python -m devtool.cli setup-cpp --config Debug
+
+      - name: Build export C++ layer
+        run: python -m devtool.cli build-export-cpp --config Debug
+
+      - name: Format C++
+        run: python -m devtool.cli fmt-cpp
+
+      - name: Build C++
+        run: python -m devtool.cli build-cpp --config Debug
+
+      - name: Test C++
+        run: python -m devtool.cli test-cpp
+
+      - name: Vet C++
+        continue-on-error: true
+        run: python -m devtool.cli vet-cpp
+
+      - name: Guard C++
+        continue-on-error: true
+        run: python -m devtool.cli guard-cpp

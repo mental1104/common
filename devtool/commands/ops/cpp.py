@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import platform
 import re
 import shutil
 import subprocess
@@ -205,9 +206,14 @@ def build_submodules(env: Mapping[str, str]) -> None:
     wanted = _wanted_list(env, paths)
     extra_cmake_args = {
         "cpp/lib/cJSON": ["-DENABLE_CUSTOM_COMPILER_FLAGS=OFF"],
+        "cpp/lib/hiredis": ["-DDISABLE_TESTS=ON"],
     }
+    is_windows = platform.system().lower() == "windows"
     for rel in paths:
         if rel not in wanted or rel in skip:
+            continue
+        if is_windows and rel in {"cpp/lib/redis-plus-plus", "cpp/lib/hiredis"}:
+            print(f"[warn] Skip {rel} on Windows (not supported)")
             continue
         path = ROOT / rel
         if not path.exists() or not (path / "CMakeLists.txt").exists():
@@ -233,6 +239,8 @@ def build_submodules(env: Mapping[str, str]) -> None:
 def configure(env: Mapping[str, str]) -> None:
     ensure_dir(CPP_BUILD_DIR)
     extra = []
+    if platform.system().lower() == "windows":
+        extra += ["-DENABLE_COVERAGE=OFF", "-DCOVERAGE=OFF"]
     venv_py = env.get("PY_VENV_PYTHON")
     if venv_py and Path(venv_py).exists():
         try:
@@ -264,11 +272,16 @@ def build(env: Mapping[str, str]) -> None:
 def test(env: Mapping[str, str], *, file_pattern: str | None, filter_expr: str | None) -> None:
     env_np = strip_proxies(env)
     cache = CPP_BUILD_DIR / "CMakeCache.txt"
+    is_multi_config = False
     if cache.exists():
         for line in cache.read_text().splitlines():
+            if line.startswith("CMAKE_CONFIGURATION_TYPES:STRING="):
+                is_multi_config = True
             if line.startswith("CMAKE_BUILD_TYPE:STRING=") and "Debug" not in line:
                 raise SystemExit(f"[error] {CPP_BUILD_DIR} 不是 Debug 构建，请先 ./dev build cpp --config Debug")
     args = [env_np["CTEST"], "--output-on-failure", "-LE", "bench", "-j", env_np["JOBS"]]
+    if is_multi_config:
+        args += ["-C", env_np["CPP_BUILD_TYPE"]]
     if env_np.get("CTEST_V"):
         args.append(env_np["CTEST_V"])
     if file_pattern:
@@ -280,6 +293,11 @@ def test(env: Mapping[str, str], *, file_pattern: str | None, filter_expr: str |
 
 
 def coverage(env: Mapping[str, str]) -> None:
+    import platform
+
+    if platform.system().lower() == "windows":
+        print("[info] coverage-cpp not supported on Windows (gcov/lcov unavailable); skipping")
+        return
     env_np = strip_proxies(env)
     run([env_np["CTEST"], "--output-on-failure", "-LE", "bench"], env=env_np, cwd=CPP_BUILD_DIR)
     gcovr_bin = shutil.which("gcovr")
