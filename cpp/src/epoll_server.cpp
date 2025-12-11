@@ -11,6 +11,10 @@
 #elif defined(__APPLE__)
 #include <sys/event.h>
 #include <sys/time.h>
+#elif defined(_WIN32)
+#include <winsock2.h>
+#include <windows.h>
+#pragma message("epoll_server: stubbed on Windows; operations are no-ops")
 #else
 #error "Unsupported platform: need Linux (epoll) or macOS (kqueue)"
 #endif
@@ -208,6 +212,22 @@ void EpollServer::event_loop() {
   while (true)
     (void)dispatch_once(-1);
 }
+
+#elif defined(_WIN32)
+
+// -------------------- Windows: stub implementations --------------------
+EpollServer::EpollServer() : epoll_fd_(-1) {}
+EpollServer::~EpollServer() = default;
+
+void EpollServer::add_fd(int, uint32_t, EventCallback) {
+  throw std::runtime_error("EpollServer not supported on Windows");
+}
+void EpollServer::modify_fd(int, uint32_t) {
+  throw std::runtime_error("EpollServer not supported on Windows");
+}
+void EpollServer::remove_fd(int) {}
+int EpollServer::dispatch_once(int) { return 0; }
+void EpollServer::event_loop() { throw std::runtime_error("EpollServer not supported on Windows"); }
 
 #endif // platform
 

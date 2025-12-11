@@ -4,8 +4,15 @@
  * @LastEditors: mental1104 mental1104@gmail.com
  * @LastEditTime: 2025-11-09 14:09:58
  */
-#include "mental1104/net/epoll_server.h"
 #include <gtest/gtest.h>
+
+#ifdef _WIN32
+TEST(EpollServerTest, SkipOnWindows) {
+  GTEST_SKIP() << "EpollServer not supported on Windows";
+}
+#else
+
+#include "mental1104/net/epoll_server.h"
 
 #include <atomic>
 #include <sys/types.h>
@@ -82,3 +89,5 @@ TEST(EpollServerTest, RemoveUnregisteredFdIsNoop) {
   // 未注册直接移除，应该只是输出告警，不抛异常
   EXPECT_NO_THROW(srv.remove_fd(123456)); // 一个明显不合法/未注册的 fd
 }
+
+#endif // _WIN32
