@@ -71,7 +71,8 @@ def _install_requirements(env: Mapping[str, str]) -> None:
     replaced = False
     if "file://../export/python" in text:
         bak.write_text(text)
-        req_file.write_text(text.replace("file://../export/python", f"file://{export_dir.resolve()}"))
+        export_url = export_dir.resolve().as_uri()
+        req_file.write_text(text.replace("file://../export/python", export_url))
         replaced = True
     try:
         run([env["PY_VENV_PIP"], "install", "--no-build-isolation", "-r", str(req_file)], env=env, cwd=PY_DIR)
