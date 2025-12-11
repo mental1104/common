@@ -13,7 +13,6 @@ pytest-asyncio
 pytest-mock
 pytest-benchmark
 pytest-leaks ; sys_platform != "win32"
-memray
 memray ; sys_platform != "win32"
 autopep8
 coverage
