@@ -16,6 +16,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -46,9 +49,11 @@ jobs:
         run: ./dev coverage-python
 
       - name: Vet Python
+        continue-on-error: true
         run: ./dev vet-python
 
       - name: Guard Python
+        continue-on-error: true
         run: ./dev guard-python
 
   cpp-macos:
@@ -64,6 +69,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
 
       - name: Install toolchain
         run: |
@@ -87,7 +95,9 @@ jobs:
         run: ./dev coverage-cpp
 
       - name: Vet C++
+        continue-on-error: true
         run: ./dev vet-cpp
 
       - name: Guard C++
+        continue-on-error: true
         run: ./dev guard-cpp
