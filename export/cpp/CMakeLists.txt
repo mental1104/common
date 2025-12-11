@@ -21,6 +21,14 @@ if(EXISTS "${_cjson_src}")
     list(APPEND EXPORT_JSON_SRCS "${_cjson_src}")
     set_source_files_properties("${_cjson_src}" PROPERTIES LANGUAGE C)
 endif()
+# Ensure cJSON headers are reachable even if include paths differ across platforms
+set(_cjson_hdr "${THIRDROOT}/cJSON/cJSON.h")
+set(_cjson_overlay "${CMAKE_CURRENT_BINARY_DIR}/cjson_overlay")
+if(EXISTS "${_cjson_hdr}")
+    file(MAKE_DIRECTORY "${_cjson_overlay}")
+    file(COPY "${_cjson_hdr}" DESTINATION "${_cjson_overlay}")
+    list(APPEND THIRD_INCLUDE_DIRS "${_cjson_overlay}")
+endif()
 
 add_library(export_json SHARED ${EXPORT_JSON_SRCS})
 
