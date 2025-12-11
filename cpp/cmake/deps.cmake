@@ -87,6 +87,8 @@ macro(m1104_collect_thirdparty_paths)
     "${THIRDROOT}/*/build/include/*"
     "${THIRDROOT}/*/include"
     "${THIRDROOT}/*/include/*"
+    "${THIRDROOT}/boost/libs/*/include"
+    "${THIRDROOT}/boost/libs/*/include/*"
   )
   foreach(increl ${THIRD_INC_CANDIDATES})
     set(incdir "${CMAKE_SOURCE_DIR}/${increl}")
