@@ -17,8 +17,17 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          submodules: recursive
+          submodules: false
           fetch-depth: 0
+
+      - name: Init submodules (sparse Boost)
+        run: |
+          python3 - <<'PY'
+          import sys
+          from devtool.commands.common import base_env
+          from devtool.commands.ops import cpp as cpp_ops
+          sys.exit(cpp_ops.git_submodules(base_env()) or 0)
+          PY
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -70,13 +79,23 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          submodules: recursive
+          submodules: false
           fetch-depth: 0
+
+      - name: Init submodules (sparse Boost)
+        run: |
+          python3 - <<'PY'
+          import sys
+          from devtool.commands.common import base_env
+          from devtool.commands.ops import cpp as cpp_ops
+          sys.exit(cpp_ops.git_submodules(base_env()) or 0)
+          PY
 
       - name: Install toolchain
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential cmake ninja-build clang-format clang-tidy gcovr lcov
+          sudo apt-get install -y build-essential cmake ninja-build clang-format clang-tidy gcovr lcov \
+            libmpfr-dev libgmp-dev
 
       - name: Setup C++
         run: ./dev setup-cpp --config Debug
