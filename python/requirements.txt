@@ -3,8 +3,8 @@ psycopg2-binary>=2.9
 sqlalchemy 
 requests 
 redis>=5.0 
-pulsar-client>=2.10 
-pulsar-client[avro]
+pulsar-client>=2.10 ; sys_platform != "win32"
+pulsar-client[avro] ; sys_platform != "win32"
 pycryptodome 
 aiohttp 
 genanki
