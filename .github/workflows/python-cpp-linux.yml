@@ -51,15 +51,6 @@ jobs:
         options: >-
           --health-cmd="redis-cli ping"
           --health-interval=5s --health-timeout=3s --health-retries=5
-      pulsar:
-        image: apachepulsar/pulsar:3.2.0
-        command: [ "bin/pulsar", "standalone", "-nss" ]
-        ports:
-          - 6650:6650
-          - 8080:8080
-        options: >-
-          --health-cmd="curl -sf http://localhost:8080/admin/v2/clusters"
-          --health-interval=10s --health-timeout=5s --health-retries=12
     defaults:
       run:
         shell: bash
@@ -79,6 +70,14 @@ jobs:
           from devtool.commands.ops import cpp as cpp_ops
           sys.exit(cpp_ops.git_submodules(base_env()) or 0)
           PY
+
+      - name: Start Pulsar (standalone -nss)
+        run: |
+          docker rm -f pulsar || true
+          docker run -d --name pulsar \
+            -p 6650:6650 -p 8080:8080 \
+            apachepulsar/pulsar:3.2.0 \
+            bin/pulsar standalone -nss
 
       - name: Wait for postgres/redis/pulsar
         run: |
@@ -146,15 +145,6 @@ jobs:
         options: >-
           --health-cmd="redis-cli ping"
           --health-interval=5s --health-timeout=3s --health-retries=5
-      pulsar:
-        image: apachepulsar/pulsar:3.2.0
-        command: [ "bin/pulsar", "standalone", "-nss" ]
-        ports:
-          - 6650:6650
-          - 8080:8080
-        options: >-
-          --health-cmd="curl -sf http://localhost:8080/admin/v2/clusters"
-          --health-interval=10s --health-timeout=5s --health-retries=12
     env:
       CMAKE_BUILD_PARALLEL_LEVEL: 4
       GCOV: gcov
@@ -177,6 +167,14 @@ jobs:
           from devtool.commands.ops import cpp as cpp_ops
           sys.exit(cpp_ops.git_submodules(base_env()) or 0)
           PY
+
+      - name: Start Pulsar (standalone -nss)
+        run: |
+          docker rm -f pulsar || true
+          docker run -d --name pulsar \
+            -p 6650:6650 -p 8080:8080 \
+            apachepulsar/pulsar:3.2.0 \
+            bin/pulsar standalone -nss
 
       - name: Wait for postgres/redis/pulsar
         run: |
