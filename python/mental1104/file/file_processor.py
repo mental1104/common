@@ -22,19 +22,20 @@ def file_iterator(process_function):
     """
     @wraps(process_function)
     def wrapper(input_path):
+        norm_input = os.path.normpath(input_path)
         # 如果输入路径是文件，直接处理该文件
-        if os.path.isfile(input_path):
-            process_function(input_path)  # 传递文件的完整路径
+        if os.path.isfile(norm_input):
+            process_function(norm_input)  # 传递文件的完整路径
         # 如果输入路径是目录，递归遍历该目录下的所有文件
-        elif os.path.isdir(input_path):
-            process_directory(input_path)
+        elif os.path.isdir(norm_input):
+            process_directory(norm_input)
         else:
             raise ValueError(f"输入路径 '{input_path}' 既不是文件也不是目录。")
 
     def process_directory(directory):
         """递归处理目录中的所有文件"""
         for entry in os.listdir(directory):
-            full_path = os.path.join(directory, entry)
+            full_path = os.path.normpath(os.path.join(directory, entry))
             if os.path.isdir(full_path):
                 # 如果是目录，递归调用
                 process_directory(full_path)

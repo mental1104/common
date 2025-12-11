@@ -23,6 +23,16 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 message(STATUS "CXX_STANDARD = ${CMAKE_CXX_STANDARD}")
 
+# 统一使用动态运行时（/MD /MDd），避免与 gtest 等静态运行时冲突
+if (MSVC)
+  set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
+endif()
+
+# Ensure __cplusplus reports the correct value on MSVC (needed for C++20 feature checks)
+if (MSVC)
+  add_compile_options(/Zc:__cplusplus)
+endif()
+
 # 不同构建类型的默认附加编译参数：
 #   -Wall -Wextra：打开常用告警，便于发现问题
 #   -g：生成调试符号，便于调试/诊断
@@ -31,10 +41,17 @@ message(STATUS "CXX_STANDARD = ${CMAKE_CXX_STANDARD}")
 #   -DNDEBUG：禁用断言与 debug 分支
 # Release 与 RelWithDebInfo 仅差一个 -g，都是 -O2+DNDEBUG；想兼顾优化和调试符号时用 RelWithDebInfo。
 # 跑覆盖率时若继续使用 -O2/-DNDEBUG，编译器会删除/折叠分支，导致 gcov/llvm-cov 统计缺失甚至出错，通常需改用低优化并显式加 --coverage。
-set(CMAKE_CXX_FLAGS_DEBUG          "${CMAKE_CXX_FLAGS_DEBUG} -Wall -Wextra -g")
-set(CMAKE_CXX_FLAGS_RELEASE        "${CMAKE_CXX_FLAGS_RELEASE} -O2 -DNDEBUG")
-set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS_RELWITHDEBINFO} -O2 -g -DNDEBUG")
-set(CMAKE_CXX_FLAGS_MINSIZEREL     "${CMAKE_CXX_FLAGS_MINSIZEREL} -Os -DNDEBUG")
+if(MSVC)
+  set(CMAKE_CXX_FLAGS_DEBUG          "${CMAKE_CXX_FLAGS_DEBUG} /W4")
+  set(CMAKE_CXX_FLAGS_RELEASE        "${CMAKE_CXX_FLAGS_RELEASE} /O2 /DNDEBUG")
+  set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS_RELWITHDEBINFO} /O2 /Zi /DNDEBUG")
+  set(CMAKE_CXX_FLAGS_MINSIZEREL     "${CMAKE_CXX_FLAGS_MINSIZEREL} /Os /DNDEBUG")
+else()
+  set(CMAKE_CXX_FLAGS_DEBUG          "${CMAKE_CXX_FLAGS_DEBUG} -Wall -Wextra -g")
+  set(CMAKE_CXX_FLAGS_RELEASE        "${CMAKE_CXX_FLAGS_RELEASE} -O2 -DNDEBUG")
+  set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS_RELWITHDEBINFO} -O2 -g -DNDEBUG")
+  set(CMAKE_CXX_FLAGS_MINSIZEREL     "${CMAKE_CXX_FLAGS_MINSIZEREL} -Os -DNDEBUG")
+endif()
 
 # 将项目头文件根目录添加到全局 include 搜索路径
 # （以 INTERFACE/target_include_directories 为佳，但这里全局添加可快速让所有 target 可见）

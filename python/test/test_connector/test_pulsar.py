@@ -1,8 +1,18 @@
 import os
 import pytest
 import requests
-import pulsar
-from mental1104.connector.pulsar import PulsarConnector, PulsarEnvironment, Consumer, Producer, PulsarAdminHelper
+import pytest
+
+pulsar = pytest.importorskip(
+    "pulsar", reason="pulsar-client not available on this platform"
+)
+from mental1104.connector.pulsar import (
+    PulsarConnector,
+    PulsarEnvironment,
+    Consumer,
+    Producer,
+    PulsarAdminHelper,
+)
 
 
 @pytest.fixture(autouse=True)

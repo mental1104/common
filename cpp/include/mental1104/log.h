@@ -231,6 +231,19 @@ void format_sequence(const Container &c, bool show_info, std::ostream &out,
 }
 
 #if M1104_HAS_CXX17
+
+template <typename Map> auto sorted_map_items(const Map &m) {
+  using Key = typename Map::key_type;
+  using Value = typename Map::mapped_type;
+  std::vector<std::pair<Key, const Value *>> items;
+  items.reserve(m.size());
+  for (const auto &kv : m)
+    items.emplace_back(kv.first, &kv.second);
+  std::sort(items.begin(), items.end(),
+            [](const auto &a, const auto &b) { return a.first < b.first; });
+  return items;
+}
+
 // indent_width 允许上层控制缩进宽度（默认 4），避免魔数散布。
 template <typename K, typename V, typename SourceLocation>
 void format_map_entry(const K &key, const V &value, bool is_first_element,
@@ -243,8 +256,8 @@ void format_map_entry(const K &key, const V &value, bool is_first_element,
   if constexpr (is_map_like<V>::value) {
     out << "{\n";
     bool nested_first = true;
-    for (const auto &[nested_key, nested_value] : value) {
-      format_map_entry(nested_key, nested_value, nested_first, indent_level + 1,
+    for (const auto &kv : sorted_map_items(value)) {
+      format_map_entry(kv.first, *kv.second, nested_first, indent_level + 1,
                        out, loc, indent_width);
       nested_first = false;
     }
@@ -260,8 +273,8 @@ void format_map_like(const std::map<K, V> &m, bool show_info, std::ostream &out,
   maybe_print_info(m, show_info, out, loc);
   out << "{\n";
   bool first = true;
-  for (const auto &[key, value] : m) {
-    format_map_entry(key, value, first, 1, out, loc, indent_width);
+  for (const auto &kv : sorted_map_items(m)) {
+    format_map_entry(kv.first, *kv.second, first, 1, out, loc, indent_width);
     first = false;
   }
   out << "\n}" << std::endl;
@@ -274,8 +287,8 @@ void format_map_like(const std::unordered_map<K, V> &m, bool show_info,
   maybe_print_info(m, show_info, out, loc);
   out << "{\n";
   bool first = true;
-  for (const auto &[key, value] : m) {
-    format_map_entry(key, value, first, 1, out, loc, indent_width);
+  for (const auto &kv : sorted_map_items(m)) {
+    format_map_entry(kv.first, *kv.second, first, 1, out, loc, indent_width);
     first = false;
   }
   out << "\n}" << std::endl;
@@ -332,9 +345,15 @@ void format_map_like(const std::unordered_map<K, V> &m, bool show_info,
                      int indent_width = 4) {
   maybe_print_info(m, show_info, out, loc);
   out << "{\n";
+  std::vector<std::pair<K, const V *>> items;
+  items.reserve(m.size());
+  for (const auto &kv : m)
+    items.emplace_back(kv.first, &kv.second);
+  std::sort(items.begin(), items.end(),
+            [](const auto &a, const auto &b) { return a.first < b.first; });
   bool first = true;
-  for (const auto &kv : m) {
-    format_map_entry(kv.first, kv.second, first, 1, out, loc, indent_width);
+  for (const auto &kv : items) {
+    format_map_entry(kv.first, *kv.second, first, 1, out, loc, indent_width);
     first = false;
   }
   out << "\n}" << std::endl;

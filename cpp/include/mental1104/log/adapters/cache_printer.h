@@ -40,8 +40,33 @@ template <typename Ret, typename... Args>
 std::string format_value(const LFUCache<Ret, Args...> &cache) {
   std::ostringstream os;
   os << "{\n";
+  const auto &entries = cache.debug_lfu_entries();
+
+  // 将输出顺序固定为：频率降序，其次按 key 升序，避免 unordered_map
+  // 在不同平台/编译器上的迭代顺序差异导致日志不稳定。
+  using EntriesType = std::decay_t<decltype(entries)>;
+  using EntryRef = std::reference_wrapper<
+      const typename EntriesType::value_type>; // value_type = pair<key, entry>
+  std::vector<EntryRef> items;
+  items.reserve(entries.size());
+  for (const auto &kv : entries) {
+    items.emplace_back(kv);
+  }
+
+  std::sort(items.begin(), items.end(), [](const auto &lhs_ref, const auto &rhs_ref) {
+    const auto &lhs = lhs_ref.get();
+    const auto &rhs = rhs_ref.get();
+    if (lhs.second.frequency != rhs.second.frequency) {
+      return lhs.second.frequency > rhs.second.frequency; // 频率高的优先
+    }
+    return lhs.first < rhs.first; // 同频率按 key 递增
+  });
+
   bool first_entry = true;
-  for (const auto &[key, entry] : cache.debug_lfu_entries()) {
+  for (const auto &kv_ref : items) {
+    const auto &key = kv_ref.get().first;
+    const auto &entry = kv_ref.get().second;
+
     if (!first_entry) {
       os << ",\n";
     }

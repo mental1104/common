@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import platform
 import shutil
 from pathlib import Path
 from typing import Iterable, Mapping
@@ -38,7 +39,20 @@ def _ensure_venv(env: Mapping[str, str]) -> Mapping[str, str]:
 
 
 def _upgrade_build_tools(env: Mapping[str, str]) -> None:
-    run([env["PY_VENV_PIP"], "install", "--no-build-isolation", "--upgrade", "pip", "setuptools", "wheel"], env=env)
+    run(
+        [
+            env["PY_VENV_PYTHON"],
+            "-m",
+            "pip",
+            "install",
+            "--no-build-isolation",
+            "--upgrade",
+            "pip",
+            "setuptools",
+            "wheel",
+        ],
+        env=env,
+    )
 
 
 def _install_export_layer(env: Mapping[str, str]) -> None:
@@ -58,15 +72,33 @@ def _install_requirements(env: Mapping[str, str]) -> None:
     replaced = False
     if "file://../export/python" in text:
         bak.write_text(text)
-        req_file.write_text(text.replace("file://../export/python", f"file://{export_dir.resolve()}"))
+        export_url = export_dir.resolve().as_uri()
+        req_file.write_text(text.replace("file://../export/python", export_url))
         replaced = True
+    install_path = req_file
+    tmp_req = None
+    if platform.system().lower() == "windows":
+        lines = req_file.read_text().splitlines()
+        filtered = []
+        for line in lines:
+            stripped = line.strip()
+            if stripped.startswith("pulsar-client"):
+                # pulsar-client has no Windows wheel; skip to keep CI green
+                continue
+            filtered.append(line)
+        if len(filtered) != len(lines):
+            tmp_req = req_file.with_suffix(req_file.suffix + ".win.tmp")
+            tmp_req.write_text("\n".join(filtered) + "\n")
+            install_path = tmp_req
     try:
-        run([env["PY_VENV_PIP"], "install", "--no-build-isolation", "-r", str(req_file)], env=env, cwd=PY_DIR)
+        run([env["PY_VENV_PIP"], "install", "--no-build-isolation", "-r", str(install_path)], env=env, cwd=PY_DIR)
     finally:
         if replaced:
             req_file.write_text(text)
             if bak.exists():
                 bak.unlink(missing_ok=True)
+        if tmp_req and tmp_req.exists():
+            tmp_req.unlink(missing_ok=True)
 
 
 def _generate_init(env: Mapping[str, str]) -> None:

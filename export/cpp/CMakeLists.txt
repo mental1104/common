@@ -53,6 +53,27 @@ foreach(_d
     endif()
 endforeach()
 
+# Ensure cJSON headers are reachable even if include paths differ across platforms
+set(_cjson_hdr "${THIRDROOT}/cJSON/cJSON.h")
+set(_cjson_inc_candidates
+    "${THIRDROOT}/cJSON"
+    "${THIRDROOT}/cJSON/build"
+    "${THIRDROOT}/cJSON/build/include"
+)
+foreach(_inc IN LISTS _cjson_inc_candidates)
+    if(EXISTS "${_inc}")
+        list(APPEND THIRD_INCLUDE_DIRS "${_inc}")
+    endif()
+endforeach()
+if(EXISTS "${_cjson_hdr}")
+    set(_cjson_overlay "${CMAKE_CURRENT_BINARY_DIR}/cjson_overlay")
+    file(MAKE_DIRECTORY "${_cjson_overlay}")
+    file(COPY "${_cjson_hdr}" DESTINATION "${_cjson_overlay}")
+    list(APPEND THIRD_INCLUDE_DIRS "${_cjson_overlay}")
+    # also attach overlay directly in case list is pruned by generator nuances
+    target_include_directories(export_json PUBLIC "${_cjson_overlay}")
+endif()
+
 list(REMOVE_DUPLICATES THIRD_INCLUDE_DIRS)
 target_include_directories(export_json PUBLIC ${THIRD_INCLUDE_DIRS})
 

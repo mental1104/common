@@ -2,6 +2,23 @@
 
 Python + C++ 混合工程，使用统一的 `dev` 命令驱动（macOS/Linux：`./dev`，Windows：`dev`）。子命令按语言拆分，后续扩展只需新增文件。
 
+## 本地依赖（最小子集）
+
+参考 CI workflow，在一台干净主机上跑 `dev` 系列命令前需要先准备的可执行文件/工具：
+
+- 通用：`git`、Python 3.12（含 `pip` 和 `venv`），可执行 `bash`（Windows 使用 PowerShell 调用 `python -m devtool.cli ...` 也可直接运行 `dev`），如需启动依赖服务请安装 Docker/Docker Desktop。
+- Ubuntu（apt）：
+  - 构建/测试 C++：`sudo apt-get install -y build-essential cmake ninja-build clang-format clang-tidy gcovr lcov libmpfr-dev libgmp-dev`
+  - 其他语言：Go 1.22（官方 tar.gz 或包管理器）、Rust（`rustup` 安装 stable 并添加 `rustfmt`/`clippy`）。
+- macOS（Homebrew）：
+  - `brew install cmake llvm ninja gcovr lcov mpfr gmp`，并将 `$(brew --prefix llvm)/bin` 置入 PATH（匹配 CI 的 `GCOV="llvm-cov gcov"`）。
+  - Go 1.22：`brew install go`；Rust：`rustup toolchain install stable --profile minimal && rustup component add rustfmt clippy`。
+- Windows：
+  - Python 3.12（PATH 中的 `python`），Git。
+  - Visual Studio 2022 Build Tools：安装 “使用 C++ 的桌面开发” 工作负载（包含 MSVC、CMake、Ninja 可选）以满足 `CMAKE_GENERATOR="Visual Studio 17 2022"`。
+  - Go 1.22（官方 MSI）；Rust：`rustup` stable 并添加 `rustfmt`/`clippy`。
+  - 如需启动依赖服务，安装 Docker Desktop。
+
 ## 顶层入口（TL;DR）
 
 ```bash
