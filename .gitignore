@@ -1,6 +1,9 @@
 .DS_Store
 *.egg-info
 build
+# Allow tracked CLI command package
+!devtool/commands/build/
+!devtool/commands/build/**
 a.out
 .env*
 __pycache__
