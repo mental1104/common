@@ -17,6 +17,10 @@ set_target_properties(mental1104 PROPERTIES
   POSITION_INDEPENDENT_CODE ON
   OUTPUT_NAME "mental1104"
 )
+if (WIN32)
+  # Auto-export all symbols so an import library is produced without annotating each API.
+  set_target_properties(mental1104 PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
+endif()
 if (HAVE_ASYNC_SIMPLE AND TARGET ASYNC_SIMPLE::headers)
   target_link_libraries(mental1104 PUBLIC ASYNC_SIMPLE::headers)
   target_compile_definitions(mental1104 PUBLIC M1104_HAS_ASYNC_SIMPLE=1)
