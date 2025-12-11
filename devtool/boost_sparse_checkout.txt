@@ -12,6 +12,8 @@
 /libs/chrono/include
 /libs/config
 /libs/config/include
+/libs/container
+/libs/container/include
 /libs/container_hash
 /libs/core
 /libs/core/include
@@ -20,6 +22,8 @@
 /libs/endian
 /libs/function
 /libs/integer
+/libs/intrusive
+/libs/intrusive/include
 /libs/iterator
 /libs/lexical_cast
 /libs/math
