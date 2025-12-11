@@ -272,11 +272,16 @@ def build(env: Mapping[str, str]) -> None:
 def test(env: Mapping[str, str], *, file_pattern: str | None, filter_expr: str | None) -> None:
     env_np = strip_proxies(env)
     cache = CPP_BUILD_DIR / "CMakeCache.txt"
+    is_multi_config = False
     if cache.exists():
         for line in cache.read_text().splitlines():
+            if line.startswith("CMAKE_CONFIGURATION_TYPES:STRING="):
+                is_multi_config = True
             if line.startswith("CMAKE_BUILD_TYPE:STRING=") and "Debug" not in line:
                 raise SystemExit(f"[error] {CPP_BUILD_DIR} 不是 Debug 构建，请先 ./dev build cpp --config Debug")
     args = [env_np["CTEST"], "--output-on-failure", "-LE", "bench", "-j", env_np["JOBS"]]
+    if is_multi_config:
+        args += ["-C", env_np["CPP_BUILD_TYPE"]]
     if env_np.get("CTEST_V"):
         args.append(env_np["CTEST_V"])
     if file_pattern:
