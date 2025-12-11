@@ -23,6 +23,11 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 message(STATUS "CXX_STANDARD = ${CMAKE_CXX_STANDARD}")
 
+# Ensure __cplusplus reports the correct value on MSVC (needed for C++20 feature checks)
+if (MSVC)
+  add_compile_options(/Zc:__cplusplus)
+endif()
+
 # 不同构建类型的默认附加编译参数：
 #   -Wall -Wextra：打开常用告警，便于发现问题
 #   -g：生成调试符号，便于调试/诊断

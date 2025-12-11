@@ -5,6 +5,20 @@ file(GLOB_RECURSE TEST_FILES CONFIGURE_DEPENDS "${TEST_DIR}/*.cpp")
 list(LENGTH TEST_FILES _TEST_COUNT)
 message(STATUS "Collected ${_TEST_COUNT} test files under ${TEST_DIR} (recursive)")
 
+if (WIN32)
+  # Windows runners lack mpfr/gmp/pthread; skip unsupported tests
+  set(M1104_SKIP_TESTS
+    test_high_precision_decimal
+    test_boost_mn_coroutine_pool
+    test_mn_coroutine_pool
+    test_mn_coroutine_pool_async_simple
+  )
+  set(M1104_PLATFORM_LIBS "")
+else()
+  set(M1104_SKIP_TESTS "")
+  set(M1104_PLATFORM_LIBS mpfr gmp pthread)
+endif()
+
 set(TEST_DEPS_test_redis_lock "HIREDIS;REDISPP")
 set(TEST_REQUIRE_LIBS_test_redis_lock "HIREDIS;REDISPP")
 set(TEST_DEPS_test_json         "CJSON")
@@ -13,6 +27,14 @@ set(TEST_REQUIRE_LIBS_test_json "CJSON")
 function(add_optional_test SRC)
   get_filename_component(TEST_NAME "${SRC}" NAME_WE)
   message(STATUS "Consider test ${TEST_NAME} -> ${SRC}")
+
+  if (WIN32)
+    list(FIND M1104_SKIP_TESTS "${TEST_NAME}" _skip_idx)
+    if (NOT _skip_idx EQUAL -1)
+      message(STATUS "Skip test ${TEST_NAME}: unsupported on Windows")
+      return()
+    endif()
+  endif()
 
   set(_hdr_var  "TEST_DEPS_${TEST_NAME}")
   set(_libs_var "TEST_REQUIRE_LIBS_${TEST_NAME}")
@@ -85,8 +107,7 @@ function(add_optional_test SRC)
 
   target_link_libraries(${TEST_NAME} PRIVATE
     ${GTEST_LINK}
-    mpfr gmp
-    pthread
+    ${M1104_PLATFORM_LIBS}
   )
 
   target_use_all_components(${TEST_NAME})
