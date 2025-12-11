@@ -85,6 +85,8 @@ macro(m1104_collect_thirdparty_paths)
   file(GLOB THIRD_INC_CANDIDATES RELATIVE ${CMAKE_SOURCE_DIR} # GLOB 语法：匹配指定模式的路径；RELATIVE 使结果相对源目录，便于后续拼接
     "${THIRDROOT}/*/build/include"
     "${THIRDROOT}/*/build/include/*"
+    "${THIRDROOT}/*/include"
+    "${THIRDROOT}/*/include/*"
   )
   foreach(increl ${THIRD_INC_CANDIDATES})
     set(incdir "${CMAKE_SOURCE_DIR}/${increl}")
