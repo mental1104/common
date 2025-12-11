@@ -4,34 +4,11 @@ on:
   push:
   pull_request:
 
-env:
-  PYTHONPATH: ${{ github.workspace }}
-  DATABASE_URL: postgresql://test:test@localhost:5432/app
-  REDIS_URL: redis://localhost:6379/0
-  PGUSER: test
-  PGPASSWORD: test
-  PGDATABASE: app
-  PGHOST: localhost
-  PGPORT: "5432"
-  REDIS_HOST: localhost
-  REDIS_PORT: "6379"
-  PULSAR_HOST: localhost
-  PULSAR_BROKER_PORT: "6650"
-  PULSAR_ADMIN_PORT: "8080"
-  PULSAR_TOKEN: ""
-  PULSAR_SCHEMA_PATH: "/tmp/pulsar/schema"
-  PULSAR_DATA_PATH: "/tmp/pulsar/data"
-  CLICKHOUSE_USER: default
-  CLICKHOUSE_HOST: localhost
-  CLICKHOUSE_PORT: "8123"
-  CLICKHOUSE_DATABASE: default
-  MONGO_HOST: localhost
-  MONGO_PORT: "27017"
-  GOPROXY: "direct"
-
 jobs:
   python-macos:
     runs-on: macos-latest
+    env:
+      PYTHONPATH: ${{ github.workspace }}
     defaults:
       run:
         shell: bash
@@ -93,6 +70,7 @@ jobs:
     env:
       CMAKE_BUILD_PARALLEL_LEVEL: 4
       GCOV: "llvm-cov gcov"
+      PYTHONPATH: ${{ github.workspace }}
     defaults:
       run:
         shell: bash
