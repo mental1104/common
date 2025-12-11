@@ -77,20 +77,19 @@ def _install_requirements(env: Mapping[str, str]) -> None:
         replaced = True
     install_path = req_file
     tmp_req = None
-    try:
-        if platform.system().lower() == "windows":
-            lines = req_file.read_text().splitlines()
-            filtered = []
-            for line in lines:
-                stripped = line.strip()
-                if stripped.startswith("pulsar-client"):
-                    # pulsar-client has no Windows wheel; skip to keep CI green
-                    continue
-                filtered.append(line)
-            if len(filtered) != len(lines):
-                tmp_req = req_file.with_suffix(req_file.suffix + ".win.tmp")
-                tmp_req.write_text("\n".join(filtered) + "\n")
-                install_path = tmp_req
+    if platform.system().lower() == "windows":
+        lines = req_file.read_text().splitlines()
+        filtered = []
+        for line in lines:
+            stripped = line.strip()
+            if stripped.startswith("pulsar-client"):
+                # pulsar-client has no Windows wheel; skip to keep CI green
+                continue
+            filtered.append(line)
+        if len(filtered) != len(lines):
+            tmp_req = req_file.with_suffix(req_file.suffix + ".win.tmp")
+            tmp_req.write_text("\n".join(filtered) + "\n")
+            install_path = tmp_req
     try:
         run([env["PY_VENV_PIP"], "install", "--no-build-isolation", "-r", str(install_path)], env=env, cwd=PY_DIR)
     finally:

@@ -205,6 +205,7 @@ def build_submodules(env: Mapping[str, str]) -> None:
     wanted = _wanted_list(env, paths)
     extra_cmake_args = {
         "cpp/lib/cJSON": ["-DENABLE_CUSTOM_COMPILER_FLAGS=OFF"],
+        "cpp/lib/hiredis": ["-DDISABLE_TESTS=ON"],
     }
     for rel in paths:
         if rel not in wanted or rel in skip:

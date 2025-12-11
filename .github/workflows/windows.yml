@@ -147,6 +147,8 @@ jobs:
       CMAKE_BUILD_PARALLEL_LEVEL: 4
       PYTHONPATH: ${{ github.workspace }}
       CMAKE_GENERATOR: Ninja
+      PYTHONUTF8: "1"
+      PYTHONIOENCODING: "utf-8"
     defaults:
       run:
         shell: pwsh
