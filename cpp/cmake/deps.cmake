@@ -319,6 +319,17 @@ macro(m1104_register_components)
       LIB_GLOBS "libcjson*.so*" "libcjson*.a" "libcjson*.dylib"
       INC_REL .
   )
+  if (HAVE_CJSON AND NOT TARGET CJSON::lib)
+    set(_cjson_src "${CMAKE_SOURCE_DIR}/lib/cJSON/cJSON.c")
+    if (EXISTS "${_cjson_src}")
+      message(STATUS "Component CJSON missing built library, using source fallback: ${_cjson_src}")
+      add_library(m1104_cjson_fallback STATIC "${_cjson_src}")
+      target_include_directories(m1104_cjson_fallback PUBLIC "${CMAKE_SOURCE_DIR}/lib/cJSON")
+      set_target_properties(m1104_cjson_fallback PROPERTIES POSITION_INDEPENDENT_CODE ON)
+      add_library(CJSON::lib ALIAS m1104_cjson_fallback)
+      set(HAVE_LIB_CJSON TRUE)
+    endif()
+  endif()
 
   register_component(ASYNC_SIMPLE "lib/async_simple"
       INC_REL .
