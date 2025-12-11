@@ -76,7 +76,7 @@ jobs:
       - name: Install toolchain
         run: |
           brew update
-          brew install cmake llvm ninja gcovr
+          brew install cmake llvm ninja gcovr lcov
           echo "$(brew --prefix llvm)/bin" >> $GITHUB_PATH
 
       - name: Setup C++
