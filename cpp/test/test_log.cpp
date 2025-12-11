@@ -34,7 +34,7 @@ TEST(ContainerPrinterTest, PrintForwardList) {
 // forward_list没有 .size() 方法
 #if __cplusplus >= 202002L
   EXPECT_EQ(out, std::format("[File: {}, Line: {}] {{1, 2, 3, 4, 5, 6, 7}}\n",
-                             std::string(std::filesystem::absolute(__FILE__)),
+                             std::filesystem::absolute(__FILE__).string(),
                              line));
 #elif __cplusplus >= 201703L
   EXPECT_EQ(out, "{1, 2, 3, 4, 5, 6, 7}\n");
@@ -53,7 +53,7 @@ TEST(ContainerPrinterTest, PrintList) {
       out,
       std::format("[File: {}, Line: {}] (size: "
                   "7) \n{{1, 2, 3, 4, 5, 6, 7}}\n",
-                  std::string(std::string(std::filesystem::absolute(__FILE__))),
+                  std::filesystem::absolute(__FILE__).string(),
                   line));
 #else
   EXPECT_EQ(out, "(size: 7) \n{1, 2, 3, 4, 5, 6, 7}\n");
@@ -68,7 +68,7 @@ TEST(ContainerPrinterTest, PrintVector) {
 #if __cplusplus >= 202002L
   EXPECT_EQ(out, std::format("[File: {}, Line: {}] (size: "
                              "7) \n{{1, 2, 3, 4, 5, 6, 7}}\n",
-                             std::string(std::filesystem::absolute(__FILE__)),
+                             std::filesystem::absolute(__FILE__).string(),
                              line));
 #else
   EXPECT_EQ(out, "(size: 7) \n{1, 2, 3, 4, 5, 6, 7}\n");
@@ -84,7 +84,7 @@ TEST(ContainerPrinterTest, PrintMap) {
   EXPECT_EQ(out, std::format(
                      "[File: {}, Line: {}] (size: 3) \n{{\n    "
                      "\"a\": \"1\",\n    \"b\": \"2\",\n    \"c\": \"3\"\n}}\n",
-                     std::string(std::filesystem::absolute(__FILE__)), line));
+                     std::filesystem::absolute(__FILE__).string(), line));
 #else
   EXPECT_EQ(out,
             "(size: 3) \n{\n    \"a\": \"1\",\n    \"b\": \"2\",\n    \"c\": "
@@ -103,7 +103,7 @@ TEST(ContainerPrinterTest, PrintMap) {
                         " \"outer1\": {{\n        \"b\": \"2\",\n        "
                         "\"a\": \"1\"\n    }},\n    \"outer2\": {{\n        "
                         "\"d\": \"4\",\n        \"c\": \"3\"\n    }}\n}}\n",
-                        std::string(std::filesystem::absolute(__FILE__)),
+                        std::filesystem::absolute(__FILE__).string(),
                         line));
 #else
   EXPECT_EQ(nested_out,
@@ -124,7 +124,7 @@ TEST(ContainerPrinterTest, PrintUnorderMap) {
       out,
       std::format("[File: {}, Line: {}] (size: 3) \n{{\n    "
                   "\"z\": \"30\",\n    \"y\": \"20\",\n    \"x\": \"10\"\n}}\n",
-                  std::string(std::filesystem::absolute(__FILE__)), line));
+                  std::filesystem::absolute(__FILE__).string(), line));
 #else
   EXPECT_EQ(out,
             "(size: 3) \n{\n    \"z\": \"30\",\n    \"y\": \"20\",\n    \"x\": "
@@ -144,7 +144,7 @@ TEST(ContainerPrinterTest, PrintUnorderMap) {
                         " \"outer2\": {{\n        \"d\": \"4\",\n        "
                         "\"c\": \"3\"\n    }},\n    \"outer1\": {{\n        "
                         "\"b\": \"2\",\n        \"a\": \"1\"\n    }}\n}}\n",
-                        std::string(std::filesystem::absolute(__FILE__)),
+                        std::filesystem::absolute(__FILE__).string(),
                         line));
 #else
   EXPECT_EQ(nested_out,
