@@ -100,16 +100,16 @@ TEST(ContainerPrinterTest, PrintMap) {
 #if __cplusplus >= 202002L
   EXPECT_EQ(nested_out,
             std::format("[File: {}, Line: {}] (size: 2) \n{{\n   "
-                        " \"outer1\": {{\n        \"b\": \"2\",\n        "
-                        "\"a\": \"1\"\n    }},\n    \"outer2\": {{\n        "
-                        "\"d\": \"4\",\n        \"c\": \"3\"\n    }}\n}}\n",
+                        " \"outer1\": {{\n        \"a\": \"1\",\n        "
+                        "\"b\": \"2\"\n    }},\n    \"outer2\": {{\n        "
+                        "\"c\": \"3\",\n        \"d\": \"4\"\n    }}\n}}\n",
                         std::filesystem::absolute(__FILE__).string(),
                         line));
 #else
   EXPECT_EQ(nested_out,
-            "(size: 2) \n{\n    \"outer1\": {\n        \"b\": \"2\",\n        "
-            "\"a\": \"1\"\n    },\n    \"outer2\": {\n        \"d\": \"4\",\n  "
-            "      \"c\": \"3\"\n    }\n}\n");
+            "(size: 2) \n{\n    \"outer1\": {\n        \"a\": \"1\",\n        "
+            "\"b\": \"2\"\n    },\n    \"outer2\": {\n        \"c\": \"3\",\n  "
+            "      \"d\": \"4\"\n    }\n}\n");
 #endif
 }
 
@@ -123,12 +123,12 @@ TEST(ContainerPrinterTest, PrintUnorderMap) {
   EXPECT_EQ(
       out,
       std::format("[File: {}, Line: {}] (size: 3) \n{{\n    "
-                  "\"z\": \"30\",\n    \"y\": \"20\",\n    \"x\": \"10\"\n}}\n",
+                  "\"x\": \"10\",\n    \"y\": \"20\",\n    \"z\": \"30\"\n}}\n",
                   std::filesystem::absolute(__FILE__).string(), line));
 #else
   EXPECT_EQ(out,
-            "(size: 3) \n{\n    \"z\": \"30\",\n    \"y\": \"20\",\n    \"x\": "
-            "\"10\"\n}\n");
+            "(size: 3) \n{\n    \"x\": \"10\",\n    \"y\": \"20\",\n    \"z\": "
+            "\"30\"\n}\n");
 #endif
 
   // 测试嵌套
@@ -141,16 +141,16 @@ TEST(ContainerPrinterTest, PrintUnorderMap) {
 #if __cplusplus >= 202002L
   EXPECT_EQ(nested_out,
             std::format("[File: {}, Line: {}] (size: 2) \n{{\n   "
-                        " \"outer2\": {{\n        \"d\": \"4\",\n        "
-                        "\"c\": \"3\"\n    }},\n    \"outer1\": {{\n        "
-                        "\"b\": \"2\",\n        \"a\": \"1\"\n    }}\n}}\n",
+                        " \"outer1\": {{\n        \"a\": \"1\",\n        "
+                        "\"b\": \"2\"\n    }},\n    \"outer2\": {{\n        "
+                        "\"c\": \"3\",\n        \"d\": \"4\"\n    }}\n}}\n",
                         std::filesystem::absolute(__FILE__).string(),
                         line));
 #else
   EXPECT_EQ(nested_out,
-            "(size: 2) \n{\n    \"outer2\": {\n        \"d\": \"4\",\n        "
-            "\"c\": \"3\"\n    },\n    \"outer1\": {\n        \"b\": \"2\",\n  "
-            "      \"a\": \"1\"\n    }\n}\n");
+            "(size: 2) \n{\n    \"outer1\": {\n        \"a\": \"1\",\n        "
+            "\"b\": \"2\"\n    },\n    \"outer2\": {\n        \"c\": \"3\",\n  "
+            "      \"d\": \"4\"\n    }\n}\n");
 #endif
 }
 
@@ -423,13 +423,13 @@ TEST(LFUCacheTest, PrintInternal) {
   cache(2); // 2 -> 4
   auto out2 = mental1104::log_detail::format_value(cache);
   EXPECT_EQ(out2, R"({
-    "2": {
-        "freq": 1,
-        "value": 4
-    },
     "1": {
         "freq": 1,
         "value": 1
+    },
+    "2": {
+        "freq": 1,
+        "value": 4
     }
 }
 )");
@@ -437,17 +437,17 @@ TEST(LFUCacheTest, PrintInternal) {
   cache(3); // 3 -> 9
   auto out3 = mental1104::log_detail::format_value(cache);
   EXPECT_EQ(out3, R"({
-    "3": {
+    "1": {
         "freq": 1,
-        "value": 9
+        "value": 1
     },
     "2": {
         "freq": 1,
         "value": 4
     },
-    "1": {
+    "3": {
         "freq": 1,
-        "value": 1
+        "value": 9
     }
 }
 )");
@@ -455,17 +455,17 @@ TEST(LFUCacheTest, PrintInternal) {
   cache(4); // 淘汰 1, 4 -> 16
   auto out4 = mental1104::log_detail::format_value(cache);
   EXPECT_EQ(out4, R"({
-    "4": {
+    "2": {
         "freq": 1,
-        "value": 16
+        "value": 4
     },
     "3": {
         "freq": 1,
         "value": 9
     },
-    "2": {
+    "4": {
         "freq": 1,
-        "value": 4
+        "value": 16
     }
 }
 )");
@@ -473,17 +473,17 @@ TEST(LFUCacheTest, PrintInternal) {
   cache(2); // 访问 2, 频率增加
   auto out5 = mental1104::log_detail::format_value(cache);
   EXPECT_EQ(out5, R"({
-    "4": {
-        "freq": 1,
-        "value": 16
+    "2": {
+        "freq": 2,
+        "value": 4
     },
     "3": {
         "freq": 1,
         "value": 9
     },
-    "2": {
-        "freq": 2,
-        "value": 4
+    "4": {
+        "freq": 1,
+        "value": 16
     }
 }
 )");
@@ -492,17 +492,17 @@ TEST(LFUCacheTest, PrintInternal) {
   cache(5); // 驱逐 3，5 -> 25
   auto out6 = mental1104::log_detail::format_value(cache);
   EXPECT_EQ(out6, R"({
-    "5": {
-        "freq": 1,
-        "value": 25
+    "2": {
+        "freq": 2,
+        "value": 4
     },
     "4": {
         "freq": 1,
         "value": 16
     },
-    "2": {
-        "freq": 2,
-        "value": 4
+    "5": {
+        "freq": 1,
+        "value": 25
     }
 }
 )");
