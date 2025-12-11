@@ -22,6 +22,9 @@ jobs:
           submodules: false
           fetch-depth: 0
 
+      - name: Init submodules (sparse Boost)
+        run: python -c "import sys;from devtool.commands.common import base_env;from devtool.commands.ops import cpp as cpp_ops;sys.exit(cpp_ops.git_submodules(base_env()) or 0)"
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -71,6 +74,9 @@ jobs:
           submodules: false
           fetch-depth: 0
 
+      - name: Init submodules (sparse Boost)
+        run: python -c "import sys;from devtool.commands.common import base_env;from devtool.commands.ops import cpp as cpp_ops;sys.exit(cpp_ops.git_submodules(base_env()) or 0)"
+
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
@@ -111,6 +117,9 @@ jobs:
         with:
           submodules: false
           fetch-depth: 0
+
+      - name: Init submodules (sparse Boost)
+        run: python -c "import sys;from devtool.commands.common import base_env;from devtool.commands.ops import cpp as cpp_ops;sys.exit(cpp_ops.git_submodules(base_env()) or 0)"
 
       - name: Install Rust toolchain
         run: |
