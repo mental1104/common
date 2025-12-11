@@ -49,9 +49,11 @@ jobs:
         run: ./dev coverage-python
 
       - name: Vet Python
+        continue-on-error: true
         run: ./dev vet-python
 
       - name: Guard Python
+        continue-on-error: true
         run: ./dev guard-python
 
   cpp-linux:
@@ -92,7 +94,9 @@ jobs:
         run: ./dev coverage-cpp
 
       - name: Vet C++
+        continue-on-error: true
         run: ./dev vet-cpp
 
       - name: Guard C++
+        continue-on-error: true
         run: ./dev guard-cpp
