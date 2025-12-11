@@ -8,6 +8,7 @@ from typing import Mapping
 
 from devtool.commands.common import (
     BENCH_ARTIFACT_ROOT,
+    BOOST_SPARSE_LIST,
     CPP_BENCH_ARTIFACT_DIR,
     CPP_BUILD_DIR,
     CPP_SRC_DIR,
@@ -21,6 +22,7 @@ from devtool.context import is_windows
 
 
 _GITMODULE_PATH_RE = re.compile(r"^\s*path\s*=\s*(.+)$")
+_BOOST_SUBMODULE_PATH = ROOT / "cpp" / "lib" / "boost"
 
 
 def _gitmodule_paths() -> list[str]:
@@ -60,7 +62,16 @@ def git_submodules(env: Mapping[str, str]) -> None:
     env_np = strip_proxies(env)
     skip = _skip_list(env_np)
     run(["git", "submodule", "sync", "--recursive"], env=env_np, cwd=ROOT)
-    update_cmd = ["git", "submodule", "update", "--init", "--recursive", "--jobs", env_np.get("JOBS", "1")]
+    base_cmd = [
+        "git",
+        "submodule",
+        "update",
+        "--init",
+        "--recursive",
+        "--jobs",
+        env_np.get("JOBS", "1"),
+    ]
+    update_cmd = list(base_cmd) + ["--depth", "1", "--filter=blob:none"]
     if skip:
         all_paths = _gitmodule_paths()
         targets = [p for p in all_paths if p and p not in skip]
@@ -68,9 +79,49 @@ def git_submodules(env: Mapping[str, str]) -> None:
             print("[git] SKIP_SUBMODULES 覆盖全部子模块，已跳过")
             return
         update_cmd += ["--", *targets]
+        base_cmd += ["--", *targets]
         print(f"[git] 跳过子模块: {', '.join(sorted(skip))}")
-    # Avoid shallow fetch; pinned SHAs may be unreachable with --depth
-    run(update_cmd, env=env_np, cwd=ROOT)
+    try:
+        run(update_cmd, env=env_np, cwd=ROOT)
+    except subprocess.CalledProcessError:
+        fallback_cmd = base_cmd
+        print("[warn] 子模块 partial clone 失败，正在回退为完整检出")
+        run(fallback_cmd, env=env_np, cwd=ROOT)
+    _apply_boost_sparse_checkout(env_np)
+
+
+def _load_boost_sparse_patterns() -> list[str]:
+    if not BOOST_SPARSE_LIST.exists():
+        return []
+    patterns: list[str] = []
+    for raw in BOOST_SPARSE_LIST.read_text().splitlines():
+        line = raw.split("#", 1)[0].strip()
+        if line:
+            patterns.append(line)
+    return patterns
+
+
+def _apply_boost_sparse_checkout(env: Mapping[str, str]) -> None:
+    if env.get("BOOST_FULL_CHECKOUT", "").lower() in {"1", "true", "yes"}:
+        return
+    if not _BOOST_SUBMODULE_PATH.exists():
+        return
+    patterns = _load_boost_sparse_patterns()
+    if not patterns:
+        return
+    git_base = ["git", "-C", str(_BOOST_SUBMODULE_PATH), "sparse-checkout"]
+    run_env = {k: str(v) for k, v in env.items()}
+    try:
+        subprocess.run(git_base + ["init", "--cone"], cwd=str(ROOT), env=run_env, check=True)
+        subprocess.run(
+            git_base + ["set", "--stdin"],
+            cwd=str(ROOT),
+            env=run_env,
+            input=("\n".join(patterns) + "\n").encode(),
+            check=True,
+        )
+    except subprocess.CalledProcessError as exc:
+        print(f"[warn] Boost sparse-checkout 失败（{exc}），已回退为全量检出")
 
 
 def build_submodules(env: Mapping[str, str]) -> None:
