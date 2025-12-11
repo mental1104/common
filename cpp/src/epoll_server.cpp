@@ -6,8 +6,6 @@
 #include <stdexcept>
 
 #if defined(_WIN32)
-#include <winsock2.h>
-#include <windows.h>
 #pragma message("epoll_server: stubbed on Windows; operations are no-ops")
 #else
 #include <unistd.h>
