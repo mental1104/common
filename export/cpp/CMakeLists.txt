@@ -70,6 +70,8 @@ if(EXISTS "${_cjson_hdr}")
     file(MAKE_DIRECTORY "${_cjson_overlay}")
     file(COPY "${_cjson_hdr}" DESTINATION "${_cjson_overlay}")
     list(APPEND THIRD_INCLUDE_DIRS "${_cjson_overlay}")
+    # also attach overlay directly in case list is pruned by generator nuances
+    target_include_directories(export_json PUBLIC "${_cjson_overlay}")
 endif()
 
 list(REMOVE_DUPLICATES THIRD_INCLUDE_DIRS)

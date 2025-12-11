@@ -47,6 +47,14 @@ endfunction()
 macro(m1104_setup_testing_and_benchmark)
   add_subdirectory(thirdparty/googletest) # gtest/gmock 作为子目录源码构建（仓库已自带），无需全局安装/FindGTest
 
+  if (WIN32)
+    message(STATUS "WIN32 detected -> disable google benchmark (unsupported regex backend on MSVC)")
+    set(HAVE_GOOGLE_BENCHMARK FALSE)
+    include_directories(${gtest_SOURCE_DIR}/include ${gmock_SOURCE_DIR}/include)
+    set(GTEST_LINK gtest gtest_main)
+    return()
+  endif()
+
   set(BENCH_THIRDPARTY_DIR "${CMAKE_SOURCE_DIR}/thirdparty/benchmark") # 先记录本地 benchmark 源码目录，后面存在才 add_subdirectory 并配置开关
   if (EXISTS "${BENCH_THIRDPARTY_DIR}/CMakeLists.txt")
     # 通过 CACHE 变量强制关闭 gbench 自带测试/安装，避免污染主项目选项。

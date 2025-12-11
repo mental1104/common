@@ -208,8 +208,12 @@ def build_submodules(env: Mapping[str, str]) -> None:
         "cpp/lib/cJSON": ["-DENABLE_CUSTOM_COMPILER_FLAGS=OFF"],
         "cpp/lib/hiredis": ["-DDISABLE_TESTS=ON"],
     }
+    is_windows = platform.system().lower() == "windows"
     for rel in paths:
         if rel not in wanted or rel in skip:
+            continue
+        if is_windows and rel in {"cpp/lib/redis-plus-plus", "cpp/lib/hiredis"}:
+            print(f"[warn] Skip {rel} on Windows (not supported)")
             continue
         path = ROOT / rel
         if not path.exists() or not (path / "CMakeLists.txt").exists():
