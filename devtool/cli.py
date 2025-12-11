@@ -3,10 +3,48 @@ from __future__ import annotations
 import argparse
 import importlib
 import pkgutil
+import shlex
+import subprocess
 import sys
+import traceback
+from pathlib import Path
 from typing import Iterable
 
+from devtool.context import ROOT
+
 from devtool.commands import CONFIGURATORS
+
+
+_SKIP_FILES = {
+    (ROOT / "devtool" / "context.py").resolve(),
+    (ROOT / "devtool" / "commands" / "common.py").resolve(),
+}
+
+
+def _format_cmd(cmd: object) -> str:
+    if cmd is None:
+        return ""
+    if isinstance(cmd, (list, tuple)):
+        return " ".join(shlex.quote(str(x)) for x in cmd)
+    return str(cmd)
+
+
+def _subprocess_location(tb) -> str:
+    frames = traceback.extract_tb(tb) if tb else []
+    chain: list[str] = []
+    for frame in frames:
+        path = Path(frame.filename).resolve()
+        if path in _SKIP_FILES:
+            continue
+        try:
+            rel = path.relative_to(ROOT)
+        except ValueError:
+            continue
+        chain.append(f"{rel}:{frame.lineno}({frame.name})")
+    if not chain and frames:
+        frame = frames[-1]
+        chain.append(f"{frame.filename}:{frame.lineno}({frame.name})")
+    return " -> ".join(chain)
 
 
 def _import_command_modules() -> None:
@@ -32,11 +70,21 @@ def _build_parser() -> argparse.ArgumentParser:
 def main(argv: Iterable[str] | None = None) -> int:
     parser = _build_parser()
     args = parser.parse_args(list(argv) if argv is not None else None)
-    runner = getattr(args, "_runner", None)
-    if runner is None:
-        parser.print_help()
-        return 1
-    return int(runner(args) or 0)
+    try:
+        runner = getattr(args, "_runner", None)
+        if runner is None:
+            parser.print_help()
+            return 1
+        return int(runner(args) or 0)
+    except subprocess.CalledProcessError as exc:
+        location = _subprocess_location(exc.__traceback__)
+        cmd_display = _format_cmd(getattr(exc, "cmd", None))
+        print(f"[dev] 子进程执行失败，退出码 {exc.returncode}")
+        if location:
+            print(f"[dev] 调用链：{location}")
+        if cmd_display:
+            print(f"[dev] 命令：{cmd_display}")
+        return exc.returncode
 
 
 if __name__ == "__main__":
