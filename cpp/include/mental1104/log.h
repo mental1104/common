@@ -332,9 +332,15 @@ void format_map_like(const std::unordered_map<K, V> &m, bool show_info,
                      int indent_width = 4) {
   maybe_print_info(m, show_info, out, loc);
   out << "{\n";
+  std::vector<std::pair<K, const V *>> items;
+  items.reserve(m.size());
+  for (const auto &kv : m)
+    items.emplace_back(kv.first, &kv.second);
+  std::sort(items.begin(), items.end(),
+            [](const auto &a, const auto &b) { return a.first < b.first; });
   bool first = true;
-  for (const auto &kv : m) {
-    format_map_entry(kv.first, kv.second, first, 1, out, loc, indent_width);
+  for (const auto &kv : items) {
+    format_map_entry(kv.first, *kv.second, first, 1, out, loc, indent_width);
     first = false;
   }
   out << "\n}" << std::endl;
