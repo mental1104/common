@@ -4,19 +4,21 @@
 #include <cstring>
 #include <iostream>
 #include <stdexcept>
-#include <unistd.h>
 
+#if defined(_WIN32)
+#include <winsock2.h>
+#include <windows.h>
+#pragma message("epoll_server: stubbed on Windows; operations are no-ops")
+#else
+#include <unistd.h>
 #if defined(__linux__)
 #include <sys/epoll.h>
 #elif defined(__APPLE__)
 #include <sys/event.h>
 #include <sys/time.h>
-#elif defined(_WIN32)
-#include <winsock2.h>
-#include <windows.h>
-#pragma message("epoll_server: stubbed on Windows; operations are no-ops")
 #else
 #error "Unsupported platform: need Linux (epoll) or macOS (kqueue)"
+#endif
 #endif
 
 namespace mental1104 {
