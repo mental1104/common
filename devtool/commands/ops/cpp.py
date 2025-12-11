@@ -171,6 +171,7 @@ def _update_boost_modules(env: Mapping[str, str]) -> None:
         "--depth",
         "1",
         "--filter=blob:none",
+        "--recursive",
         "--",
         *modules,
     ]
@@ -179,6 +180,27 @@ def _update_boost_modules(env: Mapping[str, str]) -> None:
     except subprocess.CalledProcessError:
         print("[warn] Boost 内部子模块 partial clone 失败，正在回退为完整检出所需模块")
         run(["git", "-C", str(_BOOST_SUBMODULE_PATH), "submodule", "update", "--init", "--", *modules], env=env)
+    _ensure_boost_headers(env, modules)
+
+
+def _ensure_boost_headers(env: Mapping[str, str], modules: list[str]) -> None:
+    required = [
+        _BOOST_SUBMODULE_PATH / "boost" / "asio" / "post.hpp",
+        _BOOST_SUBMODULE_PATH / "boost" / "multiprecision" / "mpfr.hpp",
+    ]
+    missing = [p for p in required if not p.exists()]
+    if not missing:
+        return
+    print("[warn] Boost sparse checkout missing headers, fetching required submodules recursively")
+    try:
+        run(
+            ["git", "-C", str(_BOOST_SUBMODULE_PATH), "submodule", "update", "--init", "--recursive", "--", *modules],
+            env=env,
+        )
+    except Exception:
+        # fall back to full checkout
+        print("[warn] Boost targeted fetch failed，fallback to full checkout")
+        run(["git", "-C", str(_BOOST_SUBMODULE_PATH), "submodule", "update", "--init", "--recursive"], env=env)
 
 
 def build_submodules(env: Mapping[str, str]) -> None:
