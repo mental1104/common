@@ -143,7 +143,6 @@ def _update_boost_root(env: Mapping[str, str]) -> None:
         "--init",
         "--depth",
         "1",
-        "--filter=blob:none",
         "--",
         _BOOST_REL_PATH,
     ]
@@ -168,9 +167,6 @@ def _update_boost_modules(env: Mapping[str, str]) -> None:
         "submodule",
         "update",
         "--init",
-        "--depth",
-        "1",
-        "--filter=blob:none",
         "--recursive",
         "--",
         *modules,
@@ -179,7 +175,7 @@ def _update_boost_modules(env: Mapping[str, str]) -> None:
         run(cmd, env=env)
     except subprocess.CalledProcessError:
         print("[warn] Boost 内部子模块 partial clone 失败，正在回退为完整检出所需模块")
-        run(["git", "-C", str(_BOOST_SUBMODULE_PATH), "submodule", "update", "--init", "--", *modules], env=env)
+        run(["git", "-C", str(_BOOST_SUBMODULE_PATH), "submodule", "update", "--init", "--recursive", "--", *modules], env=env)
     _ensure_boost_headers(env, modules)
 
 
@@ -194,7 +190,7 @@ def _ensure_boost_headers(env: Mapping[str, str], modules: list[str]) -> None:
     print("[warn] Boost sparse checkout missing headers, fetching required submodules recursively")
     try:
         run(
-            ["git", "-C", str(_BOOST_SUBMODULE_PATH), "submodule", "update", "--init", "--recursive", "--", *modules],
+            ["git", "-C", str(_BOOST_SUBMODULE_PATH), "submodule", "update", "--init", "--recursive", "--depth", "1", "--", *modules],
             env=env,
         )
     except Exception:
