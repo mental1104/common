@@ -10,11 +10,13 @@ libs/bind
 libs/chrono
 libs/config
 libs/container_hash
+libs/container
 libs/core
 libs/date_time
 libs/endian
 libs/function
 libs/integer
+libs/intrusive
 libs/iterator
 libs/lexical_cast
 libs/math
