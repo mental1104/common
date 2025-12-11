@@ -1,0 +1,85 @@
+name: macOS Python & C++
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  python-macos:
+    runs-on: macos-latest
+    env:
+      PYTHONPATH: ${{ github.workspace }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/Library/Caches/pip
+          key: pip-${{ runner.os }}-${{ hashFiles('python/requirements.txt') }}
+          restore-keys: |
+            pip-${{ runner.os }}-
+
+      - name: Setup Python
+        run: ./dev setup-python
+
+      - name: Format Python
+        run: ./dev fmt-python
+
+      - name: Build Python
+        run: ./dev build-python
+
+      - name: Test Python
+        run: ./dev test-python
+
+      - name: Coverage Python
+        run: ./dev coverage-python
+
+      - name: Vet Python
+        run: ./dev vet-python
+
+      - name: Guard Python
+        run: ./dev guard-python
+
+  cpp-macos:
+    runs-on: macos-latest
+    env:
+      CMAKE_BUILD_PARALLEL_LEVEL: 4
+      GCOV: "llvm-cov gcov"
+      PYTHONPATH: ${{ github.workspace }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install toolchain
+        run: |
+          brew update
+          brew install cmake llvm ninja gcovr
+          echo "$(brew --prefix llvm)/bin" >> $GITHUB_PATH
+
+      - name: Setup C++
+        run: ./dev setup-cpp --config Debug
+
+      - name: Format C++
+        run: ./dev fmt-cpp
+
+      - name: Build C++
+        run: ./dev build-cpp --config Debug
+
+      - name: Test C++
+        run: ./dev test-cpp
+
+      - name: Coverage C++
+        run: ./dev coverage-cpp
+
+      - name: Vet C++
+        run: ./dev vet-cpp
+
+      - name: Guard C++
+        run: ./dev guard-cpp
