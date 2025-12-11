@@ -203,6 +203,9 @@ def build_submodules(env: Mapping[str, str]) -> None:
     skip = _skip_list(env)
     paths = _gitmodule_paths()
     wanted = _wanted_list(env, paths)
+    extra_cmake_args = {
+        "cpp/lib/cJSON": ["-DENABLE_CUSTOM_COMPILER_FLAGS=OFF"],
+    }
     for rel in paths:
         if rel not in wanted or rel in skip:
             continue
@@ -212,7 +215,16 @@ def build_submodules(env: Mapping[str, str]) -> None:
         build_dir = path / "build"
         ensure_dir(build_dir)
         try:
-            run([env["CMAKE"], "-S", str(path), "-B", str(build_dir), f'-DCMAKE_BUILD_TYPE={env["CPP_BUILD_TYPE"]}'], env=env)
+            cmake_args = [
+                env["CMAKE"],
+                "-S",
+                str(path),
+                "-B",
+                str(build_dir),
+                f'-DCMAKE_BUILD_TYPE={env["CPP_BUILD_TYPE"]}',
+            ]
+            cmake_args += extra_cmake_args.get(rel, [])
+            run(cmake_args, env=env)
             run([env["CMAKE"], "--build", str(build_dir), "--parallel", env["JOBS"]], env=env)
         except Exception:
             print(f"[warn] 子模块 {rel} 构建失败，已跳过（可用 BUILD_SUBMODULES=all 重新尝试）")
