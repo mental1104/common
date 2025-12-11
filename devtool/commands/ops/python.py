@@ -38,7 +38,20 @@ def _ensure_venv(env: Mapping[str, str]) -> Mapping[str, str]:
 
 
 def _upgrade_build_tools(env: Mapping[str, str]) -> None:
-    run([env["PY_VENV_PIP"], "install", "--no-build-isolation", "--upgrade", "pip", "setuptools", "wheel"], env=env)
+    run(
+        [
+            env["PY_VENV_PYTHON"],
+            "-m",
+            "pip",
+            "install",
+            "--no-build-isolation",
+            "--upgrade",
+            "pip",
+            "setuptools",
+            "wheel",
+        ],
+        env=env,
+    )
 
 
 def _install_export_layer(env: Mapping[str, str]) -> None:
