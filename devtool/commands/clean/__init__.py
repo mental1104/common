@@ -21,24 +21,39 @@ def _clean_env_files() -> None:
         print(f"[info] 已移除环境导入文件: {', '.join(str(p) for p in removed)}")
 
 
-@register("clean")
-def configure(subparsers: ArgumentParser):
-    parser = subparsers.add_parser("clean", help="Clean build artifacts")
+def _add_common_args(parser: ArgumentParser) -> None:
     parser.add_argument("target", choices=["python", "go", "cpp", "rust", "all"], help="Target to clean")
     parser.add_argument("--jobs", type=int, help="Parallelism hint")
     parser.add_argument("-v", "--verbose", action="store_true", help="Verbose output")
-    parser.set_defaults(_runner=run)
+
+
+@register("clean")
+def configure(subparsers: ArgumentParser):
+    parser = subparsers.add_parser("clean", help="Clean build artifacts (keep submodule builds intact)")
+    _add_common_args(parser)
+    parser.set_defaults(clean_submodules=False, _runner=run)
     return run
 
 
-def run(args):
+@register("clean-all")
+def configure_all(subparsers: ArgumentParser):
+    parser = subparsers.add_parser("clean-all", help="Clean build artifacts (full, includes submodules)")
+    _add_common_args(parser)
+    parser.set_defaults(clean_submodules=True, _runner=run)
+    return run
+
+
+def run(args, *, clean_submodules: bool | None = None):
     env = base_env(verbose=args.verbose, jobs=args.jobs)
+    clean_submods = clean_submodules
+    if clean_submods is None:
+        clean_submods = getattr(args, "clean_submodules", True)
     if args.target in ("python", "all"):
         python_ops.clean(env)
     if args.target in ("go", "all"):
         go_ops.clean(env)
     if args.target in ("cpp", "all"):
-        cpp_ops.clean(env)
+        cpp_ops.clean(env, clean_submodules=clean_submods)
     if args.target in ("rust", "all"):
         rust_ops.clean(env)
     if args.target == "all":

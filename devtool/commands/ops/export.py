@@ -4,9 +4,12 @@ from pathlib import Path
 from typing import Mapping
 
 from devtool.commands.common import EXPORT_CPP_BUILD_DIR, ensure_dir, run
+from devtool.commands.ops import cpp as cpp_ops
 
 
 def build_export_cpp(env: Mapping[str, str]) -> None:
+    # Ensure third-party libs (e.g., cJSON) are present without redoing work if already ready.
+    cpp_ops.prepare_submodules(env, skip_when_ready=True)
     ensure_dir(EXPORT_CPP_BUILD_DIR)
     args = [
         env["CMAKE"],

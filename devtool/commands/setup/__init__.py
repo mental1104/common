@@ -46,7 +46,6 @@ def run(args):
     _write_env_example()
     python_ops.setup(env)
     go_ops.setup(env)
-    cpp_ops.git_submodules(env)
-    cpp_ops.build_submodules(env)
+    cpp_ops.prepare_submodules(env, skip_when_ready=True)
     cpp_ops.configure(env)
     rust_ops.setup(env)

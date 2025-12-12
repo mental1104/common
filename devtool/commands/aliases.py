@@ -134,15 +134,16 @@ def _alias_uninstall(name: str, target: str):
         return parser.set_defaults
 
 
-def _alias_clean(name: str, target: str):
+def _alias_clean(name: str, target: str, *, clean_submodules: bool, base_cmd: str):
     @register(name)
     def configure(subparsers: ArgumentParser):
-        parser = subparsers.add_parser(name, help=f"{name} (alias for clean {target})")
+        parser = subparsers.add_parser(name, help=f"{name} (alias for {base_cmd} {target})")
         _add_common(parser, jobs=True, verbose=True)
         parser.set_defaults(_runner=lambda args: clean.run(SimpleNamespace(
             target=target,
             verbose=getattr(args, "verbose", False),
             jobs=getattr(args, "jobs", None),
+            clean_submodules=clean_submodules,
         )))
         return parser.set_defaults
 
@@ -198,7 +199,9 @@ for lang in ("python", "go", "cpp", "rust"):
 for lang in ("python", "go", "cpp", "rust"):
     _alias_uninstall(f"uninstall-{lang}", lang)
 for lang in ("python", "go", "cpp", "rust"):
-    _alias_clean(f"clean-{lang}", lang)
+    _alias_clean(f"clean-{lang}", lang, clean_submodules=False, base_cmd="clean")
+for lang in ("python", "go", "cpp", "rust"):
+    _alias_clean(f"clean-all-{lang}", lang, clean_submodules=True, base_cmd="clean-all")
 for lang in ("python", "go", "cpp", "rust"):
     _alias_vet(f"vet-{lang}", lang)
 
