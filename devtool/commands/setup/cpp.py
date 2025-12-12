@@ -19,6 +19,5 @@ def configure(subparsers: ArgumentParser):
 
 def run(args):
     env = base_env(verbose=args.verbose, jobs=args.jobs, cpp_build_type=args.config)
-    cpp_ops.git_submodules(env)
-    cpp_ops.build_submodules(env)
+    cpp_ops.prepare_submodules(env, skip_when_ready=True)
     cpp_ops.configure(env)
