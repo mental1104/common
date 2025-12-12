@@ -28,6 +28,43 @@ _BOOST_SUBMODULE_PATH = ROOT / "cpp" / "lib" / "boost"
 _BOOST_REL_PATH = "cpp/lib/boost"
 
 
+def _repair_empty_submodule(rel: str, env: Mapping[str, str]) -> bool:
+    """If the submodule worktree exists but is empty, force-checkout from its module git-dir."""
+    worktree = ROOT / rel
+    module_git = ROOT / ".git" / "modules" / Path(rel)
+    if not worktree.exists() or not module_git.exists():
+        return False
+    entries = [p for p in worktree.iterdir() if p.name not in {".git", ".gitmodules"}]
+    if entries:
+        return False
+    try:
+        run(
+            ["git", f"--git-dir={module_git}", f"--work-tree={worktree}", "checkout", "-f"],
+            env=env,
+            cwd=ROOT,
+        )
+        return True
+    except subprocess.CalledProcessError:
+        pass
+    try:
+        # fallback: archive from cached module (read-only)
+        archive = subprocess.run(
+            ["git", f"--git-dir={module_git}", "archive", "HEAD"],
+            env=env,
+            cwd=ROOT,
+            check=True,
+            stdout=subprocess.PIPE,
+        ).stdout
+        subprocess.run(
+            ["tar", "-x", "-C", str(worktree)],
+            input=archive,
+            check=True,
+        )
+        return True
+    except subprocess.CalledProcessError:
+        return False
+
+
 def _gitmodule_paths() -> list[str]:
     gm = ROOT / ".gitmodules"
     if not gm.exists():
@@ -47,6 +84,82 @@ def _skip_list(env: Mapping[str, str]) -> set[str]:
     items = [x.strip() for part in raw.replace(",", " ").split() for x in [part] if x.strip()]
     return set(items)
 
+
+def submodules_ready(env: Mapping[str, str]) -> bool:
+    git_dir = ROOT / ".git"
+    if not git_dir.exists():
+        return True
+    env_np = strip_proxies(env)
+    try:
+        proc = subprocess.run(
+            ["git", "submodule", "status", "--recursive"],
+            cwd=str(ROOT),
+            env=env_np,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=True,
+        )
+    except subprocess.CalledProcessError:
+        return False
+    lines = [line.strip() for line in proc.stdout.splitlines() if line.strip()]
+    if not lines:
+        return True
+    for line in lines:
+        if not line:
+            continue
+        if line[0] in {"-", "+", "U"} or "dirty" in line:
+            return False
+    skip = _skip_list(env_np)
+    for rel in _gitmodule_paths():
+        if rel in skip:
+            continue
+        path = ROOT / rel
+        if not path.exists():
+            return False
+        populated = any(p.name not in {".git", ".gitmodules"} for p in path.iterdir())
+        if not populated:
+            return False
+    return True
+
+
+def submodule_builds_ready(env: Mapping[str, str]) -> bool:
+    paths = _gitmodule_paths()
+    if not paths:
+        return True
+    skip = _skip_list(env)
+    wanted = _wanted_list(env, paths)
+    for rel in paths:
+        if rel not in wanted or rel in skip:
+            continue
+        path = ROOT / rel
+        if not path.exists() or not (path / "CMakeLists.txt").exists():
+            continue
+        build_dir = path / "build"
+        if not (build_dir / "CMakeCache.txt").exists():
+            return False
+    return True
+
+
+def prepare_submodules(env: Mapping[str, str], *, skip_when_ready: bool = False) -> None:
+    ready = submodules_ready(env)
+    build_ready = submodule_builds_ready(env)
+    if skip_when_ready and ready and build_ready:
+        print("[info] 检测到 C++ 子模块已就绪，跳过更新/构建")
+        return
+    if not ready:
+        try:
+            git_submodules(env)
+        except subprocess.CalledProcessError as exc:
+            print(f"[warn] git submodule 更新失败 ({exc}), 尝试使用已有缓存强制 checkout")
+            # best-effort repair using cached modules
+            for rel in _gitmodule_paths():
+                _repair_empty_submodule(rel, strip_proxies(env))
+        build_ready = False
+    if not build_ready or not ready or not skip_when_ready:
+        build_submodules(env)
+
+
 def _wanted_list(env: Mapping[str, str], all_paths: list[str]) -> list[str]:
     raw = env.get("BUILD_SUBMODULES", "")
     if raw.strip().lower() == "all":
@@ -64,7 +177,10 @@ def git_submodules(env: Mapping[str, str]) -> None:
         return
     env_np = strip_proxies(env)
     skip = _skip_list(env_np)
-    run(["git", "submodule", "sync", "--recursive"], env=env_np, cwd=ROOT)
+    try:
+        run(["git", "submodule", "sync", "--recursive"], env=env_np, cwd=ROOT)
+    except subprocess.CalledProcessError:
+        print("[warn] git submodule sync 失败，继续尝试 update")
     all_paths = _gitmodule_paths()
     non_boost = [p for p in all_paths if p and p != _BOOST_REL_PATH]
     if skip:
@@ -84,11 +200,16 @@ def git_submodules(env: Mapping[str, str]) -> None:
             run(update_cmd, env=env_np, cwd=ROOT)
         except subprocess.CalledProcessError:
             print("[warn] 子模块 partial clone 失败，正在回退为完整检出（非 boost）")
-            run(base_cmd + ["--", *non_boost], env=env_np, cwd=ROOT)
+            run(base_cmd + ["--force", "--", *non_boost], env=env_np, cwd=ROOT)
+        for rel in non_boost:
+            if _repair_empty_submodule(rel, env_np):
+                print(f"[warn] 检测到子模块 {rel} 为空，已强制 checkout 修复")
     if _BOOST_REL_PATH not in skip:
         _update_boost_root(env_np)
         _apply_boost_sparse_checkout(env_np)
         _update_boost_modules(env_np)
+        if _repair_empty_submodule(_BOOST_REL_PATH, env_np):
+            print(f"[warn] 检测到子模块 {_BOOST_REL_PATH} 为空，已强制 checkout 修复")
 
 
 def _load_boost_sparse_patterns() -> list[str]:
@@ -151,7 +272,7 @@ def _update_boost_root(env: Mapping[str, str]) -> None:
         run(cmd, env=env, cwd=ROOT)
     except subprocess.CalledProcessError:
         print("[warn] Boost partial clone 失败，正在回退为完整检出")
-        run(["git", "submodule", "update", "--init", "--", _BOOST_REL_PATH], env=env, cwd=ROOT)
+        run(["git", "submodule", "update", "--init", "--force", "--", _BOOST_REL_PATH], env=env, cwd=ROOT)
 
 
 def _update_boost_modules(env: Mapping[str, str]) -> None:
@@ -176,7 +297,7 @@ def _update_boost_modules(env: Mapping[str, str]) -> None:
         run(cmd, env=env)
     except subprocess.CalledProcessError:
         print("[warn] Boost 内部子模块 partial clone 失败，正在回退为完整检出所需模块")
-        run(["git", "-C", str(_BOOST_SUBMODULE_PATH), "submodule", "update", "--init", "--recursive", "--", *modules], env=env)
+        run(["git", "-C", str(_BOOST_SUBMODULE_PATH), "submodule", "update", "--init", "--recursive", "--force", "--", *modules], env=env)
     _ensure_boost_headers(env, modules)
 
 
@@ -230,6 +351,17 @@ def build_submodules(env: Mapping[str, str]) -> None:
                 f'-DCMAKE_BUILD_TYPE={env["CPP_BUILD_TYPE"]}',
             ]
             cmake_args += extra_cmake_args.get(rel, [])
+            if rel == "cpp/lib/redis-plus-plus":
+                hiredis_root = ROOT / "cpp" / "lib" / "hiredis"
+                hiredis_build = hiredis_root / "build"
+                hiredis_lib = hiredis_build / "libhiredisd.dylib"
+                if hiredis_root.exists():
+                    cmake_args.append(f"-DHIREDIS_HEADER={hiredis_root}")
+                if hiredis_lib.exists():
+                    cmake_args.append(f"-DHIREDIS_LIB={hiredis_lib}")
+                hiredis_config_dir = hiredis_build if (hiredis_build / "hiredis-config.cmake").exists() else None
+                if hiredis_config_dir:
+                    cmake_args.append(f"-Dhiredis_DIR={hiredis_config_dir}")
             run(cmake_args, env=env)
             run([env["CMAKE"], "--build", str(build_dir), "--parallel", env["JOBS"]], env=env)
         except Exception:
@@ -416,8 +548,10 @@ def uninstall(env: Mapping[str, str]) -> None:
             target.unlink()
 
 
-def clean(env: Mapping[str, str]) -> None:
+def clean(env: Mapping[str, str], *, clean_submodules: bool = True) -> None:
     shutil.rmtree(CPP_BUILD_DIR, ignore_errors=True)
+    if not clean_submodules:
+        return
     # also clean lib/*/build
     for sub in (CPP_SRC_DIR / "lib").glob("*/build"):
         shutil.rmtree(sub, ignore_errors=True)
