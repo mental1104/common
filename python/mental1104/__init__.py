@@ -9,6 +9,18 @@
 # ---- Direct imports (safe modules; no mental1104 top-level imports) ----
 from mental1104.app.anki import AnkiApkgGenerator
 from mental1104.app.pdf import extract_page_range
+from mental1104.common.i18n.context import DEFAULT_LOCALE, activate, get_locale, locale_context, reset_locale
+from mental1104.common.i18n.fastapi import I18nMiddleware
+from mental1104.common.i18n.json_localize import localize_json
+from mental1104.common.i18n.placeholder import PLACEHOLDER_PATTERN, compare_placeholders, extract_placeholders
+from mental1104.common.i18n.provider import FileMoProvider, I18nResourceProvider
+from mental1104.common.i18n.resolver import ChainResolver, CookieResolver, HeaderResolver, LocaleResolver, QueryResolver
+from mental1104.common.i18n.runtime import I18n, normalize_locale
+from mental1104.common.i18n.tools.check import check_po_tree
+from mental1104.common.i18n.tools.cli import main
+from mental1104.common.i18n.tools.compile import compile_po_tree, po_text_to_mo_bytes
+from mental1104.common.i18n.tools.mo_writer import write_mo
+from mental1104.common.i18n.tools.po_parser import PoEntry, parse_po
 from mental1104.concurrency.types import MPStartMethod
 from mental1104.connector.postgres import Base, SessionAwareMixin, close_session, db_connection, ensure_database_exists, ensure_tables_exist, get_db_config, get_db_url, get_session, init_database, logger, open_session, setup, startup, with_session
 from mental1104.connector.redis_client.redis_bloom_kv import RedisBloom
@@ -63,23 +75,34 @@ __all__ = [
     'BenchmarkPlotter',
     'BenchmarkRecord',
     'BenchmarkSuite',
+    'ChainResolver',
     'Consumer',
+    'CookieResolver',
     'CoroutinePool',
     'CpuBoundTask',
+    'DEFAULT_LOCALE',
     'DatasetFactory',
     'ELLIPSIS_CHAR',
     'FUNC_FIELD_WIDTH',
+    'FileMoProvider',
     'FirstSuccessfulStrategy',
     'GatherStrategy',
     'GoogleBenchmarkSuite',
     'HEAD_PREFIX',
+    'HeaderResolver',
+    'I18n',
+    'I18nMiddleware',
+    'I18nResourceProvider',
     'ID_FIELD_WIDTH',
     'IoBoundTask',
     'JsonParserType',
     'JsonSerializable',
     'JsonUtil',
+    'LocaleResolver',
     'MPStartMethod',
     'MissingEnvVarError',
+    'PLACEHOLDER_PATTERN',
+    'PoEntry',
     'ProcessExecutorCoroutinePool',
     'ProcessWorkerPool',
     'Producer',
@@ -87,6 +110,7 @@ __all__ = [
     'PulsarConnector',
     'PulsarEnvironment',
     'PytestBenchmarkSuite',
+    'QueryResolver',
     'RedisBloom',
     'SITE_FIELD_WIDTH',
     'SessionAwareMixin',
@@ -98,10 +122,14 @@ __all__ = [
     'TimeBasedTrendPlot',
     'TrendPlotBase',
     'YamlUtil',
+    'activate',
     'async_delay',
     'async_timed',
+    'check_po_tree',
     'check_required_env_vars',
     'close_session',
+    'compare_placeholders',
+    'compile_po_tree',
     'csv_writer',
     'db_connection',
     'deciprobe',
@@ -115,12 +143,14 @@ __all__ = [
     'ensure_tables_exist',
     'export_csv_from_database',
     'extract_page_range',
+    'extract_placeholders',
     'fetch_status',
     'file_iterator',
     'generate_salt',
     'get_current_time',
     'get_db_config',
     'get_db_url',
+    'get_locale',
     'get_session',
     'init_database',
     'iterator_csv',
@@ -128,17 +158,25 @@ __all__ = [
     'json_to_yaml',
     'load_benchmark_suite',
     'load_json',
+    'locale_context',
+    'localize_json',
     'logger',
+    'main',
+    'normalize_locale',
     'open_session',
+    'parse_po',
     'parse_time',
     'parse_yaml',
+    'po_text_to_mo_bytes',
     'random_pick',
     'replace_space_with',
+    'reset_locale',
     'setup',
     'startup',
     'timed',
     'trace_if',
     'with_session',
+    'write_mo',
     'yaml_to_json',
 ]
 
