@@ -31,7 +31,7 @@ from mental1104.file.file_processor import file_iterator
 from mental1104.iterator.iterator_csv import iterator_csv
 from mental1104.plot.bench import BenchTestType, BenchmarkPlotter, BenchmarkRecord, BenchmarkSuite, GoogleBenchmarkSuite, PytestBenchmarkSuite, load_benchmark_suite
 from mental1104.schema.common_schema import JsonSerializable
-from mental1104.string.string_util import replace_space_with
+from mental1104.string.string_util import insert_newlines, replace_space_with
 from mental1104.timed import async_timed, get_current_time, parse_time, timed
 from mental1104.utils.bench_tasks import CpuBoundTask, DatasetFactory, IoBoundTask
 from mental1104.utils.encryption import decrypt, encrypt, generate_salt
@@ -153,6 +153,7 @@ __all__ = [
     'get_locale',
     'get_session',
     'init_database',
+    'insert_newlines',
     'iterator_csv',
     'iterator_json',
     'json_to_yaml',

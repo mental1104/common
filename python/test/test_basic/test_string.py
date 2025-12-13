@@ -1,5 +1,5 @@
 from __future__ import annotations
-from mental1104 import replace_space_with
+from mental1104 import insert_newlines, replace_space_with
 
 
 class TestStringHelper:
@@ -63,3 +63,33 @@ class TestStringHelper:
         input_string = "Special@#Characters\nHere"
         expected_output = "Special@#Characters|Here"
         assert replace_space_with(input_string) == expected_output
+
+    def test_insert_newlines_basic_wrap(self):
+        """
+        【场景背景】长字符串需要按行宽自动插入换行符。
+        【步骤输入】中文长句与 max_line_length=10。
+        【期望输出】输出包含换行符，行宽被控制在指定长度附近。
+        """
+        input_string = "这是一个测试字符串，我们希望在这个字符串中插入换行符，以确保每行的长度不会太长。"
+        max_length = 10
+        expected_output = "这是一个测试字符串，\n我们希望在这个字符串中\n插入换行符，以确保每行\n的长度不会太长。"
+        assert insert_newlines(input_string, max_length) == expected_output
+
+    def test_insert_newlines_respects_existing_breaks(self):
+        """
+        【场景背景】字符串本身包含换行符时应从该位置重新计数。
+        【步骤输入】前半部分已包含换行符的字符串，max_line_length=3。
+        【期望输出】换行后的计数被重置，仍按规则插入新的换行符。
+        """
+        input_string = "abc\ndefghij"
+        expected_output = "abc\ndef\nghij"
+        assert insert_newlines(input_string, 3) == expected_output
+
+    def test_insert_newlines_short_string(self):
+        """
+        【场景背景】短字符串不应被修改。
+        【步骤输入】长度小于行宽的字符串，max_line_length=50。
+        【期望输出】返回原始字符串。
+        """
+        input_string = "short text"
+        assert insert_newlines(input_string, 50) == input_string
