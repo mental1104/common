@@ -8,6 +8,8 @@ pulsar-client[avro] ; sys_platform != "win32"
 pycryptodome 
 aiohttp 
 genanki
+fastapi
+starlette
 pytest
 pytest-asyncio
 pytest-mock
