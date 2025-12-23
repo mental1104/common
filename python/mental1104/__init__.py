@@ -34,6 +34,7 @@ from mental1104.schema.common_schema import JsonSerializable
 from mental1104.string.string_util import insert_newlines, replace_space_with
 from mental1104.timed import async_timed, get_current_time, parse_time, timed
 from mental1104.utils.bench_tasks import CpuBoundTask, DatasetFactory, IoBoundTask
+from mental1104.utils.context import RequestCtx, ctx, ctx_diag, reset_ctx, set_ctx
 from mental1104.utils.encryption import decrypt, encrypt, generate_salt
 from mental1104.utils.overload import dispatch_for
 from mental1104.utils.parse_json import JsonParserType, JsonUtil, dump_json, load_json
@@ -55,14 +56,18 @@ _EXPORT_MAP = {
     'PulsarAdminHelper': 'mental1104.connector.pulsar',
     'PulsarConnector': 'mental1104.connector.pulsar',
     'PulsarEnvironment': 'mental1104.connector.pulsar',
+    'RequestCtxMiddlewareFactory': 'mental1104.asgi.fastapi.middleware',
+    'RequestCtxContextVarMiddlewareFactory': 'mental1104.asgi.fastapi.middleware',
     'TaskExecutionStrategy': 'mental1104.concurrency.coroutine',
     'ThreadExecutorCoroutinePool': 'mental1104.concurrency.coroutine',
     'ThreadWorkerPool': 'mental1104.concurrency.sync_worker',
     'TimeBasedTrendPlot': 'mental1104.plot.trend',
     'TrendPlotBase': 'mental1104.plot.trend',
+    'register_all_request_ctx_middlewares': 'mental1104.asgi.fastapi.middleware',
     'fetch_status': 'mental1104.network.http_package',
     'iterator_json': 'mental1104.iterator.iterator_json',
     'json_to_yaml': 'mental1104.app.convert',
+    'register_request_ctx_middleware': 'mental1104.asgi.fastapi.middleware',
     'yaml_to_json': 'mental1104.app.convert',
 }
 
@@ -112,6 +117,9 @@ __all__ = [
     'PytestBenchmarkSuite',
     'QueryResolver',
     'RedisBloom',
+    'RequestCtx',
+    'RequestCtxContextVarMiddlewareFactory',
+    'RequestCtxMiddlewareFactory',
     'SITE_FIELD_WIDTH',
     'SessionAwareMixin',
     'TRACE_IF_ENABLED',
@@ -131,6 +139,8 @@ __all__ = [
     'compare_placeholders',
     'compile_po_tree',
     'csv_writer',
+    'ctx',
+    'ctx_diag',
     'db_connection',
     'deciprobe',
     'decrypt',
@@ -170,8 +180,12 @@ __all__ = [
     'parse_yaml',
     'po_text_to_mo_bytes',
     'random_pick',
+    'register_all_request_ctx_middlewares',
+    'register_request_ctx_middleware',
     'replace_space_with',
+    'reset_ctx',
     'reset_locale',
+    'set_ctx',
     'setup',
     'startup',
     'timed',

@@ -18,10 +18,12 @@ def test_chain_resolver_priority_and_fastapi_integration():
 
     client = TestClient(app)
 
-    resp = client.get("/locale?lang=en", headers={"X-Locale": "ja"}, cookies={"locale": "fr"})
+    client.cookies.set("locale", "fr")
+    resp = client.get("/locale?lang=en", headers={"X-Locale": "ja"})
     assert resp.status_code == 200
     assert resp.json() == {"ctx": "en", "state": "en"}
 
+    client.cookies.clear()  # avoid cookie influence on later cases
     resp = client.get("/locale", headers={"X-Locale": "ja"})
     assert resp.json()["ctx"] == "ja"
 
