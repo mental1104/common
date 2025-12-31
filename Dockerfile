@@ -97,7 +97,7 @@ RUN cd /tmp && wget https://download.qemu.org/qemu-4.1.0.tar.xz && tar xvJf qemu
     make install && PATH=$PATH:/opt/qemu/bin && \
     rm -rf /tmp/qemu*
 
-COPY INSTALLROOT/amd64 /
+COPY devops/INSTALLROOT/amd64 /
 
 ### 2.2 安装golang
 RUN tar -C /usr/local -xzf /tmp/go1.23.4.linux-amd64.tar.gz
@@ -124,8 +124,8 @@ RUN cd /tmp && tar -zxvf nvim-linux64.tar.gz \
 
 ENV VSCODE_COMMIT_VERSION=f1a4fb101478ce6ec82fe9627c43efbf9e98c813
 RUN mkdir -p /root/.vscode-server/bin/${VSCODE_COMMIT_VERSION}
-COPY INSTALLROOT/root/.vscode-server /root/.vscode-server
-COPY INSTALLROOT/root/extensions.txt /root/extensions.txt
+COPY devops/INSTALLROOT/root/.vscode-server /root/.vscode-server
+COPY devops/INSTALLROOT/root/extensions.txt /root/extensions.txt
 RUN tar -zxvf /root/.vscode-server/vscode-server-linux-x64.tar.gz -C /root/.vscode-server/bin/${VSCODE_COMMIT_VERSION} --strip 1 && touch /root/.vscode-server/bin/${VSCODE_COMMIT_VERSION}/0
 
 ### 3.2 下载并安装插件
@@ -134,11 +134,11 @@ RUN while read extension; do \
     done < /root/extensions.txt
 
 ## 4. 安装pip模块
-COPY INSTALLROOT/root/requirements.txt /root/requirements.txt
+COPY devops/INSTALLROOT/root/requirements.txt /root/requirements.txt
 RUN pip3 install  -i https://mirrors.aliyun.com/pypi/simple -r /root/requirements.txt --break-system-packages && rm -f /root/requirements.txt
 
 # 安装 cJSON
-COPY INSTALLROOT/lib/ /tmp/lib
+COPY devops/INSTALLROOT/lib/ /tmp/lib
 RUN cd /tmp/lib && cd cJSON && \
     mkdir build && \
     cd build && \
@@ -165,8 +165,8 @@ RUN cd /tmp/lib && cd DataStructure && \
     cd /tmp/lib && rm -rf DataStructure*
 
 # 安装lazyvim
-COPY INSTALLROOT/root/.config /root/.config
-COPY INSTALLROOT/root/.local /root/.local
+COPY devops/INSTALLROOT/root/.config /root/.config
+COPY devops/INSTALLROOT/root/.local /root/.local
 
 # 安装redis相关库
 RUN cd /tmp/lib && cd hiredis && \
@@ -189,7 +189,7 @@ COPY python /tmp/python/
 RUN cd /tmp/python && pip install . --break-system-packages
 
 ### 5.3 安装自定义必要脚本
-COPY utils /usr/local/bin
+COPY devops/utils /usr/local/bin
 RUN chmod -R +x /usr/local/bin
 
 ## 6. 快速配置项
@@ -222,8 +222,8 @@ RUN ln -sf /usr/share/zoneinfo/Asia/Shanghai /etc/localtime
 ### 6.6 映射neovim的clangd为系统clangd
 RUN mkdir -p /root/.local/share/nvim/mason/packages/clangd/clangd_19.1.2/bin && ln -s /usr/bin/clangd /root/.local/share/nvim/mason/packages/clangd/clangd_19.1.2/bin/clangd
 ### 6.7 送入clang-format
-COPY INSTALLROOT/root/.clang-format /usr/lib/llvm-18/bin
-COPY INSTALLROOT/root/.clang-format /root
+COPY devops/INSTALLROOT/root/.clang-format /usr/lib/llvm-18/bin
+COPY devops/INSTALLROOT/root/.clang-format /root
 
 ### 6.8 建立go相关的软链接
 RUN ln -s /usr/local/go/bin/go /usr/bin/go && ln -s /go/bin/gopls /usr/bin/gopls

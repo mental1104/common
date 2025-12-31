@@ -7,8 +7,8 @@ on:
 jobs:
   python-macos:
     runs-on: macos-latest
-    env:
-      PYTHONPATH: ${{ github.workspace }}
+env:
+  PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/devops
     defaults:
       run:
         shell: bash
