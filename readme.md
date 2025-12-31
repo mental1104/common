@@ -37,8 +37,8 @@ Python + C++ 混合工程，使用统一的 `dev` 命令驱动（macOS/Linux：`
 ./dev bench all          # 含基准图表与 gallery
 ./dev vet all
 ./dev guard all          # C++ ASAN/TSAN，Go race，Rust sanitizer/miri，Python ruff+pytest
-./dev setup-docker       # 启动 images/ 下的 compose，自动读取 .env
-./dev clean-docker       # 关闭 images/ 下的 compose
+./dev setup-docker       # 启动 devops/images/ 下的 compose，自动读取 .env
+./dev clean-docker       # 关闭 devops/images/ 下的 compose
 ```
 
 参数透传：在子命令后加 `--`，其后的内容直接交给底层工具，例如 `./dev test python -- -k "expr"` 或 `./dev test cpp -- --gtest_filter=Foo.*`。
@@ -130,7 +130,7 @@ PREFIX="$HOME/.local" SUDO= ./dev install cpp
 
 ## Docker（可选）
 
-仓库提供 `Dockerfile` 与 images/ 目录下的 compose：
+仓库提供 `Dockerfile` 与 devops/images/ 目录下的 compose：
 
 ```bash
 ./dev setup-docker      # 自动检测 docker-compose / docker compose；跳过缺失
@@ -139,7 +139,7 @@ PREFIX="$HOME/.local" SUDO= ./dev install cpp
 docker build -t mental1104:dev .
 ```
 
-`INSTALLROOT/` + `install.sh`/`run.sh` 可在镜像内按需安装组件。
+`devops/INSTALLROOT/` + `install.sh`/`run.sh` 可在镜像内按需安装组件。
 
 说明：`setup-docker` 自动加载根目录 `.env`，按服务目录独立 project-name 启动；已有同名容器且在运行时会跳过，避免误停。
 
@@ -166,7 +166,7 @@ docker build -t mental1104:dev .
 
 ## 工作原理（简述）
 
-- **dev CLI**：Python `argparse` 分发；子命令各在 `devtool/commands/*.py` 中注册。
+- **dev CLI**：Python `argparse` 分发；子命令各在 `devops/devtool/commands/*.py` 中注册。
 - **命令执行**：统一经过 `devtool.context.sh`，日志格式 `[dev] (cwd)$ cmd`。
 - **语言侧逻辑**：从原 Makefile 迁移的 shell 片段直接嵌入各子命令，确保行为与历史一致（venv/bootstrap、pybind11 导出、ctest/gcovr/gcov、cargo llvm-cov 等）。
 - **环境变量**：`base_env` 自动加载 `.env`，测试/覆盖率会自动剥离 HTTP(S)_PROXY/ALL_PROXY，避免代理影响内部容器。

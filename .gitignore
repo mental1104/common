@@ -2,8 +2,8 @@
 *.egg-info
 build
 # Allow tracked CLI command package
-!devtool/commands/build/
-!devtool/commands/build/**
+!devops/devtool/commands/build/
+!devops/devtool/commands/build/**
 
 a.out
 .env*
@@ -27,8 +27,8 @@ target
 *.gcda
 *.lcov
 coverage/
-!devtool/commands/coverage/
-!devtool/commands/coverage/**
+!devops/devtool/commands/coverage/
+!devops/devtool/commands/coverage/**
 flamegraph.svg
 perf.data*
 infer-out/

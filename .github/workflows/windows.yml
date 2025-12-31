@@ -9,7 +9,7 @@ jobs:
     runs-on: windows-latest
     env:
       PYTHON: python
-      PYTHONPATH: ${{ github.workspace }}
+      PYTHONPATH: ${{ github.workspace }};${{ github.workspace }}/devops
       PYTHONUTF8: "1"
       PYTHONIOENCODING: "utf-8"
     defaults:
@@ -66,6 +66,7 @@ jobs:
     runs-on: windows-latest
     env:
       PYTHON: python
+      PYTHONPATH: ${{ github.workspace }};${{ github.workspace }}/devops
     defaults:
       run:
         shell: pwsh
@@ -112,6 +113,7 @@ jobs:
     runs-on: windows-latest
     env:
       PYTHON: python
+      PYTHONPATH: ${{ github.workspace }};${{ github.workspace }}/devops
     defaults:
       run:
         shell: pwsh
@@ -160,7 +162,7 @@ jobs:
     env:
       PYTHON: python
       CMAKE_BUILD_PARALLEL_LEVEL: 4
-      PYTHONPATH: ${{ github.workspace }}
+      PYTHONPATH: ${{ github.workspace }};${{ github.workspace }}/devops
       CMAKE_GENERATOR: "Visual Studio 17 2022"
       PYTHONUTF8: "1"
       PYTHONIOENCODING: "utf-8"

@@ -5,7 +5,7 @@ on:
   pull_request:
 
 env:
-  PYTHONPATH: ${{ github.workspace }}
+  PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/devops
   DATABASE_URL: postgresql://test:test@localhost:5432/app
   REDIS_URL: redis://localhost:6379/0
   PGUSER: test
