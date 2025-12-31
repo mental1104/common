@@ -4,11 +4,12 @@ on:
   push:
   pull_request:
 
+env:
+  PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/devops
+
 jobs:
   python-macos:
     runs-on: macos-latest
-env:
-  PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/devops
     defaults:
       run:
         shell: bash
@@ -70,7 +71,7 @@ env:
     env:
       CMAKE_BUILD_PARALLEL_LEVEL: 4
       GCOV: "llvm-cov gcov"
-      PYTHONPATH: ${{ github.workspace }}
+      PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/devops
     defaults:
       run:
         shell: bash
