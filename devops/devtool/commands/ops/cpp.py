@@ -321,18 +321,39 @@ def _ensure_boost_headers(env: Mapping[str, str], modules: list[str]) -> None:
         run(["git", "-C", str(_BOOST_SUBMODULE_PATH), "submodule", "update", "--init", "--recursive"], env=env)
 
 
-def build_submodules(env: Mapping[str, str]) -> None:
+def _project_cxx_standard() -> str | None:
+    settings = CPP_SRC_DIR / "cmake" / "project_settings.cmake"
+    if not settings.exists():
+        return None
+    for raw in settings.read_text().splitlines():
+        m = re.match(r"\s*set\(CMAKE_CXX_STANDARD\s+([0-9]+)\)", raw)
+        if m:
+            return m.group(1)
+    return None
+
+
+def build_submodules(
+    env: Mapping[str, str],
+    *,
+    strict: bool = False,
+    only: set[str] | None = None,
+) -> None:
     skip = _skip_list(env)
     paths = _gitmodule_paths()
     wanted = _wanted_list(env, paths)
     extra_cmake_args = {
         "cpp/lib/cJSON": ["-DENABLE_CUSTOM_COMPILER_FLAGS=OFF"],
         "cpp/lib/hiredis": ["-DDISABLE_TESTS=ON"],
+        "cpp/lib/redis-plus-plus": ["-DREDIS_PLUS_PLUS_BUILD_TEST=ON"],
     }
     is_windows = platform.system().lower() == "windows"
     for rel in paths:
-        if rel not in wanted or rel in skip:
-            continue
+        if only is None:
+            if rel not in wanted or rel in skip:
+                continue
+        else:
+            if rel in skip or rel not in only:
+                continue
         if is_windows and rel in {"cpp/lib/redis-plus-plus", "cpp/lib/hiredis"}:
             print(f"[warn] Skip {rel} on Windows (not supported)")
             continue
@@ -354,18 +375,99 @@ def build_submodules(env: Mapping[str, str]) -> None:
             if rel == "cpp/lib/redis-plus-plus":
                 hiredis_root = ROOT / "cpp" / "lib" / "hiredis"
                 hiredis_build = hiredis_root / "build"
-                hiredis_lib = hiredis_build / "libhiredisd.dylib"
+                hiredis_lib = None
                 if hiredis_root.exists():
                     cmake_args.append(f"-DHIREDIS_HEADER={hiredis_root}")
-                if hiredis_lib.exists():
+                for name in (
+                    "libhiredis.so",
+                    "libhiredis.a",
+                    "libhiredis.dylib",
+                    "libhiredisd.so",
+                    "libhiredisd.a",
+                    "libhiredisd.dylib",
+                ):
+                    candidate = hiredis_build / name
+                    if candidate.exists():
+                        hiredis_lib = candidate
+                        break
+                if hiredis_lib:
                     cmake_args.append(f"-DHIREDIS_LIB={hiredis_lib}")
                 hiredis_config_dir = hiredis_build if (hiredis_build / "hiredis-config.cmake").exists() else None
                 if hiredis_config_dir:
                     cmake_args.append(f"-Dhiredis_DIR={hiredis_config_dir}")
+                redispp_std = env.get("REDISPP_CXX_STD") or env.get("CXX_STD") or _project_cxx_standard()
+                if redispp_std:
+                    cmake_args.append(f"-DREDIS_PLUS_PLUS_CXX_STANDARD={redispp_std}")
             run(cmake_args, env=env)
             run([env["CMAKE"], "--build", str(build_dir), "--parallel", env["JOBS"]], env=env)
         except Exception:
+            if strict:
+                raise
             print(f"[warn] 子模块 {rel} 构建失败，已跳过（可用 BUILD_SUBMODULES=all 重新尝试）")
+
+
+def _redispp_build_dir() -> Path:
+    return ROOT / "cpp" / "lib" / "redis-plus-plus" / "build"
+
+
+def _redispp_test_binary(build_dir: Path) -> Path | None:
+    candidates = [
+        build_dir / "test" / "test_redis++",
+        build_dir / "test_redis++",
+    ]
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+        exe = candidate.with_suffix(".exe")
+        if exe.exists():
+            return exe
+    return None
+
+
+def _prepend_library_path(env: dict[str, str], paths: list[Path]) -> None:
+    if is_windows():
+        return
+    key = "DYLD_LIBRARY_PATH" if platform.system().lower() == "darwin" else "LD_LIBRARY_PATH"
+    existing = env.get(key, "")
+    additions = [str(p) for p in paths if p.exists()]
+    if not additions and not existing:
+        return
+    merged = additions + ([existing] if existing else [])
+    env[key] = ":".join(merged)
+
+
+def build_redispp(env: Mapping[str, str]) -> Path:
+    run_env = dict(env)
+    run_env.pop("SKIP_SUBMODULES", None)
+    build_submodules(
+        run_env,
+        strict=True,
+        only={"cpp/lib/hiredis", "cpp/lib/redis-plus-plus"},
+    )
+    return _redispp_build_dir()
+
+
+def test_redispp(env: Mapping[str, str], *, host: str, port: str, auth: str | None = None) -> None:
+    build_dir = build_redispp(env)
+    test_bin = _redispp_test_binary(build_dir)
+    if not test_bin:
+        raise SystemExit("[error] redis-plus-plus test binary not found after build")
+    cmd = [str(test_bin), "-h", host, "-p", port]
+    if auth:
+        cmd += ["-a", auth]
+    cmd_env = dict(env)
+    hiredis_build = ROOT / "cpp" / "lib" / "hiredis" / "build"
+    _prepend_library_path(
+        cmd_env,
+        [
+            build_dir,
+            build_dir / "lib",
+            build_dir / "src",
+            hiredis_build,
+            hiredis_build / "lib",
+        ],
+    )
+    run(cmd, env=cmd_env, cwd=test_bin.parent)
 
 
 def configure(env: Mapping[str, str]) -> None:

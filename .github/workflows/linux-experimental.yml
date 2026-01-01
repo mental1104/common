@@ -117,6 +117,14 @@ jobs:
         continue-on-error: true
         run: ./dev build-cpp --config Debug
 
+      - name: Test C++ (clang)
+        continue-on-error: true
+        run: ./dev test-cpp
+
+      - name: Test redis-plus-plus (clang)
+        continue-on-error: true
+        run: ./dev test-redispp --config Debug
+
   cpp-linux-gcc-std:
     name: C++ (g++, std=${{ matrix.cxx_std }})
     runs-on: ubuntu-latest
@@ -205,3 +213,7 @@ jobs:
       - name: Test C++ (g++ c++${{ matrix.cxx_std }})
         continue-on-error: true
         run: ./dev test-cpp
+
+      - name: Test redis-plus-plus (g++ c++${{ matrix.cxx_std }})
+        continue-on-error: true
+        run: ./dev test-redispp --config Debug
