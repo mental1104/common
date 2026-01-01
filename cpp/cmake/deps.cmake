@@ -318,7 +318,7 @@ endfunction()
 macro(m1104_register_components)
   register_component(HIREDIS "lib/hiredis"
       LIB_GLOBS "libhiredis*.so*" "libhiredis*.a" "libhiredis*.dylib"
-      INC_REL .
+      INC_REL build/install/include .
   )
 
   register_component(REDISPP "lib/redis-plus-plus"
