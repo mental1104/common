@@ -332,6 +332,14 @@ def _project_cxx_standard() -> str | None:
     return None
 
 
+def _hiredis_install_dir() -> Path:
+    return ROOT / "cpp" / "lib" / "hiredis" / "build" / "install"
+
+
+def _hiredis_config_dir(install_dir: Path) -> Path:
+    return install_dir / "lib" / "cmake" / "hiredis"
+
+
 def build_submodules(
     env: Mapping[str, str],
     *,
@@ -341,9 +349,13 @@ def build_submodules(
     skip = _skip_list(env)
     paths = _gitmodule_paths()
     wanted = _wanted_list(env, paths)
+    hiredis_install = _hiredis_install_dir()
     extra_cmake_args = {
         "cpp/lib/cJSON": ["-DENABLE_CUSTOM_COMPILER_FLAGS=OFF"],
-        "cpp/lib/hiredis": ["-DDISABLE_TESTS=ON"],
+        "cpp/lib/hiredis": [
+            "-DDISABLE_TESTS=ON",
+            f"-DCMAKE_INSTALL_PREFIX={hiredis_install}",
+        ],
         "cpp/lib/redis-plus-plus": ["-DREDIS_PLUS_PLUS_BUILD_TEST=ON"],
     }
     is_windows = platform.system().lower() == "windows"
@@ -375,31 +387,38 @@ def build_submodules(
             if rel == "cpp/lib/redis-plus-plus":
                 hiredis_root = ROOT / "cpp" / "lib" / "hiredis"
                 hiredis_build = hiredis_root / "build"
+                hiredis_install_lib = hiredis_install / "lib"
                 hiredis_lib = None
-                if hiredis_root.exists():
-                    cmake_args.append(f"-DHIREDIS_HEADER={hiredis_root}")
-                for name in (
-                    "libhiredis.so",
-                    "libhiredis.a",
-                    "libhiredis.dylib",
-                    "libhiredisd.so",
-                    "libhiredisd.a",
-                    "libhiredisd.dylib",
-                ):
-                    candidate = hiredis_build / name
-                    if candidate.exists():
-                        hiredis_lib = candidate
+                hiredis_include = hiredis_install / "include"
+                if (hiredis_include / "hiredis" / "hiredis.h").exists():
+                    cmake_args.append(f"-DHIREDIS_HEADER={hiredis_include}")
+                for base in (hiredis_install_lib, hiredis_build):
+                    if hiredis_lib:
                         break
+                    for name in (
+                        "libhiredis.so",
+                        "libhiredis.a",
+                        "libhiredis.dylib",
+                        "libhiredisd.so",
+                        "libhiredisd.a",
+                        "libhiredisd.dylib",
+                    ):
+                        candidate = base / name
+                        if candidate.exists():
+                            hiredis_lib = candidate
+                            break
                 if hiredis_lib:
                     cmake_args.append(f"-DHIREDIS_LIB={hiredis_lib}")
-                hiredis_config_dir = hiredis_build if (hiredis_build / "hiredis-config.cmake").exists() else None
-                if hiredis_config_dir:
+                hiredis_config_dir = _hiredis_config_dir(hiredis_install)
+                if (hiredis_config_dir / "hiredis-config.cmake").exists():
                     cmake_args.append(f"-Dhiredis_DIR={hiredis_config_dir}")
                 redispp_std = env.get("REDISPP_CXX_STD") or env.get("CXX_STD") or _project_cxx_standard()
                 if redispp_std:
                     cmake_args.append(f"-DREDIS_PLUS_PLUS_CXX_STANDARD={redispp_std}")
             run(cmake_args, env=env)
             run([env["CMAKE"], "--build", str(build_dir), "--parallel", env["JOBS"]], env=env)
+            if rel == "cpp/lib/hiredis":
+                run([env["CMAKE"], "--install", str(build_dir), "--prefix", str(hiredis_install)], env=env)
         except Exception:
             if strict:
                 raise
