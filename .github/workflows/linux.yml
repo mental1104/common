@@ -189,6 +189,9 @@ jobs:
       - name: Test C++
         run: ./dev test-cpp
 
+      - name: Test redis-plus-plus
+        run: ./dev test-redispp --config Debug
+
       - name: Coverage C++
         run: ./dev coverage-cpp
 
