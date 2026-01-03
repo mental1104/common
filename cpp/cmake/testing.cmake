@@ -5,9 +5,10 @@ file(GLOB_RECURSE TEST_FILES CONFIGURE_DEPENDS "${TEST_DIR}/*.cpp")
 list(LENGTH TEST_FILES _TEST_COUNT)
 message(STATUS "Collected ${_TEST_COUNT} test files under ${TEST_DIR} (recursive)")
 
+set(M1104_SKIP_TESTS "")
 if (WIN32)
   # Windows runners lack mpfr/gmp/pthread; skip unsupported tests
-  set(M1104_SKIP_TESTS
+  list(APPEND M1104_SKIP_TESTS
     test_high_precision_decimal
     test_boost_mn_coroutine_pool
     test_mn_coroutine_pool
@@ -15,8 +16,15 @@ if (WIN32)
   )
   set(M1104_PLATFORM_LIBS "")
 else()
-  set(M1104_SKIP_TESTS "")
   set(M1104_PLATFORM_LIBS mpfr gmp pthread)
+endif()
+if (DEFINED CMAKE_CXX_STANDARD AND CMAKE_CXX_STANDARD LESS 20)
+  list(APPEND M1104_SKIP_TESTS
+    test_async_simple_scheduler
+    test_boost_mn_coroutine_pool
+    test_mn_coroutine_pool
+    test_mn_coroutine_pool_async_simple
+  )
 endif()
 
 set(TEST_DEPS_test_redis_lock "HIREDIS;REDISPP")
@@ -28,12 +36,10 @@ function(add_optional_test SRC)
   get_filename_component(TEST_NAME "${SRC}" NAME_WE)
   message(STATUS "Consider test ${TEST_NAME} -> ${SRC}")
 
-  if (WIN32)
-    list(FIND M1104_SKIP_TESTS "${TEST_NAME}" _skip_idx)
-    if (NOT _skip_idx EQUAL -1)
-      message(STATUS "Skip test ${TEST_NAME}: unsupported on Windows")
-      return()
-    endif()
+  list(FIND M1104_SKIP_TESTS "${TEST_NAME}" _skip_idx)
+  if (NOT _skip_idx EQUAL -1)
+    message(STATUS "Skip test ${TEST_NAME}: in skip list")
+    return()
   endif()
 
   set(_hdr_var  "TEST_DEPS_${TEST_NAME}")

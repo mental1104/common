@@ -12,19 +12,50 @@
 #include <limits> // std::numeric_limits
 #include <list>
 #include <tuple>
-#include <type_traits> // std::decay_t
+#include <type_traits>
 #include <unordered_map>
 #include <utility> // std::forward
+
+namespace mental1104 {
+namespace detail {
+template <typename T> struct decay {
+  using type = typename std::decay<T>::type;
+};
+
+template <typename T> using decay_t = typename decay<T>::type;
+
+inline void hash_combine(std::size_t &seed, std::size_t value) {
+  seed ^= value + 0x9e3779b9u + (seed << 6) + (seed >> 2);
+}
+
+template <typename T> inline void hash_combine(std::size_t &seed, const T &v) {
+  hash_combine(seed, std::hash<decay_t<T>>{}(v));
+}
+
+template <typename Tuple, std::size_t Index> struct tuple_hash_helper {
+  static void apply(std::size_t &seed, const Tuple &t) {
+    tuple_hash_helper<Tuple, Index - 1>::apply(seed, t);
+    hash_combine(seed, std::get<Index - 1>(t));
+  }
+};
+
+template <typename Tuple> struct tuple_hash_helper<Tuple, 0> {
+  static void apply(std::size_t &, const Tuple &) {}
+};
+
+template <typename Tuple> inline std::size_t hash_tuple(const Tuple &t) {
+  std::size_t seed = 0;
+  tuple_hash_helper<Tuple, std::tuple_size<Tuple>::value>::apply(seed, t);
+  return seed;
+}
+} // namespace detail
+} // namespace mental1104
 
 // Hash function for tuple arguments
 namespace std {
 template <typename... Args> struct hash<std::tuple<Args...>> {
   size_t operator()(const std::tuple<Args...> &t) const {
-    return std::apply(
-        [](auto &&...args) {
-          return (std::hash<std::decay_t<decltype(args)>>{}(args) ^ ...);
-        },
-        t);
+    return ::mental1104::detail::hash_tuple(t);
   }
 };
 } // namespace std
@@ -68,18 +99,20 @@ public:
   }
 
   // 调试/格式化辅助（避免直接暴露内部容器类型）
-  const auto &debug_lru_entries() const { return lru_list; }
+  const std::list<std::pair<KeyType, Ret>> &debug_lru_entries() const {
+    return lru_list;
+  }
 };
 
 // 使用完美转发来推导类型，支持 lambda 表达式
 template <typename Ret, typename... Args, typename F>
-auto make_lru_cache(size_t capacity, F &&func) {
+LRUCache<Ret, Args...> make_lru_cache(size_t capacity, F &&func) {
   return LRUCache<Ret, Args...>(capacity, std::forward<F>(func));
 }
 
 // 新增的无限容量缓存装饰器
 template <typename Ret, typename... Args, typename F>
-auto make_cache(F &&func) {
+LRUCache<Ret, Args...> make_cache(F &&func) {
   const size_t unlimited_capacity = std::numeric_limits<size_t>::max();
   return make_lru_cache<Ret, Args...>(unlimited_capacity, func);
 }
@@ -146,12 +179,14 @@ public:
     return result;
   }
 
-  const auto &debug_lfu_entries() const { return cache; }
+  const std::unordered_map<KeyType, CacheEntry> &debug_lfu_entries() const {
+    return cache;
+  }
 };
 
 // 使用完美转发来推导类型，支持 lambda 表达式
 template <typename Ret, typename... Args, typename F>
-auto make_lfu_cache(size_t capacity, F &&func) {
+LFUCache<Ret, Args...> make_lfu_cache(size_t capacity, F &&func) {
   return LFUCache<Ret, Args...>(capacity, std::forward<F>(func));
 }
 
