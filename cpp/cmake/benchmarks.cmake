@@ -10,7 +10,10 @@ if (HAVE_GOOGLE_BENCHMARK)
         target_include_directories(${TGT} PRIVATE
           ${PROJECT_SOURCE_DIR}/include
         )
-        target_compile_features(${TGT} PRIVATE cxx_std_20)
+        set_target_properties(${TGT} PROPERTIES
+          CXX_STANDARD ${CMAKE_CXX_STANDARD}
+          CXX_STANDARD_REQUIRED ON
+        )
         target_link_libraries(${TGT} PRIVATE mental1104)
         target_link_libraries(${TGT} PRIVATE benchmark::benchmark)
         target_use_all_components(${TGT})
