@@ -246,16 +246,17 @@ function(rpp_apply_cxx_utils_shim)
     set(_cxx_utils "${_overlay_inc}/sw/redis++/cxx_utils.h")
     file(WRITE "${_cxx_utils}" [=[
 #pragma once
-#if __has_include(<sw/redis++/cxx17/cxx_utils.h>)
-#  include <sw/redis++/cxx17/cxx_utils.h>
-#elif __has_include(<sw/redis++/cxx11/cxx_utils.h>)
-#  include <sw/redis++/cxx11/cxx_utils.h>
-#else
-#  include <string>
-#  include <string_view>
-#  include <optional>
-#  include <utility>
-#  include <tuple>
+#if __cplusplus < 201703L
+#  if __has_include(<sw/redis++/cxx11/cxx_utils.h>)
+#    include <sw/redis++/cxx11/cxx_utils.h>
+#  elif __has_include(<sw/redis++/cxx17/cxx_utils.h>)
+#    include <sw/redis++/cxx17/cxx_utils.h>
+#  else
+#    include <string>
+#    include <string_view>
+#    include <optional>
+#    include <utility>
+#    include <tuple>
 namespace sw { namespace redis {
 using StringView = std::string_view;
 template <typename T> using Optional = std::optional<T>;
@@ -264,6 +265,27 @@ using OptionalLongLong    = Optional<long long>;
 using OptionalDouble      = Optional<double>;
 using OptionalStringPair  = Optional<std::pair<std::string, std::string>>;
 }} // namespace sw::redis
+#  endif
+#else
+#  if __has_include(<sw/redis++/cxx17/cxx_utils.h>)
+#    include <sw/redis++/cxx17/cxx_utils.h>
+#  elif __has_include(<sw/redis++/cxx11/cxx_utils.h>)
+#    include <sw/redis++/cxx11/cxx_utils.h>
+#  else
+#    include <string>
+#    include <string_view>
+#    include <optional>
+#    include <utility>
+#    include <tuple>
+namespace sw { namespace redis {
+using StringView = std::string_view;
+template <typename T> using Optional = std::optional<T>;
+using OptionalString      = Optional<std::string>;
+using OptionalLongLong    = Optional<long long>;
+using OptionalDouble      = Optional<double>;
+using OptionalStringPair  = Optional<std::pair<std::string, std::string>>;
+}} // namespace sw::redis
+#  endif
 #endif
 ]=])
 
@@ -364,6 +386,10 @@ macro(m1104_register_components)
         INTERFACE_INCLUDE_DIRECTORIES "${_async_simple_inc}"
       )
     endif()
+  endif()
+  if (HAVE_ASYNC_SIMPLE AND DEFINED CMAKE_CXX_STANDARD AND CMAKE_CXX_STANDARD LESS 20)
+    message(STATUS "Component ASYNC_SIMPLE requires C++20; disabling for C++${CMAKE_CXX_STANDARD}")
+    set(HAVE_ASYNC_SIMPLE FALSE)
   endif()
 endmacro()
 
