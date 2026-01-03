@@ -2,7 +2,15 @@ name: Rust
 
 on:
   push:
+    paths:
+      - "rust/**"
+      - "devops/**"
+      - ".github/workflows/rust.yml"
   pull_request:
+    paths:
+      - "rust/**"
+      - "devops/**"
+      - ".github/workflows/rust.yml"
   workflow_dispatch:
     inputs:
       verbose_logs:

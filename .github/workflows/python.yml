@@ -2,7 +2,15 @@ name: Python
 
 on:
   push:
+    paths:
+      - "python/**"
+      - "devops/**"
+      - ".github/workflows/python.yml"
   pull_request:
+    paths:
+      - "python/**"
+      - "devops/**"
+      - ".github/workflows/python.yml"
   workflow_dispatch:
     inputs:
       enable_python_314:

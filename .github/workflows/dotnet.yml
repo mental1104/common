@@ -2,7 +2,15 @@ name: .NET
 
 on:
   push:
+    paths:
+      - "dotnet/**"
+      - "devops/**"
+      - ".github/workflows/dotnet.yml"
   pull_request:
+    paths:
+      - "dotnet/**"
+      - "devops/**"
+      - ".github/workflows/dotnet.yml"
   workflow_dispatch:
     inputs:
       verbose_logs:

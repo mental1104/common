@@ -2,7 +2,15 @@ name: Go
 
 on:
   push:
+    paths:
+      - "golang/**"
+      - "devops/**"
+      - ".github/workflows/golang.yml"
   pull_request:
+    paths:
+      - "golang/**"
+      - "devops/**"
+      - ".github/workflows/golang.yml"
   workflow_dispatch:
     inputs:
       enable_go_prerelease:

@@ -2,7 +2,15 @@ name: C++
 
 on:
   push:
+    paths:
+      - "cpp/**"
+      - "devops/**"
+      - ".github/workflows/cpp.yml"
   pull_request:
+    paths:
+      - "cpp/**"
+      - "devops/**"
+      - ".github/workflows/cpp.yml"
   workflow_dispatch:
     inputs:
       verbose_logs:
