@@ -247,44 +247,91 @@ function(rpp_apply_cxx_utils_shim)
     file(WRITE "${_cxx_utils}" [=[
 #pragma once
 #if __cplusplus < 201703L
-#  if __has_include(<sw/redis++/cxx11/cxx_utils.h>)
-#    include <sw/redis++/cxx11/cxx_utils.h>
-#  elif __has_include(<sw/redis++/cxx17/cxx_utils.h>)
-#    include <sw/redis++/cxx17/cxx_utils.h>
-#  else
-#    include <string>
-#    include <string_view>
-#    include <optional>
-#    include <utility>
-#    include <tuple>
+#  if defined(__has_include)
+#    if __has_include(<sw/redis++/cxx11/sw/redis++/cxx_utils.h>)
+#      include <sw/redis++/cxx11/sw/redis++/cxx_utils.h>
+#    elif __has_include(<sw/redis++/cxx11/cxx_utils.h>)
+#      include <sw/redis++/cxx11/cxx_utils.h>
+#    else
+#      include <cstring>
+#      include <string>
+#      include <functional>
+#      include <type_traits>
+#      include <utility>
 namespace sw { namespace redis {
-using StringView = std::string_view;
-template <typename T> using Optional = std::optional<T>;
-using OptionalString      = Optional<std::string>;
-using OptionalLongLong    = Optional<long long>;
-using OptionalDouble      = Optional<double>;
-using OptionalStringPair  = Optional<std::pair<std::string, std::string>>;
+class StringView {
+public:
+  constexpr StringView() noexcept = default;
+  constexpr StringView(const char *data, std::size_t size)
+      : _data(data), _size(size) {}
+  StringView(const char *data) : _data(data), _size(std::strlen(data)) {}
+  StringView(const std::string &str) : _data(str.data()), _size(str.size()) {}
+  constexpr StringView(const StringView &) noexcept = default;
+  StringView &operator=(const StringView &) noexcept = default;
+  constexpr const char *data() const noexcept { return _data; }
+  constexpr std::size_t size() const noexcept { return _size; }
+private:
+  const char *_data = nullptr;
+  std::size_t _size = 0;
+};
+template <typename T>
+class Optional {
+public:
+  Optional() = default;
+  Optional(const Optional &) = default;
+  Optional &operator=(const Optional &) = default;
+  Optional(Optional &&) = default;
+  Optional &operator=(Optional &&) = default;
+  ~Optional() = default;
+  template <typename... Args>
+  explicit Optional(Args &&...args)
+      : _value(true, T(std::forward<Args>(args)...)) {}
+  explicit operator bool() const { return _value.first; }
+  T &value() { return _value.second; }
+  const T &value() const { return _value.second; }
+  T *operator->() { return &(_value.second); }
+  const T *operator->() const { return &(_value.second); }
+  T &operator*() { return _value.second; }
+  const T &operator*() const { return _value.second; }
+private:
+  std::pair<bool, T> _value;
+};
+template <typename F, typename... Args>
+struct IsInvocable
+    : std::is_constructible<
+          std::function<void(Args...)>,
+          std::reference_wrapper<typename std::remove_reference<F>::type>> {};
 }} // namespace sw::redis
+#    endif
+#  else
+#    include <sw/redis++/cxx11/sw/redis++/cxx_utils.h>
 #  endif
 #else
-#  if __has_include(<sw/redis++/cxx17/cxx_utils.h>)
-#    include <sw/redis++/cxx17/cxx_utils.h>
-#  elif __has_include(<sw/redis++/cxx11/cxx_utils.h>)
-#    include <sw/redis++/cxx11/cxx_utils.h>
-#  else
-#    include <string>
-#    include <string_view>
-#    include <optional>
-#    include <utility>
-#    include <tuple>
+#  if defined(__has_include)
+#    if __has_include(<sw/redis++/cxx17/sw/redis++/cxx_utils.h>)
+#      include <sw/redis++/cxx17/sw/redis++/cxx_utils.h>
+#    elif __has_include(<sw/redis++/cxx17/cxx_utils.h>)
+#      include <sw/redis++/cxx17/cxx_utils.h>
+#    elif __has_include(<sw/redis++/cxx11/sw/redis++/cxx_utils.h>)
+#      include <sw/redis++/cxx11/sw/redis++/cxx_utils.h>
+#    elif __has_include(<sw/redis++/cxx11/cxx_utils.h>)
+#      include <sw/redis++/cxx11/cxx_utils.h>
+#    else
+#      include <string_view>
+#      include <optional>
+#      include <variant>
+#      include <type_traits>
 namespace sw { namespace redis {
 using StringView = std::string_view;
 template <typename T> using Optional = std::optional<T>;
-using OptionalString      = Optional<std::string>;
-using OptionalLongLong    = Optional<long long>;
-using OptionalDouble      = Optional<double>;
-using OptionalStringPair  = Optional<std::pair<std::string, std::string>>;
+template <typename... Args> using Variant = std::variant<Args...>;
+using Monostate = std::monostate;
+template <typename F, typename... Args>
+using IsInvocable = std::is_invocable<F, Args...>;
 }} // namespace sw::redis
+#    endif
+#  else
+#    include <sw/redis++/cxx17/sw/redis++/cxx_utils.h>
 #  endif
 #endif
 ]=])
@@ -292,18 +339,22 @@ using OptionalStringPair  = Optional<std::pair<std::string, std::string>>;
     set(_tls "${_overlay_inc}/sw/redis++/tls.h")
     file(WRITE "${_tls}" [=[
 #pragma once
-#if __has_include(<sw/redis++/tls/tls.h>)
-#  include <sw/redis++/tls/tls.h>
-#elif __has_include(<sw/redis++/no_tls/tls.h>)
-#  include <sw/redis++/no_tls/tls.h>
-#else
-#  include <memory>
-#  include <cstddef>
+#if defined(__has_include)
+#  if __has_include(<sw/redis++/tls/tls.h>)
+#    include <sw/redis++/tls/tls.h>
+#  elif __has_include(<sw/redis++/no_tls/tls.h>)
+#    include <sw/redis++/no_tls/tls.h>
+#  else
+#    include <memory>
+#    include <cstddef>
 namespace sw { namespace redis { namespace tls {
 struct TlsOptions {};
 struct NullDeleter { void operator()(void*) const noexcept {} };
 using TlsContextUPtr = std::unique_ptr<void, NullDeleter>;
 }}} // namespace sw::redis::tls
+#  endif
+#else
+#  include <sw/redis++/no_tls/tls.h>
 #endif
 ]=])
 
