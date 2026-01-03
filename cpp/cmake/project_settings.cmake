@@ -16,10 +16,18 @@ if(NOT CMAKE_BUILD_TYPE)
 endif()
 message(STATUS "Build type: ${CMAKE_BUILD_TYPE}")
 
-# 指定希望使用 C++20；如果将 REQUIRED 设为 OFF（默认），
-# CMake 会在编译器不支持 C++20 时自动降级为其能支持的最高标准，
-# 而不会报错；ON 则表示必须满足所指定标准，否则配置失败。
-set(CMAKE_CXX_STANDARD 20)
+# 指定希望使用 C++23；允许通过 -DCMAKE_CXX_STANDARD / -DCXX_STD 或环境变量 CXX_STD 覆盖。
+# REQUIRED=ON 表示必须满足所指定标准，否则配置失败。
+set(CXX_STD "" CACHE STRING "Override C++ standard (e.g., 20, 23)")
+if(NOT DEFINED CMAKE_CXX_STANDARD OR CMAKE_CXX_STANDARD STREQUAL "")
+  if(CXX_STD)
+    set(CMAKE_CXX_STANDARD ${CXX_STD})
+  elseif(DEFINED ENV{CXX_STD})
+    set(CMAKE_CXX_STANDARD $ENV{CXX_STD})
+  else()
+    set(CMAKE_CXX_STANDARD 23)
+  endif()
+endif()
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 message(STATUS "CXX_STANDARD = ${CMAKE_CXX_STANDARD}")
 

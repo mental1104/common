@@ -1,0 +1,121 @@
+name: Rust
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+x-steps:
+  - &checkout
+    name: Checkout
+    uses: actions/checkout@v4
+    with:
+      submodules: false
+      fetch-depth: 0
+  - &submodules_bash
+    name: Init submodules (sparse Boost)
+    run: |
+      python3 - <<'PY'
+      import sys
+      from devtool.commands.common import base_env
+      from devtool.commands.ops import cpp as cpp_ops
+      sys.exit(cpp_ops.git_submodules(base_env()) or 0)
+      PY
+  - &submodules_pwsh
+    name: Init submodules (sparse Boost)
+    run: python -c "import sys;from devtool.commands.common import base_env;from devtool.commands.ops import cpp as cpp_ops;sys.exit(cpp_ops.git_submodules(base_env()) or 0)"
+
+jobs:
+  linux:
+    name: Linux / Rust ${{ matrix.toolchain }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - toolchain: "stable"
+          - toolchain: "1.85.0"
+            msrv: true
+    env:
+      PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/devops
+    defaults:
+      run:
+        shell: bash
+        working-directory: ${{ github.workspace }}
+    steps:
+      - *checkout
+      - *submodules_bash
+      - name: Install Rust toolchain
+        run: |
+          rustup toolchain install ${{ matrix.toolchain }} --profile minimal
+          rustup default ${{ matrix.toolchain }}
+      - name: Add rustfmt/clippy
+        if: ${{ matrix.toolchain == 'stable' }}
+        run: rustup component add rustfmt clippy
+      - name: Setup Rust
+        run: ./dev setup-rust
+      - name: Format Rust
+        if: ${{ matrix.toolchain == 'stable' }}
+        run: ./dev fmt-rust
+      - name: Build Rust
+        run: ./dev build-rust
+      - name: Test Rust
+        run: ./dev test-rust
+      - name: Coverage Rust
+        if: ${{ matrix.toolchain == 'stable' }}
+        run: ./dev coverage-rust
+      - name: Vet Rust
+        if: ${{ matrix.toolchain == 'stable' }}
+        run: ./dev vet-rust
+      - name: Guard Rust
+        if: ${{ matrix.toolchain == 'stable' }}
+        run: ./dev guard-rust
+
+  macos:
+    name: macOS / Rust stable
+    runs-on: macos-latest
+    env:
+      PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/devops
+    defaults:
+      run:
+        shell: bash
+        working-directory: ${{ github.workspace }}
+    steps:
+      - *checkout
+      - *submodules_bash
+      - name: Install Rust toolchain
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+          rustup component add rustfmt clippy
+      - name: Setup Rust
+        run: ./dev setup-rust
+      - name: Build Rust
+        run: ./dev build-rust
+      - name: Test Rust
+        run: ./dev test-rust
+
+  windows:
+    name: Windows / Rust stable
+    runs-on: windows-latest
+    env:
+      PYTHON: python
+      PYTHONPATH: ${{ github.workspace }};${{ github.workspace }}/devops
+    defaults:
+      run:
+        shell: pwsh
+        working-directory: ${{ github.workspace }}
+    steps:
+      - *checkout
+      - *submodules_pwsh
+      - name: Install Rust toolchain
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+          rustup component add rustfmt clippy
+      - name: Setup Rust
+        run: python -m devtool.cli setup-rust
+      - name: Build Rust
+        run: python -m devtool.cli build-rust
+      - name: Test Rust
+        run: python -m devtool.cli test-rust

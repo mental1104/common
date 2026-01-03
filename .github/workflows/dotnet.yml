@@ -1,0 +1,90 @@
+name: .NET
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+x-dotnet-versions: &dotnet_versions
+  - dotnet: "8.0.x"
+
+x-steps:
+  - &checkout
+    name: Checkout
+    uses: actions/checkout@v4
+    with:
+      submodules: false
+      fetch-depth: 0
+
+jobs:
+  linux:
+    name: Linux / .NET ${{ matrix.dotnet }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include: *dotnet_versions
+    defaults:
+      run:
+        shell: bash
+        working-directory: dotnet
+    steps:
+      - *checkout
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ matrix.dotnet }}
+      - name: Restore
+        run: dotnet restore mental1104.sln
+      - name: Build
+        run: dotnet build mental1104.sln --configuration Release --no-restore
+      - name: Test
+        run: dotnet test mental1104.sln --configuration Release --no-build
+
+  macos:
+    name: macOS / .NET ${{ matrix.dotnet }}
+    runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include: *dotnet_versions
+    defaults:
+      run:
+        shell: bash
+        working-directory: dotnet
+    steps:
+      - *checkout
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ matrix.dotnet }}
+      - name: Restore
+        run: dotnet restore mental1104.sln
+      - name: Build
+        run: dotnet build mental1104.sln --configuration Release --no-restore
+      - name: Test
+        run: dotnet test mental1104.sln --configuration Release --no-build
+
+  windows:
+    name: Windows / .NET ${{ matrix.dotnet }}
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include: *dotnet_versions
+    defaults:
+      run:
+        shell: pwsh
+        working-directory: dotnet
+    steps:
+      - *checkout
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ matrix.dotnet }}
+      - name: Restore
+        run: dotnet restore mental1104.sln
+      - name: Build
+        run: dotnet build mental1104.sln --configuration Release --no-restore
+      - name: Test
+        run: dotnet test mental1104.sln --configuration Release --no-build
