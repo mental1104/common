@@ -3,14 +3,27 @@ if (HAVE_GOOGLE_BENCHMARK)
   if (EXISTS "${BENCH_DIR}")
     file(GLOB BENCH_SRCS CONFIGURE_DEPENDS "${BENCH_DIR}/*.cpp")
     if (BENCH_SRCS)
+      if (DEFINED CMAKE_CXX_STANDARD AND CMAKE_CXX_STANDARD LESS 20)
+        set(_skip_benches bench_mn_coroutine_pool)
+      else()
+        set(_skip_benches "")
+      endif()
       foreach(SRC ${BENCH_SRCS})
         get_filename_component(BNAME "${SRC}" NAME_WE)
+        list(FIND _skip_benches "${BNAME}" _skip_idx)
+        if (NOT _skip_idx EQUAL -1)
+          message(STATUS "Skip benchmark ${BNAME}: requires C++20")
+          continue()
+        endif()
         set(TGT "bench_${BNAME}")
         add_executable(${TGT} "${SRC}")
         target_include_directories(${TGT} PRIVATE
           ${PROJECT_SOURCE_DIR}/include
         )
-        target_compile_features(${TGT} PRIVATE cxx_std_20)
+        set_target_properties(${TGT} PROPERTIES
+          CXX_STANDARD ${CMAKE_CXX_STANDARD}
+          CXX_STANDARD_REQUIRED ON
+        )
         target_link_libraries(${TGT} PRIVATE mental1104)
         target_link_libraries(${TGT} PRIVATE benchmark::benchmark)
         target_use_all_components(${TGT})
