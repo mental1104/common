@@ -5,6 +5,12 @@
 #include <iostream>
 #include <random>
 #include <sstream>
+#include "mental1104/meta/compiler_support.h"
+#if M1104_HAS_CXX17
+#include <sw/redis++/cxx17/sw/redis++/cxx_utils.h>
+#else
+#include <sw/redis++/cxx11/sw/redis++/cxx_utils.h>
+#endif
 #include <sw/redis++/redis++.h>
 #include <thread>
 #include <type_traits>
