@@ -1,0 +1,140 @@
+name: Go
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      enable_go_prerelease:
+        description: "Run Go 1.24/1.25 jobs (pre-release)"
+        type: boolean
+        default: true
+
+x-go-versions: &go_versions
+  - go: "1.22.x"
+  - go: "1.23.x"
+  - go: "1.24.x"
+    prerelease: true
+  - go: "1.25.x"
+    prerelease: true
+
+x-steps:
+  - &checkout
+    name: Checkout
+    uses: actions/checkout@v4
+    with:
+      submodules: false
+      fetch-depth: 0
+  - &submodules_bash
+    name: Init submodules (sparse Boost)
+    run: |
+      python3 - <<'PY'
+      import sys
+      from devtool.commands.common import base_env
+      from devtool.commands.ops import cpp as cpp_ops
+      sys.exit(cpp_ops.git_submodules(base_env()) or 0)
+      PY
+  - &submodules_pwsh
+    name: Init submodules (sparse Boost)
+    run: python -c "import sys;from devtool.commands.common import base_env;from devtool.commands.ops import cpp as cpp_ops;sys.exit(cpp_ops.git_submodules(base_env()) or 0)"
+
+jobs:
+  linux:
+    name: Linux / Go ${{ matrix.go }}
+    if: ${{ !matrix.prerelease || (inputs.enable_go_prerelease != 'false' && vars.CI_ENABLE_GO_PRERELEASE != 'false') }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include: *go_versions
+    env:
+      PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/devops
+    defaults:
+      run:
+        shell: bash
+        working-directory: ${{ github.workspace }}
+    steps:
+      - *checkout
+      - *submodules_bash
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ matrix.go }}
+          check-latest: true
+      - name: Setup Go deps
+        run: ./dev setup-go
+      - name: Format Go
+        if: ${{ matrix.go == '1.22.x' }}
+        run: ./dev fmt-go
+      - name: Build Go
+        run: ./dev build-go
+      - name: Test Go
+        run: ./dev test-go
+      - name: Coverage Go
+        if: ${{ matrix.go == '1.22.x' }}
+        run: ./dev coverage-go
+      - name: Vet Go
+        if: ${{ matrix.go == '1.22.x' }}
+        run: ./dev vet-go
+      - name: Guard Go
+        if: ${{ matrix.go == '1.22.x' }}
+        run: ./dev guard-go
+
+  macos:
+    name: macOS / Go ${{ matrix.go }}
+    if: ${{ !matrix.prerelease || (inputs.enable_go_prerelease != 'false' && vars.CI_ENABLE_GO_PRERELEASE != 'false') }}
+    runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include: *go_versions
+    env:
+      PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/devops
+    defaults:
+      run:
+        shell: bash
+        working-directory: ${{ github.workspace }}
+    steps:
+      - *checkout
+      - *submodules_bash
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ matrix.go }}
+          check-latest: true
+      - name: Setup Go deps
+        run: ./dev setup-go
+      - name: Build Go
+        run: ./dev build-go
+      - name: Test Go
+        run: ./dev test-go
+
+  windows:
+    name: Windows / Go ${{ matrix.go }}
+    if: ${{ !matrix.prerelease || (inputs.enable_go_prerelease != 'false' && vars.CI_ENABLE_GO_PRERELEASE != 'false') }}
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include: *go_versions
+    env:
+      PYTHON: python
+      PYTHONPATH: ${{ github.workspace }};${{ github.workspace }}/devops
+    defaults:
+      run:
+        shell: pwsh
+        working-directory: ${{ github.workspace }}
+    steps:
+      - *checkout
+      - *submodules_pwsh
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ matrix.go }}
+          check-latest: true
+      - name: Setup Go deps
+        run: python -m devtool.cli setup-go
+      - name: Build Go
+        run: python -m devtool.cli build-go
+      - name: Test Go
+        run: python -m devtool.cli test-go
