@@ -4,26 +4,14 @@ on:
   push:
   pull_request:
   workflow_dispatch:
+    inputs:
+      verbose_logs:
+        description: "Enable verbose test output"
+        type: boolean
+        default: true
 
-x-steps:
-  - &checkout
-    name: Checkout
-    uses: actions/checkout@v4
-    with:
-      submodules: false
-      fetch-depth: 0
-  - &submodules_bash
-    name: Init submodules (sparse Boost)
-    run: |
-      python3 - <<'PY'
-      import sys
-      from devtool.commands.common import base_env
-      from devtool.commands.ops import cpp as cpp_ops
-      sys.exit(cpp_ops.git_submodules(base_env()) or 0)
-      PY
-  - &submodules_pwsh
-    name: Init submodules (sparse Boost)
-    run: python -c "import sys;from devtool.commands.common import base_env;from devtool.commands.ops import cpp as cpp_ops;sys.exit(cpp_ops.git_submodules(base_env()) or 0)"
+env:
+  CARGO_TEST_V: ${{ (vars.CI_VERBOSE_LOGS == 'false' || (github.event_name == 'workflow_dispatch' && (github.event.inputs.verbose_logs == false || github.event.inputs.verbose_logs == 'false'))) && '' || '-- --nocapture' }}
 
 jobs:
   linux:
@@ -43,8 +31,19 @@ jobs:
         shell: bash
         working-directory: ${{ github.workspace }}
     steps:
-      - *checkout
-      - *submodules_bash
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: false
+          fetch-depth: 0
+      - name: Init submodules (sparse Boost)
+        run: |
+          python3 - <<'PY'
+          import sys
+          from devtool.commands.common import base_env
+          from devtool.commands.ops import cpp as cpp_ops
+          sys.exit(cpp_ops.git_submodules(base_env()) or 0)
+          PY
       - name: Install Rust toolchain
         run: |
           rustup toolchain install ${{ matrix.toolchain }} --profile minimal
@@ -81,8 +80,19 @@ jobs:
         shell: bash
         working-directory: ${{ github.workspace }}
     steps:
-      - *checkout
-      - *submodules_bash
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: false
+          fetch-depth: 0
+      - name: Init submodules (sparse Boost)
+        run: |
+          python3 - <<'PY'
+          import sys
+          from devtool.commands.common import base_env
+          from devtool.commands.ops import cpp as cpp_ops
+          sys.exit(cpp_ops.git_submodules(base_env()) or 0)
+          PY
       - name: Install Rust toolchain
         run: |
           rustup toolchain install stable --profile minimal
@@ -106,8 +116,13 @@ jobs:
         shell: pwsh
         working-directory: ${{ github.workspace }}
     steps:
-      - *checkout
-      - *submodules_pwsh
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: false
+          fetch-depth: 0
+      - name: Init submodules (sparse Boost)
+        run: python -c "import sys;from devtool.commands.common import base_env;from devtool.commands.ops import cpp as cpp_ops;sys.exit(cpp_ops.git_submodules(base_env()) or 0)"
       - name: Install Rust toolchain
         run: |
           rustup toolchain install stable --profile minimal

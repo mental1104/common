@@ -246,16 +246,17 @@ function(rpp_apply_cxx_utils_shim)
     set(_cxx_utils "${_overlay_inc}/sw/redis++/cxx_utils.h")
     file(WRITE "${_cxx_utils}" [=[
 #pragma once
-#if __has_include(<sw/redis++/cxx17/cxx_utils.h>)
-#  include <sw/redis++/cxx17/cxx_utils.h>
-#elif __has_include(<sw/redis++/cxx11/cxx_utils.h>)
-#  include <sw/redis++/cxx11/cxx_utils.h>
-#else
-#  include <string>
-#  include <string_view>
-#  include <optional>
-#  include <utility>
-#  include <tuple>
+#if __cplusplus < 201703L
+#  if __has_include(<sw/redis++/cxx11/cxx_utils.h>)
+#    include <sw/redis++/cxx11/cxx_utils.h>
+#  elif __has_include(<sw/redis++/cxx17/cxx_utils.h>)
+#    include <sw/redis++/cxx17/cxx_utils.h>
+#  else
+#    include <string>
+#    include <string_view>
+#    include <optional>
+#    include <utility>
+#    include <tuple>
 namespace sw { namespace redis {
 using StringView = std::string_view;
 template <typename T> using Optional = std::optional<T>;
@@ -264,6 +265,27 @@ using OptionalLongLong    = Optional<long long>;
 using OptionalDouble      = Optional<double>;
 using OptionalStringPair  = Optional<std::pair<std::string, std::string>>;
 }} // namespace sw::redis
+#  endif
+#else
+#  if __has_include(<sw/redis++/cxx17/cxx_utils.h>)
+#    include <sw/redis++/cxx17/cxx_utils.h>
+#  elif __has_include(<sw/redis++/cxx11/cxx_utils.h>)
+#    include <sw/redis++/cxx11/cxx_utils.h>
+#  else
+#    include <string>
+#    include <string_view>
+#    include <optional>
+#    include <utility>
+#    include <tuple>
+namespace sw { namespace redis {
+using StringView = std::string_view;
+template <typename T> using Optional = std::optional<T>;
+using OptionalString      = Optional<std::string>;
+using OptionalLongLong    = Optional<long long>;
+using OptionalDouble      = Optional<double>;
+using OptionalStringPair  = Optional<std::pair<std::string, std::string>>;
+}} // namespace sw::redis
+#  endif
 #endif
 ]=])
 

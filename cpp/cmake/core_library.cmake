@@ -12,8 +12,9 @@ endif()
 target_include_directories(mental1104 PUBLIC
   ${PROJECT_SOURCE_DIR}/include
 )
-target_compile_features(mental1104 PUBLIC cxx_std_20)
 set_target_properties(mental1104 PROPERTIES
+  CXX_STANDARD ${CMAKE_CXX_STANDARD}
+  CXX_STANDARD_REQUIRED ON
   POSITION_INDEPENDENT_CODE ON
   OUTPUT_NAME "mental1104"
 )

@@ -4,70 +4,15 @@ on:
   push:
   pull_request:
   workflow_dispatch:
+    inputs:
+      verbose_logs:
+        description: "Enable verbose test output"
+        type: boolean
+        default: true
 
 env:
   PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/devops
-
-x-steps:
-  - &checkout
-    name: Checkout
-    uses: actions/checkout@v4
-    with:
-      submodules: false
-      fetch-depth: 0
-  - &submodules_bash
-    name: Init submodules (sparse Boost)
-    run: |
-      python3 - <<'PY'
-      import sys
-      from devtool.commands.common import base_env
-      from devtool.commands.ops import cpp as cpp_ops
-      sys.exit(cpp_ops.git_submodules(base_env()) or 0)
-      PY
-  - &submodules_pwsh
-    name: Init submodules (sparse Boost)
-    run: python -c "import sys;from devtool.commands.common import base_env;from devtool.commands.ops import cpp as cpp_ops;sys.exit(cpp_ops.git_submodules(base_env()) or 0)"
-
-x-service-env: &service_env
-  DATABASE_URL: postgresql://test:test@localhost:5432/app
-  REDIS_URL: redis://localhost:6379/0
-  PGUSER: test
-  PGPASSWORD: test
-  PGDATABASE: app
-  PGHOST: localhost
-  PGPORT: &pg_port "5432"
-  PGPORT_MAP: &pg_port_map "5432:5432"
-  REDIS_HOST: localhost
-  REDIS_PORT: &redis_port "6379"
-  REDIS_PORT_MAP: &redis_port_map "6379:6379"
-  PULSAR_HOST: localhost
-  PULSAR_BROKER_PORT: &pulsar_broker_port "6650"
-  PULSAR_BROKER_PORT_MAP: &pulsar_broker_port_map "6650:6650"
-  PULSAR_ADMIN_PORT: &pulsar_admin_port "8080"
-  PULSAR_ADMIN_PORT_MAP: &pulsar_admin_port_map "8080:8080"
-  PULSAR_TOKEN: ""
-  PULSAR_SCHEMA_PATH: "/tmp/pulsar/schema"
-  PULSAR_DATA_PATH: "/tmp/pulsar/data"
-
-x-services: &common_services
-  postgres:
-    image: postgres:15
-    env:
-      POSTGRES_USER: test
-      POSTGRES_PASSWORD: test
-      POSTGRES_DB: app
-    ports:
-      - *pg_port_map
-    options: >-
-      --health-cmd="pg_isready -U test"
-      --health-interval=5s --health-timeout=5s --health-retries=5
-  redis:
-    image: redis/redis-stack-server:7.2.0-v7
-    ports:
-      - *redis_port_map
-    options: >-
-      --health-cmd="redis-cli ping"
-      --health-interval=5s --health-timeout=3s --health-retries=5
+  CTEST_V: ${{ (vars.CI_VERBOSE_LOGS == 'false' || (github.event_name == 'workflow_dispatch' && (github.event.inputs.verbose_logs == false || github.event.inputs.verbose_logs == 'false'))) && '' || '-V' }}
 
 jobs:
   linux:
@@ -92,8 +37,19 @@ jobs:
         shell: bash
         working-directory: ${{ github.workspace }}
     steps:
-      - *checkout
-      - *submodules_bash
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: false
+          fetch-depth: 0
+      - name: Init submodules (sparse Boost)
+        run: |
+          python3 - <<'PY'
+          import sys
+          from devtool.commands.common import base_env
+          from devtool.commands.ops import cpp as cpp_ops
+          sys.exit(cpp_ops.git_submodules(base_env()) or 0)
+          PY
       - name: Install toolchain
         run: |
           sudo apt-get update
@@ -118,21 +74,64 @@ jobs:
   linux-integration:
     name: Linux / g++ / C++20 / coverage
     runs-on: ubuntu-latest
-    services: *common_services
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: app
+        ports:
+          - "5432:5432"
+        options: >-
+          --health-cmd="pg_isready -U test"
+          --health-interval=5s --health-timeout=5s --health-retries=5
+      redis:
+        image: redis/redis-stack-server:7.2.0-v7
+        ports:
+          - "6379:6379"
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=5s --health-timeout=3s --health-retries=5
     env:
-      <<: *service_env
       CMAKE_BUILD_PARALLEL_LEVEL: 4
       GCOV: gcov
       CC: gcc
       CXX: g++
       CXX_STD: "20"
+      DATABASE_URL: postgresql://test:test@localhost:5432/app
+      REDIS_URL: redis://localhost:6379/0
+      PGUSER: test
+      PGPASSWORD: test
+      PGDATABASE: app
+      PGHOST: localhost
+      PGPORT: "5432"
+      REDIS_HOST: localhost
+      REDIS_PORT: "6379"
+      PULSAR_HOST: localhost
+      PULSAR_BROKER_PORT: "6650"
+      PULSAR_ADMIN_PORT: "8080"
+      PULSAR_TOKEN: ""
+      PULSAR_SCHEMA_PATH: "/tmp/pulsar/schema"
+      PULSAR_DATA_PATH: "/tmp/pulsar/data"
     defaults:
       run:
         shell: bash
         working-directory: ${{ github.workspace }}
     steps:
-      - *checkout
-      - *submodules_bash
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: false
+          fetch-depth: 0
+      - name: Init submodules (sparse Boost)
+        run: |
+          python3 - <<'PY'
+          import sys
+          from devtool.commands.common import base_env
+          from devtool.commands.ops import cpp as cpp_ops
+          sys.exit(cpp_ops.git_submodules(base_env()) or 0)
+          PY
       - name: Start Pulsar (standalone -nss)
         run: |
           docker rm -f pulsar || true
@@ -183,8 +182,19 @@ jobs:
         shell: bash
         working-directory: ${{ github.workspace }}
     steps:
-      - *checkout
-      - *submodules_bash
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: false
+          fetch-depth: 0
+      - name: Init submodules (sparse Boost)
+        run: |
+          python3 - <<'PY'
+          import sys
+          from devtool.commands.common import base_env
+          from devtool.commands.ops import cpp as cpp_ops
+          sys.exit(cpp_ops.git_submodules(base_env()) or 0)
+          PY
       - name: Install toolchain
         run: |
           brew update
@@ -217,8 +227,13 @@ jobs:
         shell: pwsh
         working-directory: ${{ github.workspace }}
     steps:
-      - *checkout
-      - *submodules_pwsh
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: false
+          fetch-depth: 0
+      - name: Init submodules (sparse Boost)
+        run: python -c "import sys;from devtool.commands.common import base_env;from devtool.commands.ops import cpp as cpp_ops;sys.exit(cpp_ops.git_submodules(base_env()) or 0)"
       - name: Setup C++
         run: python -m devtool.cli setup-cpp --config Debug
       - name: Build export C++ layer
