@@ -5,7 +5,7 @@ Validate PO files for placeholder consistency and common quality issues.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import List, Optional, Set, Tuple
+from typing import List, Set, Tuple
 
 from ..placeholder import extract_placeholders
 from .po_parser import PoEntry, parse_po

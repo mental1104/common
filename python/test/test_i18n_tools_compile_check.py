@@ -12,7 +12,7 @@ def test_compile_po_tree_and_runtime(tmp_path):
     po_path = po_root / "en" / "LC_MESSAGES" / f"{domain}.po"
     po_path.parent.mkdir(parents=True, exist_ok=True)
     po_path.write_text(
-        '''
+        """
 msgid ""
 msgstr ""
 "Language: en\\n"
@@ -25,7 +25,7 @@ msgid "Apple"
 msgid_plural "Apples"
 msgstr[0] "Apple"
 msgstr[1] "Apples"
-'''.strip(),
+""".strip(),
         encoding="utf-8",
     )
 
@@ -42,7 +42,7 @@ def test_check_po_tree_strict_failure(tmp_path):
     po_path = po_root / "en" / "LC_MESSAGES" / "ui.po"
     po_path.parent.mkdir(parents=True, exist_ok=True)
     po_path.write_text(
-        '''
+        """
 msgid ""
 msgstr ""
 "Language: en\\n"
@@ -53,7 +53,7 @@ msgstr "Hi {username}"
 
 msgid "Empty"
 msgstr ""
-'''.strip(),
+""".strip(),
         encoding="utf-8",
     )
 

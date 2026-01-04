@@ -7,7 +7,6 @@ from typing import Dict, Mapping, Sequence
 from devtool import config as dev_config
 from devtool.context import ROOT, is_windows, sh
 
-
 PROXY_KEYS = ("HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY", "ALL_PROXY", "http_proxy", "https_proxy", "no_proxy", "all_proxy")
 
 

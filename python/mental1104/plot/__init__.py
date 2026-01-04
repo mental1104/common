@@ -1,6 +1,6 @@
 """Plotting utilities."""
 
-from .bench import BenchTestType, BenchmarkPlotter, load_benchmark_suite
+from .bench import BenchmarkPlotter, BenchTestType, load_benchmark_suite
 from .trend import TimeBasedTrendPlot, TrendPlotBase
 
 __all__ = [

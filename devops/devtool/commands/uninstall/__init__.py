@@ -1,10 +1,18 @@
 from __future__ import annotations
 
-from argparse import ArgumentParser
+from typing import TYPE_CHECKING
 
 from devtool.commands import register
 from devtool.commands.common import base_env
-from devtool.commands.ops import cpp as cpp_ops, go as go_ops, python as python_ops, rust as rust_ops
+from devtool.commands.ops import (
+    cpp as cpp_ops,
+    go as go_ops,
+    python as python_ops,
+    rust as rust_ops,
+)
+
+if TYPE_CHECKING:
+    from argparse import ArgumentParser
 
 
 @register("uninstall")

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """把每个语言目录下的 PNG 汇总成一个简易 HTML Gallery。"""
+
 from __future__ import annotations
 
 import argparse
@@ -9,7 +10,7 @@ from pathlib import Path
 
 
 def _parse_args() -> argparse.Namespace:
-    """定义 CLI 参数，仅需 root 和可选输出路径。"""
+    """定义 CLI 参数,仅需 root 和可选输出路径。"""
     parser = argparse.ArgumentParser(description="Generate an HTML gallery for benchmark plots.")
     parser.add_argument(
         "--root",
@@ -24,7 +25,7 @@ def _parse_args() -> argparse.Namespace:
 
 
 def _discover(root: Path) -> list[tuple[str, list[tuple[str, Path]]]]:
-    """扫描 root 下的语言目录，返回 (语言, [(label, path), ...])。"""
+    """扫描 root 下的语言目录,返回 (语言, [(label, path), ...])。"""
     sections: list[tuple[str, list[tuple[str, Path]]]] = []
     for lang_dir in sorted(p for p in root.iterdir() if p.is_dir()):
         plot_dir = lang_dir / "plots"
@@ -40,8 +41,8 @@ def _discover(root: Path) -> list[tuple[str, list[tuple[str, Path]]]]:
 
 
 def _build_html(root: Path, sections: list[tuple[str, list[tuple[str, Path]]]]) -> str:
-    """根据扫描结果拼 HTML 字符串，整体风格保持简洁。"""
-    timestamp = _dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    """根据扫描结果拼 HTML 字符串,整体风格保持简洁。"""
+    timestamp = _dt.datetime.now(_dt.timezone.utc).astimezone().strftime("%Y-%m-%d %H:%M:%S")
     cards = []
     for lang, entries in sections:
         rows = []
@@ -58,7 +59,7 @@ def _build_html(root: Path, sections: list[tuple[str, list[tuple[str, Path]]]]) 
             f"""<section>
   <h2>{html.escape(lang)}</h2>
   <div class="stack">
-    {' '.join(rows)}
+    {" ".join(rows)}
   </div>
 </section>"""
         )
@@ -122,14 +123,14 @@ def _build_html(root: Path, sections: list[tuple[str, list[tuple[str, Path]]]]) 
 <body>
   <h1>Benchmark Gallery</h1>
   {body}
-  <footer>生成时间：{html.escape(timestamp)} · 根目录：{html.escape(root.as_posix())}</footer>
+  <footer>生成时间:{html.escape(timestamp)} · 根目录:{html.escape(root.as_posix())}</footer>
 </body>
 </html>
 """
 
 
 def main() -> None:
-    """入口：解析参数 -> 扫描 -> 生成 HTML -> 写文件。"""
+    """入口:解析参数 -> 扫描 -> 生成 HTML -> 写文件。"""
     args = _parse_args()
     root = Path(args.root)
     root.mkdir(parents=True, exist_ok=True)

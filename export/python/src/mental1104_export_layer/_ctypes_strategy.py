@@ -4,6 +4,7 @@ import ctypes
 import os
 import sys
 from pathlib import Path
+from typing import ClassVar
 
 from ._strategy import BackendUnavailable, Strategy
 
@@ -34,7 +35,7 @@ class CTypesUnavailable(BackendUnavailable):
 
 
 class CTypesStrategy(Strategy):
-    name = "ctypes"
+    name: ClassVar[str] = "ctypes"
 
     def __init__(self, lib_path: str | None = None):
         target = self._resolve_path(lib_path)
@@ -49,7 +50,11 @@ class CTypesStrategy(Strategy):
             raise CTypesUnavailable(f"{FUNC_NAME} not exported by {target}") from exc
 
         class _JsonResult(ctypes.Structure):
-            _fields_ = [("ok", ctypes.c_int), ("error", ctypes.c_char_p), ("offset", ctypes.c_size_t)]
+            _fields_ = (
+                ("ok", ctypes.c_int),
+                ("error", ctypes.c_char_p),
+                ("offset", ctypes.c_size_t)
+            )
 
         json_func.argtypes = [ctypes.c_char_p]
         json_func.restype = _JsonResult

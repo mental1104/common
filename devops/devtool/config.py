@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from urllib.parse import urlparse
 
-
 PIP_INDEX_URL = "https://mirrors.aliyun.com/pypi/simple"
 PIP_TRUSTED_HOST = "mirrors.aliyun.com"
 

@@ -9,7 +9,9 @@ import mental1104.utils.context as ctx_mod
 @pytest.fixture(autouse=True)
 def _ensure_ctx_is_clean():
     # 防止用例间串号：开始/结束都应为空
-    assert ctx_mod.ctx_diag()["is_set"] is False, f"ctx leaked into test start: {ctx_mod.ctx_diag()}"
+    assert ctx_mod.ctx_diag()["is_set"] is False, (
+        f"ctx leaked into test start: {ctx_mod.ctx_diag()}"
+    )
     yield
     assert ctx_mod.ctx_diag()["is_set"] is False, f"ctx leaked after test end: {ctx_mod.ctx_diag()}"
 

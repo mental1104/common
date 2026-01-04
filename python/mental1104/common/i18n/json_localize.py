@@ -14,7 +14,6 @@ from typing import Any, Dict, Iterable
 from .context import get_locale
 from .runtime import normalize_locale
 
-
 DEFAULT_SUFFIX_MAP: Dict[str, str] = {
     "zh": "_zh",
     "en": "_en",

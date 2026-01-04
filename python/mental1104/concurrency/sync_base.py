@@ -2,14 +2,16 @@ from __future__ import annotations
 
 import os
 from abc import ABC, abstractmethod
-from concurrent.futures import Executor
-from typing import Callable, List, Optional, TypeVar
+from typing import TYPE_CHECKING, Callable, List, Optional, TypeVar
+
+if TYPE_CHECKING:
+    from concurrent.futures import Executor
 
 _T = TypeVar("_T")
 
 
 class _BaseSyncWorkerPool(ABC):
-    """同步执行器封装：直接提交可调用对象到线程/进程池，不涉 asyncio。"""
+    """同步执行器封装：直接提交可调用对象到线程/进程池, 不涉 asyncio。"""
 
     def __init__(self, max_workers: Optional[int] = None):
         if max_workers is None:

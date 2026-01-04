@@ -6,9 +6,10 @@ from __future__ import annotations
 
 import struct
 from io import BytesIO
-from typing import Dict, Iterable, Tuple
+from typing import TYPE_CHECKING, Dict, Iterable, Tuple
 
-from .po_parser import PoEntry
+if TYPE_CHECKING:
+    from .po_parser import PoEntry
 
 
 def _build_catalog(entries: Iterable[PoEntry]) -> Dict[str, str]:
@@ -29,7 +30,11 @@ def _build_catalog(entries: Iterable[PoEntry]) -> Dict[str, str]:
     header_lower = header.lower()
     if "charset=" not in header_lower:
         extra = "" if header.endswith("\n") or not header else "\n"
-        header = f"{header}{extra}Content-Type: text/plain; charset=UTF-8\n" if header else "Content-Type: text/plain; charset=UTF-8\n"
+        header = (
+            f"{header}{extra}Content-Type: text/plain; charset=UTF-8\n"
+            if header
+            else "Content-Type: text/plain; charset=UTF-8\n"
+        )
         catalog[""] = header
     return catalog
 
@@ -60,7 +65,9 @@ def write_mo(entries: Iterable[PoEntry]) -> bytes:
         string_offset += len(msgstr) + 1
 
     output = BytesIO()
-    output.write(struct.pack("<IIIIIII", 0x950412DE, 0, n, orig_table_offset, trans_table_offset, 0, 0))
+    output.write(
+        struct.pack("<IIIIIII", 0x950412DE, 0, n, orig_table_offset, trans_table_offset, 0, 0)
+    )
     for length, offset in orig_table:
         output.write(struct.pack("<II", length, offset))
     for length, offset in trans_table:

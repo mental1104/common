@@ -1,10 +1,19 @@
 from __future__ import annotations
 
-from argparse import ArgumentParser
+from typing import TYPE_CHECKING
 
 from devtool.commands import register
 from devtool.commands.common import base_env
-from devtool.commands.ops import cpp as cpp_ops, export as export_ops, go as go_ops, python as python_ops, rust as rust_ops
+from devtool.commands.ops import (
+    cpp as cpp_ops,
+    export as export_ops,
+    go as go_ops,
+    python as python_ops,
+    rust as rust_ops,
+)
+
+if TYPE_CHECKING:
+    from argparse import ArgumentParser
 
 
 @register("coverage")
@@ -28,7 +37,6 @@ def run(args):
     if target in ("go", "all"):
         go_ops.coverage(env)
     if target in ("cpp", "all"):
-        cpp_ops.test(env, file_pattern=args.file, filter_expr=args.filter_expr)
-        cpp_ops.coverage(env)
+        cpp_ops.coverage(env, file_pattern=args.file, filter_expr=args.filter_expr)
     if target in ("rust", "all"):
         rust_ops.coverage(env)

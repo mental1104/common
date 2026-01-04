@@ -1,8 +1,8 @@
 """Baseline throughput and scaling benchmarks for coroutine pools."""
+
 from __future__ import annotations
 
 import pytest
-
 from test_benchmark.test_concurrency.common import (
     POOL_VARIANTS,
     SCENARIO_CASES,

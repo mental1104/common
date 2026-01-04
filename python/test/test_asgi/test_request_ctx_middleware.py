@@ -1,5 +1,5 @@
-import pytest
 import httpx
+import pytest
 from fastapi import FastAPI
 
 import mental1104.utils.context as ctx_mod
@@ -12,7 +12,9 @@ from mental1104.asgi.fastapi.middleware import (
 @pytest.fixture(autouse=True)
 def _ensure_ctx_is_clean():
     # Guard against cross-test leakage
-    assert ctx_mod.ctx_diag()["is_set"] is False, f"ctx leaked into test start: {ctx_mod.ctx_diag()}"
+    assert ctx_mod.ctx_diag()["is_set"] is False, (
+        f"ctx leaked into test start: {ctx_mod.ctx_diag()}"
+    )
     yield
     assert ctx_mod.ctx_diag()["is_set"] is False, f"ctx leaked after test end: {ctx_mod.ctx_diag()}"
 

@@ -8,20 +8,17 @@ from pathlib import Path
 from typing import Mapping
 
 from devtool.commands.common import (
-    BENCH_ARTIFACT_ROOT,
-    BOOST_SPARSE_LIST,
     BOOST_REQUIRED_SUBMODULES,
+    BOOST_SPARSE_LIST,
     CPP_BENCH_ARTIFACT_DIR,
     CPP_BUILD_DIR,
     CPP_SRC_DIR,
-    EXPORT_CPP_BUILD_DIR,
     ROOT,
     ensure_dir,
     run,
     strip_proxies,
 )
 from devtool.context import is_windows
-
 
 _GITMODULE_PATH_RE = re.compile(r"^\s*path\s*=\s*(.+)$")
 _BOOST_SUBMODULE_PATH = ROOT / "cpp" / "lib" / "boost"
@@ -96,8 +93,7 @@ def submodules_ready(env: Mapping[str, str]) -> bool:
             cwd=str(ROOT),
             env=env_np,
             text=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            capture_output=True,
             check=True,
         )
     except subprocess.CalledProcessError:
@@ -195,12 +191,12 @@ def git_submodules(env: Mapping[str, str]) -> None:
             "--jobs",
             env_np.get("JOBS", "1"),
         ]
-        update_cmd = list(base_cmd) + ["--depth", "1", "--filter=blob:none", "--", *non_boost]
+        update_cmd = [*base_cmd, "--depth", "1", "--filter=blob:none", "--", *non_boost]
         try:
             run(update_cmd, env=env_np, cwd=ROOT)
         except subprocess.CalledProcessError:
             print("[warn] 子模块 partial clone 失败，正在回退为完整检出（非 boost）")
-            run(base_cmd + ["--force", "--", *non_boost], env=env_np, cwd=ROOT)
+            run([*base_cmd, "--force", "--", *non_boost], env=env_np, cwd=ROOT)
         for rel in non_boost:
             if _repair_empty_submodule(rel, env_np):
                 print(f"[warn] 检测到子模块 {rel} 为空，已强制 checkout 修复")
@@ -234,9 +230,9 @@ def _apply_boost_sparse_checkout(env: Mapping[str, str]) -> None:
     git_base = ["git", "-C", str(_BOOST_SUBMODULE_PATH), "sparse-checkout"]
     run_env = {k: str(v) for k, v in env.items()}
     try:
-        subprocess.run(git_base + ["init", "--cone"], cwd=str(ROOT), env=run_env, check=True)
+        subprocess.run([*git_base, "init", "--cone"], cwd=str(ROOT), env=run_env, check=True)
         subprocess.run(
-            git_base + ["set", "--stdin"],
+            [*git_base, "set", "--stdin"],
             cwd=str(ROOT),
             env=run_env,
             input=("\n".join(patterns) + "\n").encode(),
@@ -545,14 +541,22 @@ def test(env: Mapping[str, str], *, file_pattern: str | None, filter_expr: str |
     run(args, env=cmd_env, cwd=CPP_BUILD_DIR)
 
 
-def coverage(env: Mapping[str, str]) -> None:
+def coverage(
+    env: Mapping[str, str], *, file_pattern: str | None = None, filter_expr: str | None = None
+) -> None:
     import platform
 
     if platform.system().lower() == "windows":
         print("[info] coverage-cpp not supported on Windows (gcov/lcov unavailable); skipping")
         return
     env_np = strip_proxies(env)
-    run([env_np["CTEST"], "--output-on-failure", "-LE", "bench"], env=env_np, cwd=CPP_BUILD_DIR)
+    args = [env_np["CTEST"], "--output-on-failure", "-LE", "bench"]
+    if file_pattern:
+        args += ["-R", file_pattern]
+    cmd_env = dict(env_np)
+    if filter_expr:
+        cmd_env["GTEST_FILTER"] = filter_expr
+    run(args, env=cmd_env, cwd=CPP_BUILD_DIR)
     gcovr_bin = shutil.which("gcovr")
     gcov_bin = env_np.get("GCOV", "gcov")
     if gcovr_bin:
@@ -598,7 +602,7 @@ def coverage(env: Mapping[str, str]) -> None:
     if not gcov_exec:
         print("[warn] 未找到 gcov，可设置 GCOV 环境变量指定可执行文件")
         return
-    gcno_files = [p for p in CPP_BUILD_DIR.rglob("*.gcno")]
+    gcno_files = list(CPP_BUILD_DIR.rglob("*.gcno"))
     if not gcno_files:
         print("[warn] 未找到 .gcno 文件，请确认已用覆盖率编译构建（-fprofile-arcs -ftest-coverage）")
         return
@@ -659,7 +663,7 @@ def install(env: Mapping[str, str]) -> None:
     run([env.get("SUDO", ""), env["CMAKE"], "--install", str(CPP_BUILD_DIR), "--prefix", env["PREFIX"]], env=env)
 
 
-def uninstall(env: Mapping[str, str]) -> None:
+def uninstall(_env: Mapping[str, str]) -> None:
     manifest = CPP_BUILD_DIR / "install_manifest.txt"
     if not manifest.exists():
         raise SystemExit(f"[error] 未找到 {manifest}")
@@ -669,7 +673,7 @@ def uninstall(env: Mapping[str, str]) -> None:
             target.unlink()
 
 
-def clean(env: Mapping[str, str], *, clean_submodules: bool = True) -> None:
+def clean(_env: Mapping[str, str], *, clean_submodules: bool = True) -> None:
     shutil.rmtree(CPP_BUILD_DIR, ignore_errors=True)
     if not clean_submodules:
         return
@@ -685,12 +689,13 @@ def vet(env: Mapping[str, str]) -> None:
     db = CPP_BUILD_DIR / "compile_commands.json"
     if not db.exists():
         raise SystemExit("[hint] 请先生成 compile_commands.json (cmake -DCMAKE_EXPORT_COMPILE_COMMANDS=ON)")
-    targets = [p for p in (CPP_SRC_DIR / "test").rglob("*.cpp")]
+    targets = list((CPP_SRC_DIR / "test").rglob("*.cpp"))
     for chunk_start in range(0, len(targets), 50):
         chunk = targets[chunk_start : chunk_start + 50]
         run([tidy, "-p", str(CPP_BUILD_DIR), "--quiet", "--warnings-as-errors=*", *map(str, chunk)], env=env)
 
 
 def guard(env: Mapping[str, str], *, mode: str | None = None) -> None:
+    _ = mode
     # Simplified: rely on ctest with sanitizers configured externally.
     test(env, file_pattern=None, filter_expr=None)

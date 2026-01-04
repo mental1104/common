@@ -1,6 +1,9 @@
 from __future__ import annotations
 
-from fastapi import Request
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from fastapi import Request
 
 from mental1104.utils.context import RequestCtx
 

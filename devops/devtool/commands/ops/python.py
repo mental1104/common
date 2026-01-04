@@ -9,12 +9,11 @@ from typing import Iterable, Mapping
 
 from devtool.commands.common import (
     BENCH_ARTIFACT_ROOT,
-    CPP_BUILD_DIR,
     EXPORT_CPP_BUILD_DIR,
     PY_DIR,
     PY_VENV,
-    PY_VENV_PIP,
     PY_VENV_PYTHON,
+    ROOT,
     ensure_dir,
     run,
     strip_proxies,
@@ -151,6 +150,28 @@ def _fix_future_annotations() -> None:
         path.write_text("\n".join(lines) + "\n")
 
 
+def _print_ruff_stats(stats_env: Mapping[str, str]) -> None:
+    python_bin = stats_env.get("PY_VENV_PYTHON", "python3")
+    try:
+        run(
+            [
+                python_bin,
+                "-m",
+                "ruff",
+                "check",
+                "--config",
+                ".ruff.toml",
+                "--statistics",
+                "--exit-zero",
+                ".",
+            ],
+            env=stats_env,
+            cwd=ROOT,
+        )
+    except Exception as exc:
+        print(f"[warn] Failed to emit ruff statistics: {exc}")
+
+
 def _build_wheel(env: Mapping[str, str]) -> None:
     ensure_dir(PY_DIR / "dist")
     run(
@@ -188,6 +209,7 @@ def test(
     filter_expr: str | None,
     runner: str | None = None,
 ) -> None:
+    _ = runner
     venv_env = _ensure_venv(env)
     # ensure pytest-benchmark
     try:
@@ -262,18 +284,31 @@ def coverage(env: Mapping[str, str], *, file_pattern: str | None, filter_expr: s
 def fmt(env: Mapping[str, str]) -> None:
     venv_env = _ensure_venv(env)
     try:
-        run([venv_env["PY_VENV_PYTHON"], "-c", "import autopep8"], env=venv_env)
+        run([venv_env["PY_VENV_PYTHON"], "-c", "import ruff"], env=venv_env)
     except Exception:
-        run([venv_env["PY_VENV_PIP"], "install", *_pip_mirror_args(venv_env), "autopep8"], env=venv_env)
+        run([venv_env["PY_VENV_PIP"], "install", *_pip_mirror_args(venv_env), "ruff"], env=venv_env)
     run(
         [
             venv_env["PY_VENV_PYTHON"],
             "-m",
-            "autopep8",
-            "--in-place",
-            "--recursive",
-            "--max-line-length=120",
-            "--ignore=E402,E226,E24,W50,W690",
+            "ruff",
+            "check",
+            "--config",
+            str(ROOT / ".ruff.toml"),
+            "--fix-only",
+            ".",
+        ],
+        env=venv_env,
+        cwd=PY_DIR,
+    )
+    run(
+        [
+            venv_env["PY_VENV_PYTHON"],
+            "-m",
+            "ruff",
+            "format",
+            "--config",
+            str(ROOT / ".ruff.toml"),
             ".",
         ],
         env=venv_env,
@@ -333,7 +368,7 @@ def uninstall(env: Mapping[str, str]) -> None:
         run([pip3, "uninstall", "-y", pkg, *break_flag.split()], env=env)
 
 
-def clean(env: Mapping[str, str]) -> None:
+def clean(_env: Mapping[str, str]) -> None:
     shutil.rmtree(PY_DIR / "build", ignore_errors=True)
     shutil.rmtree(PY_DIR / "dist", ignore_errors=True)
     shutil.rmtree(PY_DIR / ".venv", ignore_errors=True)
@@ -350,12 +385,33 @@ def clean(env: Mapping[str, str]) -> None:
 
 
 def vet(env: Mapping[str, str]) -> None:
-    venv_env = _ensure_venv(env)
+    venv_env: Mapping[str, str] | None = None
+    had_error = False
     try:
-        run([venv_env["PY_VENV_PYTHON"], "-c", "import ruff"], env=venv_env)
+        venv_env = _ensure_venv(env)
+        try:
+            run([venv_env["PY_VENV_PYTHON"], "-c", "import ruff"], env=venv_env)
+        except Exception:
+            run([venv_env["PY_VENV_PIP"], "install", *_pip_mirror_args(venv_env), "ruff"], env=venv_env)
+        run(
+            [
+                venv_env["PY_VENV_PYTHON"],
+                "-m",
+                "ruff",
+                "check",
+                "--config",
+                str(ROOT / ".ruff.toml"),
+                ".",
+            ],
+            env=venv_env,
+            cwd=ROOT,
+        )
     except Exception:
-        run([venv_env["PY_VENV_PIP"], "install", *_pip_mirror_args(venv_env), "ruff"], env=venv_env)
-    run([venv_env["PY_VENV_PYTHON"], "-m", "ruff", "check", "--select", "F,B,UP,PERF", "mental1104"], env=venv_env, cwd=PY_DIR)
+        had_error = True
+        raise
+    finally:
+        if had_error:
+            _print_ruff_stats(venv_env or env)
 
 
 def guard(env: Mapping[str, str], *, file_pattern: str | None, filter_expr: str | None) -> None:

@@ -55,7 +55,13 @@ def parse_po(po_text: str) -> List[PoEntry]:
                 flags=set(current["flags"]),
             )
         )
-        current = {"context": None, "msgid": None, "msgid_plural": None, "msgstr": None, "flags": set()}
+        current = {
+            "context": None,
+            "msgid": None,
+            "msgid_plural": None,
+            "msgstr": None,
+            "flags": set(),
+        }
 
     for line in po_text.splitlines():
         stripped = line.strip()

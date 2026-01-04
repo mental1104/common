@@ -7,9 +7,10 @@ instead of raising AttributeError during requests.
 
 from __future__ import annotations
 
-from typing import Iterable, Optional, Protocol
+from typing import TYPE_CHECKING, Iterable, Optional, Protocol
 
-from starlette.requests import Request
+if TYPE_CHECKING:
+    from starlette.requests import Request
 
 from .runtime import normalize_locale
 
@@ -27,7 +28,7 @@ class ChainResolver:
     def __init__(self, resolvers: Iterable[LocaleResolver], default_locale: str = "zh"):
         self.resolvers = list(resolvers)
         for resolver in self.resolvers:
-            if not hasattr(resolver, "resolve") or not callable(getattr(resolver, "resolve")):
+            if not hasattr(resolver, "resolve") or not callable(resolver.resolve):
                 raise TypeError(f"Resolver {resolver!r} must expose an async `resolve` method")
         self.default_locale = normalize_locale(default_locale, default_locale)
 

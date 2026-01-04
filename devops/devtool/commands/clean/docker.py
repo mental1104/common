@@ -1,10 +1,13 @@
 from __future__ import annotations
 
-from argparse import ArgumentParser
+from typing import TYPE_CHECKING
 
 from devtool.commands import register
 from devtool.commands.common import base_env
 from devtool.commands.ops import docker
+
+if TYPE_CHECKING:
+    from argparse import ArgumentParser
 
 
 @register("clean-docker")
@@ -14,6 +17,6 @@ def configure(subparsers: ArgumentParser):
     return run
 
 
-def run(args):
+def run(_args):
     env = base_env()
     docker.clean_docker(env)

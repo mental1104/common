@@ -1,11 +1,11 @@
-from mental1104.common.i18n import I18n, FileMoProvider, locale_context
+from mental1104.common.i18n import FileMoProvider, I18n, locale_context
 
 
 def test_i18n_runtime_translations(tmp_path, write_mo_from_po_text):
     mo_root = tmp_path / "mo"
     domain = "ui"
 
-    zh_po = '''
+    zh_po = """
 msgid ""
 msgstr ""
 "Language: zh\\n"
@@ -16,9 +16,9 @@ msgstr "你好"
 msgctxt "btn"
 msgid "Save"
 msgstr "保存"
-'''.strip()
+""".strip()
 
-    en_po = '''
+    en_po = """
 msgid ""
 msgstr ""
 "Language: en\\n"
@@ -29,7 +29,7 @@ msgstr "Hello"
 msgctxt "btn"
 msgid "Save"
 msgstr "Save"
-'''.strip()
+""".strip()
 
     write_mo_from_po_text(mo_root, "zh", domain, zh_po)
     write_mo_from_po_text(mo_root, "en", domain, en_po)

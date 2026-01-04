@@ -7,6 +7,7 @@ fallback. Currently exposes `parse_json`, backed by the canonical
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import os
 
@@ -19,20 +20,28 @@ def _setup_logging() -> None:
     if not root.handlers:
         logging.basicConfig(level=level)
     else:
-        try:
+        with contextlib.suppress(Exception):
             root.setLevel(level)
-        except Exception:
-            pass
+
+def _load_interface():
+    from .interface import (
+        BackendUnavailable,
+        StrategyError,
+        choose_strategy,
+        get_active_strategy_name,
+        parse_json,
+    )
+
+    return BackendUnavailable, StrategyError, choose_strategy, get_active_strategy_name, parse_json
 
 
 _setup_logging()
-
-from .interface import parse_json, choose_strategy, StrategyError, BackendUnavailable, get_active_strategy_name
+BackendUnavailable, StrategyError, choose_strategy, get_active_strategy_name, parse_json = _load_interface()
 
 __all__ = [
-    "parse_json",
-    "choose_strategy",
-    "StrategyError",
     "BackendUnavailable",
+    "StrategyError",
+    "choose_strategy",
     "get_active_strategy_name",
+    "parse_json",
 ]

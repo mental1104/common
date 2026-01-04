@@ -1,5 +1,6 @@
 # dispatch_for.py
 from __future__ import annotations
+
 import inspect
 import sys
 from typing import Any, Callable, Dict, Tuple, Type
@@ -49,7 +50,7 @@ def dispatch_for(*decorator_args: Any) -> Any:
             patterns = getattr(fn, "__dispatch_patterns__", None)
             if patterns is None:
                 patterns = []
-                setattr(fn, "__dispatch_patterns__", patterns)
+                fn.__dispatch_patterns__ = patterns
             patterns.append(pattern)
             return fn
 
@@ -63,7 +64,7 @@ def dispatch_for(*decorator_args: Any) -> Any:
             # 1) Collect overloads: {arity -> {pattern -> function}}
             registry: Dict[int, Dict[_Pattern, Callable[..., Any]]] = {}
 
-            for name, attr in cls.__dict__.items():
+            for attr in cls.__dict__.values():
                 patterns = getattr(attr, "__dispatch_patterns__", None)
                 if not patterns:
                     continue
@@ -73,8 +74,7 @@ def dispatch_for(*decorator_args: Any) -> Any:
                     arity_map = registry.setdefault(arity, {})
                     if pat in arity_map:
                         raise TypeError(
-                            f"Duplicate overload for pattern {pat} "
-                            f"on method {attr.__qualname__}"
+                            f"Duplicate overload for pattern {pat} on method {attr.__qualname__}"
                         )
                     arity_map[pat] = attr
 
@@ -87,15 +87,18 @@ def dispatch_for(*decorator_args: Any) -> Any:
 
             def _make_trie_lookup(root: Dict[Type[Any], Any], arity: int):
                 if arity == 1:
+
                     def _lookup(args: tuple[Any, ...]):
                         return root.get(args[0].__class__)
                 elif arity == 2:
+
                     def _lookup(args: tuple[Any, ...]):
                         node = root.get(args[0].__class__)
                         if node is None:
                             return None
                         return node.get(args[1].__class__)
                 elif arity == 3:
+
                     def _lookup(args: tuple[Any, ...]):
                         node = root.get(args[0].__class__)
                         if node is None:
@@ -105,6 +108,7 @@ def dispatch_for(*decorator_args: Any) -> Any:
                             return None
                         return node.get(args[2].__class__)
                 else:
+
                     def _lookup(args: tuple[Any, ...]):
                         node: Any = root
                         last_index = len(args) - 1
@@ -115,6 +119,7 @@ def dispatch_for(*decorator_args: Any) -> Any:
                             if idx == last_index:
                                 return node
                         return None
+
                 return _lookup
 
             for arity, arity_map in registry.items():
@@ -167,7 +172,7 @@ def dispatch_for(*decorator_args: Any) -> Any:
             def _instance_call(_self: Any, *args: Any, **kwargs: Any) -> Any:
                 return dispatcher(*args, **kwargs)
 
-            setattr(cls, "__call__", _instance_call)
+            cls.__call__ = _instance_call
 
             return cls
 
