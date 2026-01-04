@@ -8,6 +8,7 @@ import pytest
 from mental1104.concurrency.coroutine import (
     AsCompletedStrategy,
     CoroutinePool,
+    ExceptionGroup,
     FirstSuccessfulStrategy,
     GatherStrategy,
     ProcessExecutorCoroutinePool,

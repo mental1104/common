@@ -7,6 +7,7 @@ LastEditTime: 2025-11-09 00:26:39
 from __future__ import annotations
 
 import asyncio
+import builtins
 import functools
 import math
 import inspect
@@ -16,6 +17,15 @@ from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor, Executor
 
 from mental1104 import async_timed
 from mental1104.concurrency.types import MPStartMethod
+
+# Python < 3.11 compatibility for ExceptionGroup.
+if hasattr(builtins, "ExceptionGroup"):
+    ExceptionGroup = builtins.ExceptionGroup  # type: ignore[attr-defined]
+else:
+    class ExceptionGroup(Exception):
+        def __init__(self, message: str, exceptions: List[BaseException]) -> None:
+            super().__init__(message)
+            self.exceptions = list(exceptions)
 
 # 私有类型变量：不作为公共 API 暴露
 _T = TypeVar("_T")
