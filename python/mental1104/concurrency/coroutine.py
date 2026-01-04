@@ -232,7 +232,10 @@ class _BaseExecutorCoroutinePool(CoroutinePool, ABC):
     def _shutdown_executors(self) -> None:
         if self._executors is not None:
             for ex in self._executors:
-                ex.shutdown(wait=True, cancel_futures=False)
+                try:
+                    ex.shutdown(wait=True, cancel_futures=False)
+                except TypeError:
+                    ex.shutdown(wait=True)
             self._executors = None
         # 负载表保留结构，供下一批次复用
 

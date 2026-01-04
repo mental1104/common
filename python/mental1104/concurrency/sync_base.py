@@ -35,7 +35,10 @@ class _BaseSyncWorkerPool(ABC):
 
     def shutdown(self, wait: bool = True) -> None:
         if self._executor is not None:
-            self._executor.shutdown(wait=wait, cancel_futures=False)
+            try:
+                self._executor.shutdown(wait=wait, cancel_futures=False)
+            except TypeError:
+                self._executor.shutdown(wait=wait)
             self._executor = None
 
     def __enter__(self):

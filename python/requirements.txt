@@ -25,7 +25,7 @@ ruamel.yaml
 ruff
 ujson
 orjson
-semgrep
+semgrep ; sys_platform != "win32"
 pybind11
 pypdf
 mental1104_export_layer @ file://../export/python
