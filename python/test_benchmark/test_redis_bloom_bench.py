@@ -4,6 +4,7 @@ import concurrent.futures
 import os
 import random
 import time
+from typing import Tuple
 
 import pytest
 
@@ -397,7 +398,7 @@ class TestRedisBloomConcurrent:
         if path == "bloom_guard_concurrent" and not bloom_bench_data["bloom_enabled"]:
             pytest.skip("Redis Bloom module is not loaded; skipping Bloom benchmark")
 
-        def run():
+        def run() -> Tuple[float, float]:
             if path == "plain_get_concurrent":
                 return _benchmark_concurrent_plain(redis_client, workload, workers)
             elapsed, skipped = _benchmark_concurrent_bloom(
