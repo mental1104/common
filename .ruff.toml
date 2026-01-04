@@ -31,6 +31,7 @@ select = [
   "DTZ",
   "TCH",
   "RUF",
+  "ANN"
 ]
 allowed-confusables = [
   "，",
@@ -59,7 +60,9 @@ ignore = [
   "UP006",
   "UP007",
   "UP045",
-  "I001"
+  "I001",
+  "ANN101",
+  "ANN102"
 ]
 
 [lint.isort]
@@ -69,4 +72,7 @@ known-first-party = ["mental1104"]
 [lint.per-file-ignores]
 "python/test/**/*.py" = ["ARG001", "ARG002", "ARG003"]
 "python/test_benchmark/**/*.py" = ["ARG001", "ARG002", "ARG003"]
+
+[lint.flake8-annotations]
+suppress-none-returning = true
 
