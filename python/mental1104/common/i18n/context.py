@@ -3,6 +3,8 @@ Locale management using contextvars so async tasks inherit the active locale
 without passing language parameters everywhere.
 """
 
+from __future__ import annotations
+
 from contextlib import contextmanager
 from contextvars import ContextVar, Token
 
