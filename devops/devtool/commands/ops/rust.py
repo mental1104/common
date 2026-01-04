@@ -12,7 +12,7 @@ from devtool.commands.common import RUST_DIR, run, strip_proxies
 
 
 _CARGO_LLVM_COV_MIN_RUSTC = (1, 87, 0)
-_CARGO_LLVM_COV_PINNED_VERSION = "0.6.21"
+_CARGO_LLVM_COV_FALLBACK_VERSIONS = ("0.6.20", "0.6.19", "0.6.18")
 
 
 def _rustc_version(env: Mapping[str, str]) -> tuple[int, int, int] | None:
@@ -38,6 +38,28 @@ def _cargo_extra_args(env: Mapping[str, str]) -> list[str]:
         return shlex.split(raw, posix=os.name != "nt")
     except ValueError:
         return raw.split()
+
+
+def _install_cargo_llvm_cov(env: Mapping[str, str], versions: list[str]) -> None:
+    last_exc: Exception | None = None
+    for version in versions:
+        for locked in (True, False):
+            cmd = ["cargo", "install", "cargo-llvm-cov"]
+            if version:
+                cmd += ["--version", version]
+            if locked:
+                cmd.append("--locked")
+            try:
+                run(cmd, env=env)
+                return
+            except Exception as exc:
+                last_exc = exc
+                if locked:
+                    continue
+                if version != versions[-1]:
+                    print(f"[warn] cargo-llvm-cov {version} install failed; trying older version")
+    if last_exc:
+        raise last_exc
 
 
 def setup(env: Mapping[str, str]) -> None:
@@ -132,14 +154,15 @@ def coverage(env: Mapping[str, str]) -> None:
     run(["rustup", "component", "add", "llvm-tools-preview"], env=env_np)
     if not shutil.which("cargo-llvm-cov", path=env_np.get("PATH")):
         llvm_cov_version = env.get("RUST_LLVM_COV_VERSION", "")
-        if not llvm_cov_version:
+        if llvm_cov_version:
+            versions = [llvm_cov_version]
+        else:
             rustc_ver = _rustc_version(env_np)
             if rustc_ver and rustc_ver < _CARGO_LLVM_COV_MIN_RUSTC:
-                llvm_cov_version = _CARGO_LLVM_COV_PINNED_VERSION
-        cmd = ["cargo", "install", "cargo-llvm-cov"]
-        if llvm_cov_version:
-            cmd += ["--version", llvm_cov_version]
-        run(cmd, env=env_np)
+                versions = list(_CARGO_LLVM_COV_FALLBACK_VERSIONS)
+            else:
+                versions = [""]
+        _install_cargo_llvm_cov(env_np, versions)
     ignore = "(^|/)(tests?|benches?|examples)/"
     run(["cargo", "llvm-cov", "--all-features", f"--ignore-filename-regex={ignore}", "--summary-only"], env=env_np, cwd=RUST_DIR)
 
