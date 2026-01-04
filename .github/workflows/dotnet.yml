@@ -19,7 +19,7 @@ on:
         default: true
 
 env:
-  DOTNET_TEST_LOGGER: ${{ (vars.CI_VERBOSE_LOGS == 'false' || (github.event_name == 'workflow_dispatch' && (github.event.inputs.verbose_logs == false || github.event.inputs.verbose_logs == 'false'))) && '' || '--logger \"console;verbosity=detailed\"' }}
+  DOTNET_TEST_LOGGER: ${{ (vars.CI_VERBOSE_LOGS == 'false' || (github.event_name == 'workflow_dispatch' && (github.event.inputs.verbose_logs == false || github.event.inputs.verbose_logs == 'false'))) && '' || 'console;verbosity=detailed' }}
 
 jobs:
   linux:
@@ -48,7 +48,12 @@ jobs:
       - name: Build
         run: dotnet build mental1104.sln --configuration Release --no-restore
       - name: Coverage
-        run: dotnet test mental1104.sln --configuration Release --no-build --collect:"XPlat Code Coverage" ${{ env.DOTNET_TEST_LOGGER }}
+        run: |
+          if [ -n "${DOTNET_TEST_LOGGER}" ]; then
+            dotnet test mental1104.sln --configuration Release --no-build --collect:"XPlat Code Coverage" --logger "${DOTNET_TEST_LOGGER}"
+          else
+            dotnet test mental1104.sln --configuration Release --no-build --collect:"XPlat Code Coverage"
+          fi
 
   macos:
     name: macOS / .NET ${{ matrix.dotnet }}
@@ -76,7 +81,12 @@ jobs:
       - name: Build
         run: dotnet build mental1104.sln --configuration Release --no-restore
       - name: Coverage
-        run: dotnet test mental1104.sln --configuration Release --no-build --collect:"XPlat Code Coverage" ${{ env.DOTNET_TEST_LOGGER }}
+        run: |
+          if [ -n "${DOTNET_TEST_LOGGER}" ]; then
+            dotnet test mental1104.sln --configuration Release --no-build --collect:"XPlat Code Coverage" --logger "${DOTNET_TEST_LOGGER}"
+          else
+            dotnet test mental1104.sln --configuration Release --no-build --collect:"XPlat Code Coverage"
+          fi
 
   windows:
     name: Windows / .NET ${{ matrix.dotnet }}
@@ -104,4 +114,9 @@ jobs:
       - name: Build
         run: dotnet build mental1104.sln --configuration Release --no-restore
       - name: Coverage
-        run: dotnet test mental1104.sln --configuration Release --no-build --collect:"XPlat Code Coverage" ${{ env.DOTNET_TEST_LOGGER }}
+        run: |
+          if ($env:DOTNET_TEST_LOGGER) {
+            dotnet test mental1104.sln --configuration Release --no-build --collect:"XPlat Code Coverage" --logger $env:DOTNET_TEST_LOGGER
+          } else {
+            dotnet test mental1104.sln --configuration Release --no-build --collect:"XPlat Code Coverage"
+          }

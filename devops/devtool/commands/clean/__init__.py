@@ -9,16 +9,10 @@ from devtool.commands.ops import cpp as cpp_ops, go as go_ops, python as python_
 
 
 def _clean_env_files() -> None:
-    env_src = ROOT / ".env"
     env_stamp = ROOT / ".env.active"
-    env_mk = env_src.with_suffix(env_src.suffix + ".mk")
-    removed = []
-    for path in (env_stamp, env_mk):
-        if path.exists():
-            path.unlink()
-            removed.append(path)
-    if removed:
-        print(f"[info] 已移除环境导入文件: {', '.join(str(p) for p in removed)}")
+    if env_stamp.exists():
+        env_stamp.unlink()
+        print(f"[info] 已移除环境标记文件: {env_stamp}")
 
 
 def _add_common_args(parser: ArgumentParser) -> None:

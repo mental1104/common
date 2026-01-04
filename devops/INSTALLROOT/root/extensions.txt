@@ -28,7 +28,6 @@ cstrap.python-snippets
 njqdev.vscode-python-typehint
 kaih2o.python-resource-monitor
 batisteo.vscode-django
-ms-vscode.makefile-tools
 eamodio.gitlens
 mintlify.document
 ms-dotnettools.csharp

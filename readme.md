@@ -51,7 +51,7 @@ Python + C++ 混合工程，使用统一的 `dev` 命令驱动（macOS/Linux：`
 - `./dev build all`：Python wheel、Go build、C++（含子模块配置）、Rust release build。
 - `./dev test all`：pytest / go test / ctest / cargo test。
 - `./dev install all` / `./dev uninstall all`
-- `./dev clean all`：含 `.env.active`/`.env.mk` 清理。
+- `./dev clean all`：含 `.env.active` 标记清理。
 - `./dev coverage all`：pytest+coverage / go cover / ctest+gcovr（表格概要，自动回退 gcov） / cargo llvm-cov。
 - `./dev fmt all`
 - `./dev bench all`：完成后自动生成 `artifacts/bench/index.html`。
@@ -98,8 +98,6 @@ Python + C++ 混合工程，使用统一的 `dev` 命令驱动（macOS/Linux：`
 ### 诊断/别名
 
 - `./dev test -v ...` / `./dev bench -v ...`：等价于 `VERBOSE=1`。
-- `./dev build cpp --config Release` 等同历史的 `make build-cpp-release`。
-- 兼容旧 Makefile 目标：`build-*`/`test-*`/`coverage-*`/`fmt-*`/`install-*`/`uninstall-*` 等别名均已映射。
 - 覆盖率：C++ 使用 `gcovr --merge-mode-functions=separate` 输出概要表格；缺失时回退逐目录 `gcov -b -c`。
 
 ## 可配置参数
@@ -168,7 +166,7 @@ docker build -t mental1104:dev .
 
 - **dev CLI**：Python `argparse` 分发；子命令各在 `devops/devtool/commands/*.py` 中注册。
 - **命令执行**：统一经过 `devtool.context.sh`，日志格式 `[dev] (cwd)$ cmd`。
-- **语言侧逻辑**：从原 Makefile 迁移的 shell 片段直接嵌入各子命令，确保行为与历史一致（venv/bootstrap、pybind11 导出、ctest/gcovr/gcov、cargo llvm-cov 等）。
+- **语言侧逻辑**：从旧自动化脚本迁移的 shell 片段直接嵌入各子命令，确保行为与历史一致（venv/bootstrap、pybind11 导出、ctest/gcovr/gcov、cargo llvm-cov 等）。
 - **环境变量**：`base_env` 自动加载 `.env`，测试/覆盖率会自动剥离 HTTP(S)_PROXY/ALL_PROXY，避免代理影响内部容器。
 
 ## 开发建议

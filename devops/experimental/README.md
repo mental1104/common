@@ -1,6 +1,6 @@
 # Experimental Playground
 
-This directory is intentionally isolated from the repo-level Makefile; build and test only inside each subproject. Each language folder holds a minimal best-practice layout that extracts the substring `"world"` from the constant `"hello world"` and ships with a tiny test.
+This directory is intentionally isolated from repo-level automation; build and test only inside each subproject. Each language folder holds a minimal best-practice layout that extracts the substring `"world"` from the constant `"hello world"` and ships with a tiny test.
 
 ## Quick notes
 - Keep experiments tidy so they can be promoted into language roots later; no artifacts are tracked thanks to the local `.gitignore`.
