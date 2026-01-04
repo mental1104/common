@@ -4,7 +4,10 @@ import time
 import logging
 import re
 from datetime import datetime
-from zoneinfo import ZoneInfo
+try:
+    from zoneinfo import ZoneInfo
+except ImportError:  # Python 3.8 fallback
+    from backports.zoneinfo import ZoneInfo
 from mental1104 import async_timed, timed, get_current_time  # 替换为实际模块名
 
 

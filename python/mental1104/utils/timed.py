@@ -4,6 +4,11 @@ import logging
 from typing import Callable, Any
 from datetime import datetime
 
+try:
+    from zoneinfo import ZoneInfo
+except ImportError:  # Python 3.8 fallback
+    from backports.zoneinfo import ZoneInfo
+
 
 # 无参的 async_timed 装饰器
 def async_timed(func: Callable) -> Callable:
@@ -70,7 +75,6 @@ def get_current_time(format="%Y-%m-%d %H:%M:%S", zone="Asia/Shanghai"):
     Returns:
         str: 符合特定时区的时间字符串
     """
-    from zoneinfo import ZoneInfo
     return datetime.now(ZoneInfo(zone)).strftime(format)
 
 

@@ -20,6 +20,7 @@ memray ; sys_platform != "win32"
 autopep8
 coverage
 tzdata ; sys_platform == "win32"
+backports.zoneinfo ; python_version < "3.9"
 ruamel.yaml
 ruff
 ujson
