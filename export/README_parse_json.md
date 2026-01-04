@@ -5,11 +5,11 @@ This note captures the end-to-end steps we used to get the RapidJSON-based C++ p
 
 Environment & build
 -------------------
-- Python venv: `python/.venv` (created by `make setup-python`) installs pybind11, pytest-benchmark, ujson, orjson, etc.
+- Python venv: `python/.venv` (created by `./dev setup-python`) installs pybind11, pytest-benchmark, ujson, orjson, etc.
 - CMake configuration:
-  - `make build-export-cpp` now enables `-DPYBIND11_FINDPYTHON=ON` and injects `pybind11_DIR` from the venv (`python -m pybind11 --cmakedir`) so CMake finds pybind11.
-  - Build type comes from `CPP_BUILD_TYPE` (default Release), passed into the export/cpp configure step to avoid Debug slowness.
-- Python side logging: `mental1104_export_layer/__init__.py` sets up basicConfig if no handlers, default INFO (overridable via `EXPORT_LAYER_LOG_LEVEL`). `make test-python` / `make bench-python` export `EXPORT_LAYER_LOG_LEVEL=DEBUG` so strategy selection logs are visible.
+  - `./dev build-export-cpp` enables `-DPYBIND11_FINDPYTHON=ON` and injects `pybind11_DIR` from the venv (`python -m pybind11 --cmakedir`) so CMake finds pybind11.
+  - Build type comes from `./dev build-export-cpp --config ...` (default Debug); use Release to avoid Debug slowness.
+- Python side logging: `mental1104_export_layer/__init__.py` sets up basicConfig if no handlers, default INFO (overridable via `EXPORT_LAYER_LOG_LEVEL`).
 - Strategy selection: prefers pybind11, then ctypes; ENV overrides:
   - `EXPORT_LAYER_STRATEGY=pybind11|ctypes`
   - `EXPORT_LAYER_ALLOW_FALLBACK=0` to forbid fallback.
@@ -25,14 +25,15 @@ Binding behavior
 Repro steps
 -----------
 1) Install Python deps in venv (includes pybind11):
-   - `make setup-python`  # requires network / PyPI mirror configured
+   - `./dev setup-python`  # requires network / PyPI mirror configured
 2) Build export/cpp with pybind11 module:
-   - `make clean-export-cpp build-export-cpp CPP_BUILD_TYPE=Release`
+   - `./dev clean-export-cpp`
+   - `./dev build-export-cpp --config Release`
 3) Run Python tests with DEBUG logs for mental1104_export_layer:
-   - `make test-python FILTER=json`
+   - `./dev test python --filter json`
    - Logs will show chosen backend (pybind11 expected if mental1104_export_layer_pybind built).
 4) Run benchmarks:
-   - `make bench-python FILE=test_benchmark/test_deserialization/test_json_parser_bench`
+   - `./dev bench python --filter json_parser_bench`
    - Artifacts under `artifacts/bench/python/...` and plots under `artifacts/bench/python/plots/`.
 
 Performance snapshot (Release build)

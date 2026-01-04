@@ -161,6 +161,4 @@ def clean_docker(env: Mapping[str, str]) -> None:
             print(f"[warn] {d} 关闭失败（已忽略）")
             continue
     env_stamp.unlink(missing_ok=True)
-    env_mk = env_src.with_suffix(env_src.suffix + ".mk")
-    env_mk.unlink(missing_ok=True)
     print("[ok] clean-docker 完成（出错已忽略）")

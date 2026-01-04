@@ -11,7 +11,7 @@ include(CMakeParseArguments)             # 引入 cmake_parse_arguments，供 re
 set_property(GLOBAL PROPERTY COMPONENT_RPATH_DIRS "") # 预置全局属性，累积第三方库的 rpath 目录
 set_property(GLOBAL PROPERTY REGISTERED_COMPONENTS "") # 预置全局属性，记录注册过的组件名
 set_property(GLOBAL PROPERTY SUBMODULE_INSTALL_BUILD_DIRS "") # 记录需要在 install 阶段递归安装的子模块 build 目录
-option(M1104_INSTALL_SUBMODULES "Install C++ submodules that live under lib/* when running make install" ON)
+option(M1104_INSTALL_SUBMODULES "Install C++ submodules that live under lib/* during cmake --install" ON)
 
 function(_m1104_track_submodule_install_root root)
   if(NOT root)
