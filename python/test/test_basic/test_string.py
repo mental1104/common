@@ -72,11 +72,11 @@ class TestStringHelper:
         【期望输出】输出包含换行符, 行宽被控制在指定长度附近。
         """
         input_string = (
-            "这是一个测试字符串, 我们希望在这个字符串中插入换行符, 以确保每行的长度不会太长。"
+            "这是一个测试字符串，我们希望在这个字符串中插入换行符，以确保每行的长度不会太长。"
         )
         max_length = 10
         expected_output = (
-            "这是一个测试字符串, \n我们希望在这个字符串中\n插入换行符, 以确保每行\n的长度不会太长。"
+            "这是一个测试字符串，\n我们希望在这个字符串中\n插入换行符，以确保每行\n的长度不会太长。"
         )
         assert insert_newlines(input_string, max_length) == expected_output
 

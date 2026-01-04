@@ -6,7 +6,10 @@ import uuid
 from functools import lru_cache
 
 import pytest
-from psycopg2 import errorcodes
+
+psycopg2 = pytest.importorskip("psycopg2")
+errorcodes = pytest.importorskip("psycopg2.errorcodes")
+
 from sqlalchemy import Column, Integer, String, create_engine, select, text
 from sqlalchemy.exc import TimeoutError as SATimeoutError
 
@@ -22,7 +25,7 @@ from mental1104.connector.postgres import (
     with_session,
 )
 
-psycopg2 = pytest.importorskip("psycopg2")
+
 logging.basicConfig()
 logging.getLogger("sqlalchemy.pool").setLevel(logging.DEBUG)
 logger = logging.getLogger(__name__)
