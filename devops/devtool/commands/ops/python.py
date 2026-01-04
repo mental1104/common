@@ -96,6 +96,9 @@ def _install_requirements(env: Mapping[str, str]) -> None:
             if stripped.startswith("pulsar-client"):
                 # pulsar-client has no Windows wheel; skip to keep CI green
                 continue
+            if stripped.startswith("semgrep"):
+                # semgrep does not support Windows; skip to keep CI green
+                continue
             filtered.append(line)
         if len(filtered) != len(lines):
             tmp_req = req_file.with_suffix(req_file.suffix + ".win.tmp")
