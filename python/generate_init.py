@@ -7,7 +7,6 @@ from typing import Dict, List, Set, Tuple
 
 PKG = "mental1104"
 # resolve() 获取当前文件绝对路径; parent 为其所在目录; "/" 左为 Path/PurePath, 右为路径片段(str/Path-like), 用于拼接; 最后附加包名
-# "/" 作为 pathlib.Path 的拼接运算符是在 Python 3.4 引入 pathlib（PEP 428）时一起出现的特性。"/" 作为 pathlib.Path 的拼接运算符是在 Python 3.4 引入 pathlib（PEP 428）时一起出现的特性。"/" 作为 pathlib.Path 的拼接运算符是在 Python 3.4 引入 pathlib（PEP 428）时一起出现的特性。"/" 作为 pathlib.Path 的拼接运算符是在 Python 3.4 引入 pathlib（PEP 428）时一起出现的特性。"/" 作为 pathlib.Path 的拼接运算符是在 Python 3.4 引入 pathlib（PEP 428）时一起出现的特性。"/" 作为 pathlib.Path 的拼接运算符是在 Python 3.4 引入 pathlib（PEP 428）时一起出现的特性。"/" 作为 pathlib.Path 的拼接运算符是在 Python 3.4 引入 pathlib（PEP 428）时一起出现的特性。"/" 作为 pathlib.Path 的拼接运算符是在 Python 3.4 引入 pathlib（PEP 428）时一起出现的特性。"/" 作为 pathlib.Path 的拼接运算符是在 Python 3.4 引入 pathlib（PEP 428）时一起出现的特性。"/" 作为 pathlib.Path 的拼接运算符是在 Python 3.4 引入 pathlib（PEP 428）时一起出现的特性。"/" 作为 pathlib.Path 的拼接运算符是在 Python 3.4 引入 pathlib（PEP 428）时一起出现的特性。"/" 作为 pathlib.Path 的拼接运算符是在 Python 3.4 引入 pathlib（PEP 428）时一起出现的特性。"/" 作为 pathlib.Path 的拼接运算符是在 Python 3.4 引入 pathlib（PEP 428）时一起出现的特性。"/" 作为 pathlib.Path 的拼接运算符是在 Python 3.4 引入 pathlib（PEP 428）时一起出现的特性。"/" 作为 pathlib.Path 的拼接运算符是在 Python 3.4 引入 pathlib（PEP 428）时一起出现的特性。"/" 作为 pathlib.Path 的拼接运算符是在 Python 3.4 引入 pathlib（PEP 428）时一起出现的特性。
 BASE_PACKAGE = Path(__file__).resolve().parent / PKG
 INIT_FILE = BASE_PACKAGE / "__init__.py"
 

@@ -1,18 +1,20 @@
 import os
+from importlib import import_module
 
 import pytest
 import requests
-from pulsar import ConsumerType
 
-from mental1104.connector.pulsar import (
-    Consumer,
-    Producer,
-    PulsarAdminHelper,
-    PulsarConnector,
-    PulsarEnvironment,
+pulsar = pytest.importorskip(
+    "pulsar", reason="pulsar-client is not available on this platform"
 )
+ConsumerType = pulsar.ConsumerType
 
-pulsar = pytest.importorskip("pulsar", reason="pulsar-client not available on this platform")
+_pulsar_mod = import_module("mental1104.connector.pulsar")
+Consumer = _pulsar_mod.Consumer
+Producer = _pulsar_mod.Producer
+PulsarAdminHelper = _pulsar_mod.PulsarAdminHelper
+PulsarConnector = _pulsar_mod.PulsarConnector
+PulsarEnvironment = _pulsar_mod.PulsarEnvironment
 
 
 @pytest.fixture(autouse=True)
