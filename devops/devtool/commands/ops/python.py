@@ -96,6 +96,9 @@ def _install_requirements(env: Mapping[str, str]) -> None:
             if stripped.startswith("pulsar-client"):
                 # pulsar-client has no Windows wheel; skip to keep CI green
                 continue
+            if stripped.startswith("psycopg2-binary"):
+                # psycopg2-binary fails to build on Windows in CI; skip to keep CI green
+                continue
             if stripped.startswith("semgrep"):
                 # semgrep does not support Windows; skip to keep CI green
                 continue
