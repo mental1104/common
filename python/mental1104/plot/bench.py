@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import math
 import re
+import sys
 from abc import ABC, abstractmethod
 from collections import defaultdict
 from dataclasses import dataclass, field
@@ -29,7 +30,10 @@ _TIME_UNIT_TO_SECONDS = {
 }
 
 
-@dataclass(slots=True)
+_DATACLASS_KW = {"slots": True} if sys.version_info >= (3, 10) else {}
+
+
+@dataclass(**_DATACLASS_KW)
 class BenchmarkRecord:
     label: str
     metrics: dict[str, float]
