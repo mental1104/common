@@ -1,5 +1,5 @@
 matplotlib
-psycopg2-binary>=2.9 
+psycopg2-binary>=2.9 ; python_version >= "3.9" or sys_platform != "darwin"
 sqlalchemy 
 requests 
 redis>=5.0 

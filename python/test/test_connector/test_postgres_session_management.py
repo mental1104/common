@@ -6,9 +6,10 @@ import uuid
 
 from functools import lru_cache
 
-import psycopg2
-from psycopg2 import errorcodes
 import pytest
+
+psycopg2 = pytest.importorskip("psycopg2")
+from psycopg2 import errorcodes
 from sqlalchemy import Column, Integer, String, select, text, create_engine
 from sqlalchemy.exc import TimeoutError
 import mental1104.connector.postgres as connector_pg
