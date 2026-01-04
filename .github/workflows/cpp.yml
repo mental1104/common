@@ -1,0 +1,250 @@
+name: C++
+
+on:
+  push:
+    paths:
+      - "cpp/**"
+      - "devops/**"
+      - ".github/workflows/cpp.yml"
+  pull_request:
+    paths:
+      - "cpp/**"
+      - "devops/**"
+      - ".github/workflows/cpp.yml"
+  workflow_dispatch:
+    inputs:
+      verbose_logs:
+        description: "Enable verbose test output"
+        type: boolean
+        default: true
+
+env:
+  PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/devops
+  CTEST_V: ${{ (vars.CI_VERBOSE_LOGS == 'false' || (github.event_name == 'workflow_dispatch' && (github.event.inputs.verbose_logs == false || github.event.inputs.verbose_logs == 'false'))) && '' || '-V' }}
+
+jobs:
+  linux:
+    name: Linux / ${{ matrix.compiler == 'clang' && 'clang++' || 'g++' }} / C++${{ matrix.cxx_std }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        compiler: [gcc, clang]
+        cxx_std: ["11", "14", "17", "20", "23"]
+        exclude:
+          - compiler: gcc
+            cxx_std: "20"
+    env:
+      CMAKE_BUILD_PARALLEL_LEVEL: 4
+      GCOV: gcov
+      CC: ${{ matrix.compiler == 'clang' && 'clang' || 'gcc' }}
+      CXX: ${{ matrix.compiler == 'clang' && 'clang++' || 'g++' }}
+      CXX_STD: ${{ matrix.cxx_std }}
+    defaults:
+      run:
+        shell: bash
+        working-directory: ${{ github.workspace }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: false
+          fetch-depth: 0
+      - name: Init submodules (sparse Boost)
+        run: |
+          python3 - <<'PY'
+          import sys
+          from devtool.commands.common import base_env
+          from devtool.commands.ops import cpp as cpp_ops
+          sys.exit(cpp_ops.git_submodules(base_env()) or 0)
+          PY
+      - name: Install toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake ninja-build clang clang-format clang-tidy gcovr lcov \
+            libmpfr-dev libgmp-dev
+      - name: Setup C++
+        run: ./dev setup-cpp --config Debug
+      - name: Format C++
+        if: ${{ matrix.compiler == 'gcc' && matrix.cxx_std == '23' }}
+        run: ./dev fmt-cpp
+      - name: Build C++
+        run: ./dev build-cpp --config Debug
+      - name: Coverage C++
+        run: ./dev coverage-cpp
+      - name: Vet C++
+        if: ${{ matrix.compiler == 'gcc' && matrix.cxx_std == '23' }}
+        run: ./dev vet-cpp
+      - name: Guard C++
+        if: ${{ matrix.compiler == 'gcc' && matrix.cxx_std == '23' }}
+        run: ./dev guard-cpp
+
+  linux-integration:
+    name: Linux / g++ / C++20 / coverage
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: app
+        ports:
+          - "5432:5432"
+        options: >-
+          --health-cmd="pg_isready -U test"
+          --health-interval=5s --health-timeout=5s --health-retries=5
+      redis:
+        image: redis/redis-stack-server:7.2.0-v7
+        ports:
+          - "6379:6379"
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=5s --health-timeout=3s --health-retries=5
+    env:
+      CMAKE_BUILD_PARALLEL_LEVEL: 4
+      GCOV: gcov
+      CC: gcc
+      CXX: g++
+      CXX_STD: "20"
+      DATABASE_URL: postgresql://test:test@localhost:5432/app
+      REDIS_URL: redis://localhost:6379/0
+      PGUSER: test
+      PGPASSWORD: test
+      PGDATABASE: app
+      PGHOST: localhost
+      PGPORT: "5432"
+      REDIS_HOST: localhost
+      REDIS_PORT: "6379"
+      PULSAR_HOST: localhost
+      PULSAR_BROKER_PORT: "6650"
+      PULSAR_ADMIN_PORT: "8080"
+      PULSAR_TOKEN: ""
+      PULSAR_SCHEMA_PATH: "/tmp/pulsar/schema"
+      PULSAR_DATA_PATH: "/tmp/pulsar/data"
+    defaults:
+      run:
+        shell: bash
+        working-directory: ${{ github.workspace }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: false
+          fetch-depth: 0
+      - name: Init submodules (sparse Boost)
+        run: |
+          python3 - <<'PY'
+          import sys
+          from devtool.commands.common import base_env
+          from devtool.commands.ops import cpp as cpp_ops
+          sys.exit(cpp_ops.git_submodules(base_env()) or 0)
+          PY
+      - name: Start Pulsar (standalone -nss)
+        run: |
+          docker rm -f pulsar || true
+          docker run -d --name pulsar \
+            -p ${PULSAR_BROKER_PORT}:${PULSAR_BROKER_PORT} -p ${PULSAR_ADMIN_PORT}:${PULSAR_ADMIN_PORT} \
+            apachepulsar/pulsar:3.2.0 \
+            bin/pulsar standalone -nss
+      - name: Wait for postgres/redis/pulsar
+        run: |
+          for i in {1..40}; do
+            (echo > /dev/tcp/127.0.0.1/${PGPORT}) && (echo > /dev/tcp/127.0.0.1/${REDIS_PORT}) && (echo > /dev/tcp/127.0.0.1/${PULSAR_ADMIN_PORT}) && exit 0
+            sleep 2
+          done
+          echo "services not ready" >&2
+          exit 1
+      - name: Install toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake ninja-build clang clang-format clang-tidy gcovr lcov \
+            libmpfr-dev libgmp-dev
+      - name: Setup C++
+        run: ./dev setup-cpp --config Debug
+      - name: Build C++
+        run: ./dev build-cpp --config Debug
+      - name: Test redis-plus-plus
+        run: ./dev test-redispp --config Debug
+      - name: Coverage C++
+        run: ./dev coverage-cpp
+
+  macos:
+    name: macOS / ${{ matrix.compiler == 'clang' && 'clang++' || 'g++' }} / C++${{ matrix.cxx_std }}
+    runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        compiler: [clang, gcc]
+        cxx_std: ["11", "14", "17", "20", "23"]
+    env:
+      CMAKE_BUILD_PARALLEL_LEVEL: 4
+      CC: ${{ matrix.compiler == 'clang' && 'clang' || 'gcc' }}
+      CXX: ${{ matrix.compiler == 'clang' && 'clang++' || 'g++' }}
+      CXX_STD: ${{ matrix.cxx_std }}
+      GCOV: "llvm-cov gcov"
+    defaults:
+      run:
+        shell: bash
+        working-directory: ${{ github.workspace }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: false
+          fetch-depth: 0
+      - name: Init submodules (sparse Boost)
+        run: |
+          python3 - <<'PY'
+          import sys
+          from devtool.commands.common import base_env
+          from devtool.commands.ops import cpp as cpp_ops
+          sys.exit(cpp_ops.git_submodules(base_env()) or 0)
+          PY
+      - name: Install toolchain
+        run: |
+          brew update
+          brew install cmake llvm ninja gcovr lcov mpfr gmp gcc
+          echo "$(brew --prefix llvm)/bin" >> $GITHUB_PATH
+      - name: Setup C++
+        run: ./dev setup-cpp --config Debug
+      - name: Build C++
+        run: ./dev build-cpp --config Debug
+      - name: Coverage C++
+        run: ./dev coverage-cpp
+
+  windows:
+    name: Windows / MSVC / C++${{ matrix.cxx_std }}
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        cxx_std: ["11", "14", "17", "20", "23"]
+    env:
+      PYTHON: python
+      PYTHONPATH: ${{ github.workspace }};${{ github.workspace }}/devops
+      PYTHONUTF8: "1"
+      PYTHONIOENCODING: "utf-8"
+      CMAKE_GENERATOR: "Visual Studio 17 2022"
+      CMAKE_BUILD_PARALLEL_LEVEL: 4
+      CXX_STD: ${{ matrix.cxx_std }}
+    defaults:
+      run:
+        shell: pwsh
+        working-directory: ${{ github.workspace }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: false
+          fetch-depth: 0
+      - name: Init submodules (sparse Boost)
+        run: python -c "import sys;from devtool.commands.common import base_env;from devtool.commands.ops import cpp as cpp_ops;sys.exit(cpp_ops.git_submodules(base_env()) or 0)"
+      - name: Setup C++
+        run: python -m devtool.cli setup-cpp --config Debug
+      - name: Build export C++ layer
+        run: python -m devtool.cli build-export-cpp --config Debug
+      - name: Build C++
+        run: python -m devtool.cli build-cpp --config Debug
+      - name: Coverage C++
+        run: python -m devtool.cli coverage-cpp

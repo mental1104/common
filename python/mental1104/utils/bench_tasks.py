@@ -6,7 +6,7 @@ import string
 import time
 from typing import Any
 
-__all__ = ["IoBoundTask", "CpuBoundTask", "DatasetFactory"]
+__all__ = ["CpuBoundTask", "DatasetFactory", "IoBoundTask"]
 
 
 class IoBoundTask:
@@ -89,28 +89,26 @@ class DatasetFactory:
         if payload_repeat <= 0:
             raise ValueError("payload_repeat 必须大于 0")
 
-        # 混合布尔/数字/中文字符，覆盖常见 JSON 序列化类型
+        # 混合布尔/数字/中文字符, 覆盖常见 JSON 序列化类型
         heavy_flags = [True, False, None, 123, 45.6, "中文"] * 5
-        # 固定序列的整数数组，便于下游快速断言
+        # 固定序列的整数数组, 便于下游快速断言
         base_values = list(range(40))
         # 构造冗长字符串以放大解析压力
         payload_seed = "Espeon-☯-payload-" + "0123456789" * 5
         payload = payload_seed * payload_repeat
 
-        dataset: list[dict[str, Any]] = []
-        for idx in range(n_objects):
-            dataset.append(
-                {
-                    "id": idx,
-                    "name": f"Espeon-{idx}",
-                    "payload": payload[idx % len(payload):] + payload[: idx % len(payload)],
-                    "flags": heavy_flags[idx % len(heavy_flags):]
-                    + heavy_flags[: idx % len(heavy_flags)],
-                    "nested": {
-                        "values": base_values,
-                        "metrics": [round(j * 0.1234, 5) for j in range(50)],
-                        "tags": [f"tag-{idx % 10}-{j}" for j in range(10)],
-                    },
-                }
-            )
-        return dataset
+        return [
+            {
+                "id": idx,
+                "name": f"Espeon-{idx}",
+                "payload": payload[idx % len(payload) :] + payload[: idx % len(payload)],
+                "flags": heavy_flags[idx % len(heavy_flags) :]
+                + heavy_flags[: idx % len(heavy_flags)],
+                "nested": {
+                    "values": base_values,
+                    "metrics": [round(j * 0.1234, 5) for j in range(50)],
+                    "tags": [f"tag-{idx % 10}-{j}" for j in range(10)],
+                },
+            }
+            for idx in range(n_objects)
+        ]

@@ -1,4 +1,5 @@
 """Benchmarks with heavy CPU work wrapped by additional async I/O phases."""
+
 from __future__ import annotations
 
 import pytest

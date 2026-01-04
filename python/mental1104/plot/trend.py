@@ -1,14 +1,23 @@
-import os
 import csv
-import matplotlib.pyplot as plt
+import os
 from collections.abc import Iterable
-from datetime import datetime
+from datetime import datetime, timezone
+
+import matplotlib.pyplot as plt
+
 from mental1104.timed import parse_time
+
+
+def _safe_float(value) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return 0.0
 
 
 class TrendPlotBase:
     """
-    基于 matplotlib 创建趋势图的基类，支持从 CSV 文件和可迭代对象中生成趋势图。
+    基于 matplotlib 创建趋势图的基类, 支持从 CSV 文件和可迭代对象中生成趋势图。
     """
 
     def __init__(self):
@@ -21,18 +30,15 @@ class TrendPlotBase:
 
         Args:
             input_file_path (str): 输入的 CSV 文件路径。
-            output_file_path (str, optional): 输出的图片文件路径，默认为 None。
+            output_file_path (str, optional): 输出的图片文件路径, 默认为 None。
         """
-        with open(input_file_path, mode='r', encoding='utf-8') as file:
+        with open(input_file_path, encoding="utf-8") as file:
             reader = csv.DictReader(file)
             data = {key: [] for key in reader.fieldnames}
 
             for row in reader:
                 for key, value in row.items():
-                    try:
-                        data[key].append(float(value))
-                    except ValueError:
-                        data[key].append(0.0)
+                    data[key].append(_safe_float(value))
 
         TrendPlotBase._plot_data(data, output_file_path)
 
@@ -42,8 +48,8 @@ class TrendPlotBase:
         从可迭代对象生成趋势图。
 
         Args:
-            data_iterable (iterable): 输入的可迭代对象，可以是列表、元组或字典。
-            output_file_path (str, optional): 输出的图片文件路径，默认为 None。
+            data_iterable (iterable): 输入的可迭代对象, 可以是列表、元组或字典。
+            output_file_path (str, optional): 输出的图片文件路径, 默认为 None。
         """
         if not isinstance(data_iterable, Iterable):
             raise TypeError("data_iterable 必须是可迭代对象。")
@@ -61,14 +67,12 @@ class TrendPlotBase:
 
         elif isinstance(data_iterable[0], (list, tuple)):
             max_len = len(data_iterable[0])
-            data = {f"Column{i+1}": [] for i in range(max_len)}
+            data = {f"Column{i + 1}": [] for i in range(max_len)}
 
             for row in data_iterable:
                 for i in range(max_len):
-                    try:
-                        data[f"Column{i+1}"].append(float(row[i]))
-                    except (IndexError, ValueError):
-                        data[f"Column{i+1}"].append(0.0)
+                    cell = row[i] if i < len(row) else 0.0
+                    data[f"Column{i + 1}"].append(_safe_float(cell))
 
         else:
             raise TypeError("data_iterable 的元素必须是字典、列表或元组。")
@@ -85,15 +89,15 @@ class TrendPlotBase:
             output_file_path (str): 输出的图片文件路径。
         """
         if output_file_path is None:
-            timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+            timestamp = datetime.now(tz=timezone.utc).strftime("%Y%m%d%H%M%S")
             output_file_path = os.path.join("/tmp", f"trend_{timestamp}.png")
 
         elif os.path.isdir(output_file_path):
-            timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+            timestamp = datetime.now(tz=timezone.utc).strftime("%Y%m%d%H%M%S")
             output_file_path = os.path.join(output_file_path, f"trend_{timestamp}.png")
 
         elif os.path.exists(output_file_path):
-            print(f"文件已存在，未覆盖: {output_file_path}")
+            print(f"文件已存在, 未覆盖: {output_file_path}")
             return
 
         elif not os.path.exists(os.path.dirname(output_file_path)):
@@ -130,26 +134,23 @@ class TimeBasedTrendPlot(TrendPlotBase):
 
         Args:
             input_file_path (str): 输入的 CSV 文件路径。
-            output_file_path (str, optional): 输出的图片文件路径，默认为 None。
+            output_file_path (str, optional): 输出的图片文件路径, 默认为 None。
         """
-        with open(input_file_path, mode='r', encoding='utf-8') as file:
+        with open(input_file_path, encoding="utf-8") as file:
             reader = csv.DictReader(file)
 
-            if 'time' not in reader.fieldnames:
+            if "time" not in reader.fieldnames:
                 raise KeyError("CSV 文件中必须包含 'time' 列。")
 
-            data = {key: [] for key in reader.fieldnames if key != 'time'}
+            data = {key: [] for key in reader.fieldnames if key != "time"}
             time_values = []
 
             for row in reader:
-                time_str = row.pop('time')
+                time_str = row.pop("time")
                 time_values.append(parse_time(time_str))
 
                 for key, value in row.items():
-                    try:
-                        data[key].append(float(value))
-                    except ValueError:
-                        data[key].append(0.0)
+                    data[key].append(_safe_float(value))
 
         TimeBasedTrendPlot._plot_data_with_time(data, time_values, output_file_path)
 
@@ -159,8 +160,8 @@ class TimeBasedTrendPlot(TrendPlotBase):
         从可迭代对象生成基于时间轴的趋势图。
 
         Args:
-            data_iterable (iterable): 输入的可迭代对象，可以是字典的队列或列表。
-            output_file_path (str, optional): 输出的图片文件路径，默认为 None。
+            data_iterable (iterable): 输入的可迭代对象, 可以是字典的队列或列表。
+            output_file_path (str, optional): 输出的图片文件路径, 默认为 None。
         """
         if not isinstance(data_iterable, Iterable):
             raise TypeError("data_iterable 必须是可迭代对象。")
@@ -177,7 +178,7 @@ class TimeBasedTrendPlot(TrendPlotBase):
                 continue  # 跳过第一个元素
 
             if not isinstance(row, dict) or "time" not in row:
-                raise KeyError(f"第 {i+1} 个元素缺少 'time' 键。")
+                raise KeyError(f"第 {i + 1} 个元素缺少 'time' 键。")
 
         # 提取时间和其他数据
         data = {}
@@ -190,10 +191,7 @@ class TimeBasedTrendPlot(TrendPlotBase):
             for key, value in row.items():
                 if key not in data:
                     data[key] = []
-                try:
-                    data[key].append(float(value))
-                except ValueError:
-                    data[key].append(0.0)
+                data[key].append(_safe_float(value))
 
         TimeBasedTrendPlot._plot_data_with_time(data, time_values, output_file_path)
 
@@ -208,15 +206,15 @@ class TimeBasedTrendPlot(TrendPlotBase):
             output_file_path (str): 输出的图片文件路径。
         """
         if output_file_path is None:
-            timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+            timestamp = datetime.now(tz=timezone.utc).strftime("%Y%m%d%H%M%S")
             output_file_path = os.path.join("/tmp", f"trend_{timestamp}.png")
 
         elif os.path.isdir(output_file_path):
-            timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+            timestamp = datetime.now(tz=timezone.utc).strftime("%Y%m%d%H%M%S")
             output_file_path = os.path.join(output_file_path, f"trend_{timestamp}.png")
 
         elif os.path.exists(output_file_path):
-            print(f"文件已存在，未覆盖: {output_file_path}")
+            print(f"文件已存在, 未覆盖: {output_file_path}")
             return
 
         elif not os.path.exists(os.path.dirname(output_file_path)):

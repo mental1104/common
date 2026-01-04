@@ -26,7 +26,7 @@ cargo -V
 
 # 4) 重新测试
 cd ~/code/common
-make test-rust
+./dev test rust
 ```
 
 > 如果你“现在**只想先跑通测试**，不跑基准”，临时方案（不升级编译器）：
@@ -45,7 +45,7 @@ make test-rust
 >
 >   ```bash
 >   cargo clean
->   make test-rust
+>   ./dev test rust
 >   ```
 >
 > 之后再升级到 rust 1.80+，把上面两段恢复即可。

@@ -1,24 +1,23 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 
-import os
+import concurrent.futures
 import os
 import random
 import time
+
 import pytest
-import concurrent.futures
 
 from mental1104.connector.redis_client import RedisConnection
 from mental1104.connector.redis_client.redis_bloom_kv import RedisBloom
 
-
 PREFIX = "test:bloom:kv"
 FILTER_KEY = "test:bf:kv"
-BLOOM_ERROR_RATE = float(os.getenv("BLOOM_BENCH_ERROR_RATE", "1e-6"))  # 低误判率，便于观察大规模 miss 的过滤效果
+BLOOM_ERROR_RATE = float(
+    os.getenv("BLOOM_BENCH_ERROR_RATE", "1e-6")
+)  # 低误判率,便于观察大规模 miss 的过滤效果
 BLOOM_CAPACITY = int(os.getenv("BLOOM_BENCH_CAPACITY", "1000000"))
 BATCH_SIZE = int(os.getenv("BLOOM_BENCH_BATCH_SIZE", "500"))
 WORKERS = int(os.getenv("BLOOM_BENCH_WORKERS", "20"))
-BATCH_SIZE = int(os.getenv("BLOOM_BENCH_BATCH_SIZE", "500"))
 
 
 def _clear_prefix(client, prefix: str) -> None:
@@ -66,7 +65,7 @@ def _benchmark_bloom(client, bloom: RedisBloom, workload):
 def _benchmark_pipeline_plain(client, workload, batch_size: int):
     start = time.perf_counter()
     for i in range(0, len(workload), batch_size):
-        batch = workload[i: i + batch_size]
+        batch = workload[i : i + batch_size]
         pipe = client.pipeline()
         for key in batch:
             pipe.get(key)
@@ -78,7 +77,7 @@ def _benchmark_pipeline_bloom(client, bloom: RedisBloom, workload, batch_size: i
     skipped = 0
     start = time.perf_counter()
     for i in range(0, len(workload), batch_size):
-        batch = workload[i: i + batch_size]
+        batch = workload[i : i + batch_size]
         # 1) pipeline BF.EXISTS
         pipe = client.pipeline()
         for key in batch:
@@ -101,7 +100,7 @@ def _benchmark_pipeline_bloom(client, bloom: RedisBloom, workload, batch_size: i
 def _chunk_work(workload, chunks: int):
     size = (len(workload) + chunks - 1) // chunks
     for i in range(0, len(workload), size):
-        yield workload[i: i + size]
+        yield workload[i : i + size]
 
 
 def _benchmark_concurrent_plain(client, workload, workers: int):
@@ -197,7 +196,9 @@ def bloom_bench_data(redis_client):
     """
     existing_count = int(os.getenv("BLOOM_BENCH_EXISTING_COUNT", "100000"))
     query_count = int(os.getenv("BLOOM_BENCH_QUERY_COUNT", "500000"))
-    miss_ratio = float(os.getenv("BLOOM_BENCH_MISS_RATIO", "0.999"))  # 更偏向 miss，放大 Bloom 的作用
+    miss_ratio = float(
+        os.getenv("BLOOM_BENCH_MISS_RATIO", "0.999")
+    )  # 更偏向 miss,放大 Bloom 的作用
     seed = int(os.getenv("BLOOM_BENCH_SEED", "42"))
     random.seed(seed)
 
@@ -229,7 +230,7 @@ def bloom_bench_data(redis_client):
 
 class TestRedisBloomPerformance:
     """
-    纯性能基准：对比 miss-heavy 场景下裸 GET 与 Bloom 过滤的表现。
+    纯性能基准:对比 miss-heavy 场景下裸 GET 与 Bloom 过滤的表现。
     """
 
     @pytest.mark.benchmark(group="redis_bloom_miss")
@@ -303,7 +304,7 @@ class TestRedisBloomPerformance:
 
 class TestRedisBloomPipeline:
     """
-    Pipeline 场景：将 BF.EXISTS / GET 批量发送，观察往返减少后的效果。
+    Pipeline 场景:将 BF.EXISTS / GET 批量发送,观察往返减少后的效果。
     """
 
     @pytest.mark.benchmark(group="redis_bloom_pipeline")
@@ -382,7 +383,7 @@ class TestRedisBloomPipeline:
 
 class TestRedisBloomConcurrent:
     """
-    多线程并发场景：模拟高并发访问，观察 Bloom 对 GET 数量/吞吐的影响。
+    多线程并发场景:模拟高并发访问,观察 Bloom 对 GET 数量/吞吐的影响。
     """
 
     @pytest.mark.benchmark(group="redis_bloom_concurrent")

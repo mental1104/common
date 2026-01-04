@@ -11,7 +11,7 @@ def random_pick(data):
 def _(data: list):
     """
     从列表中随机选择一个元素。
-    如果列表为空，则抛出 ValueError。
+    如果列表为空, 则抛出 ValueError。
     Args:
         data (list): 要选择的列表。
     Returns:
@@ -28,7 +28,7 @@ def _(data: list):
 def _(data: dict):
     """
     从字典中随机选择一个键值对。
-    如果字典为空，则抛出 ValueError。
+    如果字典为空, 则抛出 ValueError。
     Args:
         data (dict): 要选择的字典。
     Returns:

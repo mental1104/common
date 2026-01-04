@@ -7,6 +7,8 @@
 #include <string>
 #include <vector>
 
+#include "mental1104/meta/compiler_support.h"
+
 // 通用模板版布隆过滤器
 template <typename Key, typename Hash = std::hash<Key>> class BasicBloomFilter {
 public:
@@ -85,8 +87,25 @@ public:
 using BloomFilter = BasicBloomFilter<std::string, std::hash<std::string>>;
 
 #include <mutex>
-#include <shared_mutex> // C++17
+#if M1104_HAS_CXX14 && M1104_HAS_INCLUDE(<shared_mutex>)
+#include <shared_mutex>
+#endif
 #include <utility>
+
+namespace mental1104 {
+namespace detail {
+#if M1104_HAS_CXX17 && M1104_HAS_INCLUDE(<shared_mutex>)
+using shared_mutex_t = std::shared_mutex;
+template <typename Mutex> using shared_lock_t = std::shared_lock<Mutex>;
+#elif M1104_HAS_CXX14 && M1104_HAS_INCLUDE(<shared_mutex>)
+using shared_mutex_t = std::shared_timed_mutex;
+template <typename Mutex> using shared_lock_t = std::shared_lock<Mutex>;
+#else
+using shared_mutex_t = std::mutex;
+template <typename Mutex> using shared_lock_t = std::unique_lock<Mutex>;
+#endif
+} // namespace detail
+} // namespace mental1104
 
 // 粗粒度“大锁”版本：一把 shared_mutex 包整个 BloomFilter
 // 1. 读（contains）用 shared_lock，可并发
@@ -110,7 +129,7 @@ public:
   ThreadSafeBloomFilter &operator=(const ThreadSafeBloomFilter &) = delete;
 
   ThreadSafeBloomFilter(ThreadSafeBloomFilter &&other) noexcept {
-    std::unique_lock lk_other(other.mutex_);
+    std::unique_lock<mental1104::detail::shared_mutex_t> lk_other(other.mutex_);
     bf_ = std::move(other.bf_);
   }
 
@@ -120,55 +139,66 @@ public:
     // 避免死锁：按地址排序上锁
     ThreadSafeBloomFilter *first = this < &other ? this : &other;
     ThreadSafeBloomFilter *second = this < &other ? &other : this;
-    std::unique_lock lk1(first->mutex_);
-    std::unique_lock lk2(second->mutex_);
+    std::unique_lock<mental1104::detail::shared_mutex_t> lk1(first->mutex_);
+    std::unique_lock<mental1104::detail::shared_mutex_t> lk2(second->mutex_);
     bf_ = std::move(other.bf_);
     return *this;
   }
 
   // 插入：独占锁
   void insert(const key_type &key) {
-    std::unique_lock lk(mutex_);
+    std::unique_lock<mental1104::detail::shared_mutex_t> lk(mutex_);
     bf_.insert(key);
   }
 
   // 查询：共享锁
   bool contains(const key_type &key) const {
-    std::shared_lock lk(mutex_);
+    mental1104::detail::shared_lock_t<mental1104::detail::shared_mutex_t> lk(
+        mutex_);
     return bf_.contains(key);
   }
 
   // ==== 监控/调试接口：加读锁后转调底层 ====
 
   std::size_t getM() const {
-    std::shared_lock lk(mutex_);
+    mental1104::detail::shared_lock_t<mental1104::detail::shared_mutex_t> lk(
+        mutex_);
     return bf_.getM();
   }
 
   std::size_t getK() const {
-    std::shared_lock lk(mutex_);
+    mental1104::detail::shared_lock_t<mental1104::detail::shared_mutex_t> lk(
+        mutex_);
     return bf_.getK();
   }
 
   const std::vector<bool> getBitArraySnapshot() const {
-    std::shared_lock lk(mutex_);
+    mental1104::detail::shared_lock_t<mental1104::detail::shared_mutex_t> lk(
+        mutex_);
     // 返回一份拷贝，避免把内部引用暴露出去引起 data race
     return bf_.getBitArray();
   }
 
   // 如果你确实需要访问底层对象，可以提供一个带锁执行的 helper
-  template <typename Fn> auto with_lock(Fn &&fn) {
-    std::unique_lock lk(mutex_);
-    return fn(bf_);
+  template <typename Fn>
+  auto with_lock(Fn &&fn)
+      -> decltype(std::forward<Fn>(fn)(
+          std::declval<underlying_type &>())) {
+    std::unique_lock<mental1104::detail::shared_mutex_t> lk(mutex_);
+    return std::forward<Fn>(fn)(bf_);
   }
 
-  template <typename Fn> auto with_shared_lock(Fn &&fn) const {
-    std::shared_lock lk(mutex_);
-    return fn(bf_);
+  template <typename Fn>
+  auto with_shared_lock(Fn &&fn) const
+      -> decltype(std::forward<Fn>(fn)(
+          std::declval<const underlying_type &>())) {
+    mental1104::detail::shared_lock_t<mental1104::detail::shared_mutex_t> lk(
+        mutex_);
+    return std::forward<Fn>(fn)(bf_);
   }
 
 private:
-  mutable std::shared_mutex mutex_;
+  mutable mental1104::detail::shared_mutex_t mutex_;
   underlying_type bf_;
 };
 

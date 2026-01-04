@@ -4,6 +4,9 @@ from pathlib import Path
 
 # Ensure repo root is importable even if invoked from a different working dir.
 ROOT = Path(__file__).resolve().parent
+DEVOPS_DIR = ROOT / "devops"
+if str(DEVOPS_DIR) not in sys.path:
+    sys.path.insert(0, str(DEVOPS_DIR))
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 from devtool.cli import main

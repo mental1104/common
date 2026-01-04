@@ -1,20 +1,21 @@
-# -*- coding: utf-8 -*-
-"""基准：比较三种分发方式的性能
+"""基准:比较三种分发方式的性能
 - 手写 if/elif isinstance 链
 - functools.singledispatch
-- 自定义 dispatch_for（多参数模式）
+- 自定义 dispatch_for(多参数模式)
 
-数据集包含 (int, int)、(str, str)、(bytes, str) 三类输入，便于观察多参数分发路径。
+数据集包含 (int, int)、(str, str)、(bytes, str) 三类输入,便于观察多参数分发路径。
 """
+
 from __future__ import annotations
 
-import pytest
 from functools import singledispatch
+
+import pytest
 
 from mental1104 import dispatch_for
 
 # -------------------- 基准参数 --------------------
-DATASET_CHUNK = 5_000  # 每类入参个数，最终三倍大小
+DATASET_CHUNK = 5_000  # 每类入参个数,最终三倍大小
 PEDANTIC_ROUNDS = 6
 PEDANTIC_ITERATIONS = 1
 
@@ -25,12 +26,12 @@ def _build_dataset(n: int) -> tuple[tuple[object, object], ...]:
         items.append((i, i + 1))
         text = f"s{i}"
         items.append((text, f"{text}-tail"))
-        items.append((f"bytes{i}".encode("utf-8"), text))
+        items.append((f"bytes{i}".encode(), text))
     return tuple(items)
 
 
 def _consume(fn, pairs: tuple[tuple[object, object], ...]) -> int:
-    """轻量校验：混合 hash，避免被优化掉。"""
+    """轻量校验:混合 hash,避免被优化掉。"""
     checksum = 0
     for a, b in pairs:
         checksum ^= hash(fn(a, b))
@@ -51,7 +52,7 @@ def _run_benchmark(benchmark, fn, pairs, expected_checksum: int):
     assert result == expected_checksum
 
 
-# -------------------- 方案 1：if / isinstance 链 --------------------
+# -------------------- 方案 1:if / isinstance 链 --------------------
 def _if_dispatch(a, b):
     if isinstance(a, int) and isinstance(b, int):
         return a + b
@@ -62,7 +63,7 @@ def _if_dispatch(a, b):
     raise TypeError(f"Unsupported types: {type(a)}, {type(b)}")
 
 
-# -------------------- 方案 2：singledispatch --------------------
+# -------------------- 方案 2:singledispatch --------------------
 @singledispatch
 def singledispatch_op(a, b):
     raise TypeError(f"Unsupported types: {type(a)}, {type(b)}")
@@ -90,7 +91,7 @@ def _(a: bytes, b):
     return f"{text}:{b}"
 
 
-# -------------------- 方案 3：dispatch_for（多参数模式） --------------------
+# -------------------- 方案 3:dispatch_for(多参数模式) --------------------
 def _dispatch_for_entry(*args):
     raise NotImplementedError("Implementation is provided by Impl.")
 
@@ -114,7 +115,7 @@ class _DispatchForImpl:
         raise TypeError(f"Unsupported types: {[type(a) for a in args]}")
 
 
-# class 装饰器会替换模块级符号，取回分发入口
+# class 装饰器会替换模块级符号,取回分发入口
 _dispatch_for_entry = _dispatch_for_entry
 
 
@@ -124,21 +125,21 @@ def baseline_checksum(mixed_args) -> int:
 
 
 def test_if_chain_baseline(benchmark, mixed_args, baseline_checksum):
-    """基准 A：手写 if/elif 链。"""
+    """基准 A:手写 if/elif 链。"""
     _run_benchmark(benchmark, _if_dispatch, mixed_args, baseline_checksum)
 
 
 def test_singledispatch(benchmark, mixed_args, baseline_checksum):
-    """基准 B：functools.singledispatch。"""
+    """基准 B:functools.singledispatch。"""
     _run_benchmark(benchmark, singledispatch_op, mixed_args, baseline_checksum)
 
 
 def test_dispatch_for(benchmark, mixed_args, baseline_checksum):
-    """基准 C：自定义 dispatch_for，多参数精确匹配。"""
+    """基准 C:自定义 dispatch_for,多参数精确匹配。"""
     _run_benchmark(benchmark, _dispatch_for_entry, mixed_args, baseline_checksum)
 
 
-# -------------------- 较重分支逻辑：更贴近日常代码 --------------------
+# -------------------- 较重分支逻辑:更贴近日常代码 --------------------
 def _logic_int_int_rich(a: int, b: int) -> int:
     arr = [a, b, a + b]
     arr.extend(range(5))
@@ -230,15 +231,15 @@ def baseline_checksum_rich(mixed_args) -> int:
 
 
 def test_if_chain_richer_logic(benchmark, mixed_args, baseline_checksum_rich):
-    """基准 A2：手写 if/elif 链，分支内包含列表/字典等常见操作。"""
+    """基准 A2:手写 if/elif 链,分支内包含列表/字典等常见操作。"""
     _run_benchmark(benchmark, _if_dispatch_rich, mixed_args, baseline_checksum_rich)
 
 
 def test_singledispatch_richer_logic(benchmark, mixed_args, baseline_checksum_rich):
-    """基准 B2：singledispatch，分支内包含常见操作。"""
+    """基准 B2:singledispatch,分支内包含常见操作。"""
     _run_benchmark(benchmark, singledispatch_op_rich, mixed_args, baseline_checksum_rich)
 
 
 def test_dispatch_for_richer_logic(benchmark, mixed_args, baseline_checksum_rich):
-    """基准 C2：dispatch_for，分支内包含常见操作。"""
+    """基准 C2:dispatch_for,分支内包含常见操作。"""
     _run_benchmark(benchmark, _dispatch_for_entry_rich, mixed_args, baseline_checksum_rich)

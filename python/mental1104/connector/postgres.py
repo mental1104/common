@@ -6,9 +6,20 @@ from contextvars import ContextVar
 from functools import wraps
 from types import FunctionType
 
-import psycopg2
-from psycopg2 import DatabaseError, OperationalError
-from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
+try:
+    import psycopg2
+    from psycopg2 import DatabaseError, OperationalError
+    from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
+except ImportError:
+    psycopg2 = None  # type: ignore[assignment]
+
+    class DatabaseError(Exception):
+        pass
+
+    class OperationalError(Exception):
+        pass
+
+    ISOLATION_LEVEL_AUTOCOMMIT = None
 from sqlalchemy import create_engine, inspect as sa_inspect
 from sqlalchemy.exc import TimeoutError as SQLAlchemyTimeoutError
 from sqlalchemy.orm import declarative_base, sessionmaker
@@ -25,21 +36,26 @@ _SESSION_TOKEN_KEY = "_session_token"
 _CREATE_TABLES_ON_STARTUP = True
 
 
+def _require_psycopg2() -> None:
+    if psycopg2 is None:
+        raise RuntimeError("psycopg2 is required for PostgreSQL support; install psycopg2-binary.")
+
+
 def get_db_config():
     """从环境变量获取PostgreSQL配置信息"""
-    required_env_vars = ['PGUSER', 'PGPASSWORD', 'PGHOST', 'PGPORT', 'PGDATABASE']
+    required_env_vars = ["PGUSER", "PGPASSWORD", "PGHOST", "PGPORT", "PGDATABASE"]
     missing_vars = [var for var in required_env_vars if var not in os.environ]
 
     if missing_vars:
         raise RuntimeError(f"缺少以下环境变量: {', '.join(missing_vars)}")
 
     return {
-        "username": os.getenv('PGUSER'),
-        "password": os.getenv('PGPASSWORD'),
-        "host": os.getenv('PGHOST'),
-        "port": os.getenv('PGPORT'),
-        "database": os.getenv('PGDATABASE'),
-        "application_name": os.getenv('PGAPPNAME', 'mental1104-connector'),
+        "username": os.getenv("PGUSER"),
+        "password": os.getenv("PGPASSWORD"),
+        "host": os.getenv("PGHOST"),
+        "port": os.getenv("PGPORT"),
+        "database": os.getenv("PGDATABASE"),
+        "application_name": os.getenv("PGAPPNAME", "mental1104-connector"),
     }
 
 
@@ -59,23 +75,26 @@ def get_db_url(config=None):
 
 
 def ensure_database_exists(config):
-    """确保数据库存在，不存在时尝试创建，失败则记录日志"""
+    """确保数据库存在, 不存在时尝试创建, 失败则记录日志"""
+    _require_psycopg2()
     try:
         conn = psycopg2.connect(
             dbname="postgres",  # 连接到默认的 postgres 数据库
-            user=config['username'],
-            password=config['password'],
-            host=config['host'],
-            port=config['port']
+            user=config["username"],
+            password=config["password"],
+            host=config["host"],
+            port=config["port"],
         )
         conn.set_isolation_level(ISOLATION_LEVEL_AUTOCOMMIT)
         cursor = conn.cursor()
 
-        cursor.execute("SELECT 1 FROM pg_catalog.pg_database WHERE datname = %s", (config['database'],))
+        cursor.execute(
+            "SELECT 1 FROM pg_catalog.pg_database WHERE datname = %s", (config["database"],)
+        )
         exists = cursor.fetchone()
 
         if not exists:
-            logger.info(f"数据库 {config['database']} 不存在，尝试创建...")
+            logger.info(f"数据库 {config['database']} 不存在, 尝试创建...")
             try:
                 cursor.execute(f"CREATE DATABASE {config['database']}")
                 logger.info(f"数据库 {config['database']} 创建完成")
@@ -87,20 +106,20 @@ def ensure_database_exists(config):
         cursor.close()
         conn.close()
     except OperationalError as e:
-        logger.error(f"连接到默认数据库失败，无法检查或创建目标数据库：{e}")
+        logger.error(f"连接到默认数据库失败, 无法检查或创建目标数据库：{e}")
 
 
 def ensure_tables_exist(engine):
     """检查并按需创建数据库表"""
     inspector = sa_inspect(engine)
     existing_tables = inspector.get_table_names()
-    for table in Base.metadata.tables.keys():
+    for table in Base.metadata.tables:
         if table not in existing_tables:
-            logger.info(f"表 {table} 不存在，正在创建...")
+            logger.info(f"表 {table} 不存在, 正在创建...")
             Base.metadata.create_all(bind=engine)
             logger.info(f"表 {table} 创建完成")
         else:
-            logger.info(f"表 {table} 已存在，跳过创建")
+            logger.info(f"表 {table} 已存在, 跳过创建")
     return True
 
 
@@ -113,17 +132,18 @@ def init_database(create_table, func, engine):
 
 def startup():
     """初始化数据库连接并确保表和数据库存在"""
+    _require_psycopg2()
     config = get_db_config()
     ensure_database_exists(config)
 
     sqlalchemy_url = get_db_url(config)
     logger.info(f"数据库URL: {sqlalchemy_url}")
 
-    engine_kwargs = dict(
-        pool_pre_ping=True,
-        pool_size=20,
-        pool_recycle=3600,
-    )
+    engine_kwargs = {
+        "pool_pre_ping": True,
+        "pool_size": 20,
+        "pool_recycle": 3600,
+    }
     app_name = config.get("application_name")
     if app_name:
         engine_kwargs["connect_args"] = {"application_name": app_name}
@@ -143,7 +163,7 @@ def startup():
 
 def setup(create_tables: bool = False):
     """
-    兼容 PokemonBattleInference 的 setup 行为，允许临时控制建表。
+    兼容 PokemonBattleInference 的 setup 行为, 允许临时控制建表。
     """
     global _CREATE_TABLES_ON_STARTUP
     previous = _CREATE_TABLES_ON_STARTUP
@@ -157,7 +177,7 @@ def setup(create_tables: bool = False):
 @contextmanager
 def open_session():
     """
-    数据库会话的上下文管理器，向调用栈提供共享Session。
+    数据库会话的上下文管理器, 向调用栈提供共享Session。
     """
     session = _Session()
     token = _session_ctx.set(session)
@@ -176,7 +196,7 @@ def open_session():
 
 def get_session():
     """
-    获取当前上下文中的会话，若不存在则懒加载并缓存。
+    获取当前上下文中的会话, 若不存在则懒加载并缓存。
     """
     session = _session_ctx.get()
     if session is None:
@@ -188,7 +208,7 @@ def get_session():
 
 def close_session():
     """
-    关闭 get_session() 创建的会话，不影响 open_session() 管理的会话。
+    关闭 get_session() 创建的会话, 不影响 open_session() 管理的会话。
     """
     session = _session_ctx.get()
     if session is None:
@@ -233,7 +253,7 @@ def _needs_session_injection(func):
 
 def _wrap_session_callable(func):
     """
-    为目标函数应用 with_session 装饰器，并打标避免重复包装。
+    为目标函数应用 with_session 装饰器, 并打标避免重复包装。
     """
     if getattr(func, _SESSION_WRAP_FLAG, False):
         return func
@@ -290,12 +310,13 @@ class SessionAwareMixin:
 def db_connection(db_type, db_params):
     def decorator(func):
         @wraps(func)
-        def wrapper(*args, **kwargs):
+        def wrapper(*_args, **kwargs):
+            _require_psycopg2()
             conn = None
             cursor = None
             try:
                 # 连接数据库
-                if db_type == 'postgresql':
+                if db_type == "postgresql":
                     conn = psycopg2.connect(**db_params)
                     cursor = conn.cursor()
                 else:
@@ -306,13 +327,13 @@ def db_connection(db_type, db_params):
 
                 while True:
                     # 执行传入的 SQL 语句
-                    sql, params = kwargs.get('sql'), kwargs.get('params', {})
+                    sql, params = kwargs.get("sql"), kwargs.get("params", {})
                     if not sql:
                         raise ValueError("SQL query must be provided.")
 
                     # 处理 SQL 语句的 offset 和 limit
                     params.update({"offset": offset, "limit": limit})
-                    if db_type == 'postgresql':
+                    if db_type == "postgresql":
                         cursor.execute(sql, params)
                         result = cursor.fetchall()
 
@@ -326,15 +347,14 @@ def db_connection(db_type, db_params):
                     offset += limit
 
             except Exception as e:
-                if conn:
-                    if db_type == 'postgresql':
-                        conn.rollback()
-                print(f"错误: {str(e)}")
+                if conn and db_type == "postgresql":
+                    conn.rollback()
+                print(f"错误: {e!s}")
             finally:
                 # 关闭连接
                 if cursor:
                     cursor.close()
-                if conn and db_type == 'postgresql':
+                if conn and db_type == "postgresql":
                     conn.close()
 
         return wrapper

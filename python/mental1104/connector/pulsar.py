@@ -1,12 +1,17 @@
-import os
-import pulsar
+from __future__ import annotations
+
+import functools
 import logging
+import os
+from enum import Enum
+from typing import Optional
+
+import pulsar
 import requests
 from pulsar import ConsumerType
-from pulsar.schema import AvroSchema, BytesSchema
-from enum import Enum
+from pulsar.schema import AvroSchema
+
 from mental1104 import check_required_env_vars
-import functools
 
 
 class PulsarEnvironment(str, Enum):
@@ -19,38 +24,38 @@ class PulsarEnvironment(str, Enum):
 class PulsarConnector:
     @staticmethod
     def make_client():
-        check_required_env_vars([
-            PulsarEnvironment.PULSAR_HOST.value,
-            PulsarEnvironment.PULSAR_BROKER_PORT.value
-        ])
+        check_required_env_vars(
+            [PulsarEnvironment.PULSAR_HOST.value, PulsarEnvironment.PULSAR_BROKER_PORT.value]
+        )
 
         return pulsar.Client(
             PulsarConnector.get_broker_url(),
             authentication=pulsar.AuthenticationToken(
-                os.environ[PulsarEnvironment.PULSAR_TOKEN.value]) if PulsarEnvironment.PULSAR_TOKEN.value in os.environ else None
+                os.environ[PulsarEnvironment.PULSAR_TOKEN.value]
+            )
+            if PulsarEnvironment.PULSAR_TOKEN.value in os.environ
+            else None,
         )
 
     @staticmethod
     def get_broker_url():
-        check_required_env_vars([
-            PulsarEnvironment.PULSAR_HOST.value,
-            PulsarEnvironment.PULSAR_BROKER_PORT.value
-        ])
+        check_required_env_vars(
+            [PulsarEnvironment.PULSAR_HOST.value, PulsarEnvironment.PULSAR_BROKER_PORT.value]
+        )
         return f"pulsar://{os.environ[PulsarEnvironment.PULSAR_HOST.value]}:{os.environ[PulsarEnvironment.PULSAR_BROKER_PORT.value]}"
 
     @staticmethod
     def get_admin_url():
-        check_required_env_vars([
-            PulsarEnvironment.PULSAR_HOST.value,
-            PulsarEnvironment.PULSAR_ADMIN_PORT.value
-        ])
+        check_required_env_vars(
+            [PulsarEnvironment.PULSAR_HOST.value, PulsarEnvironment.PULSAR_ADMIN_PORT.value]
+        )
         return f"http://{os.environ[PulsarEnvironment.PULSAR_HOST.value]}:{os.environ[PulsarEnvironment.PULSAR_ADMIN_PORT.value]}"
 
     @staticmethod
     def get_header(content_type=""):
         """
         构建认证头
-        :param content_type: 请求的内容类型，默认为 application/json
+        :param content_type: 请求的内容类型, 默认为 application/json
         """
         headers = {}
         if PulsarEnvironment.PULSAR_TOKEN.value in os.environ:
@@ -72,14 +77,14 @@ class Consumer:
         client=None,
         subscription_type=ConsumerType.Shared,
         message_listener=None,
-        **kwargs
+        **kwargs,
     ):
         """
-        :kwargs 用于传入pulsar consumer的各种可选的参数配置，如
+        :kwargs 用于传入pulsar consumer的各种可选的参数配置, 如
         negative_ack_redelivery_delay_ms 否认重传时间间隔
-        receiver_queue_size 消费者消息队列大小，默认值为1000
-        unacked_messages_timeout_ms 消息超时否认时间，默认设置为240s，单位ms
-        更多的可选参数可参考pulsar的api文档 
+        receiver_queue_size 消费者消息队列大小, 默认值为1000
+        unacked_messages_timeout_ms 消息超时否认时间, 默认设置为240s, 单位ms
+        更多的可选参数可参考pulsar的api文档
         """
         self.__is_close = True
         if not client:
@@ -87,24 +92,19 @@ class Consumer:
             client = self.__client
             self.__is_close = False
 
-        if False:
-            real_schema = BytesSchema()
-        else:
-            real_schema = AvroSchema(None, schema)
+        real_schema = AvroSchema(None, schema)
 
         # 指定租户、命名空间
-        self.__subscrifunc = functools.partial(client.subscribe,
-                                               'persistent://{tenant}/{namespace}/{topic}'.format(
-                                                   tenant=tenant,
-                                                   namespace=namespace,
-                                                   topic=topic
-                                               ),
-                                               subscription_name=subscription,
-                                               consumer_type=subscription_type,
-                                               message_listener=message_listener,
-                                               batch_index_ack_enabled=True,
-                                               schema=real_schema,
-                                               **kwargs)
+        self.__subscrifunc = functools.partial(
+            client.subscribe,
+            f"persistent://{tenant}/{namespace}/{topic}",
+            subscription_name=subscription,
+            consumer_type=subscription_type,
+            message_listener=message_listener,
+            batch_index_ack_enabled=True,
+            schema=real_schema,
+            **kwargs,
+        )
 
         self.__consumer = self.__subscrifunc()
 
@@ -120,17 +120,15 @@ class Consumer:
         self.__consumer.close()
         self.close()
 
-    def receive(self, timeout_millis: int = None):
-        # 如果指定了时间，那么在指定时间内，没有接收到消息回抛错，单位为毫秒
-        record = self.__consumer.receive(timeout_millis=timeout_millis)
+    def receive(self, timeout_millis: Optional[int] = None):
+        # 如果指定了时间, 那么在指定时间内, 没有接收到消息回抛错, 单位为毫秒
+        return self.__consumer.receive(timeout_millis=timeout_millis)
 
-        return record
-
-    # 消费者需要确认消息处理成功，以便Pulsar broker删除消息。
+    # 消费者需要确认消息处理成功, 以便Pulsar broker删除消息。
     def acknowledge(self, record):
         self.__consumer.acknowledge(record)
 
-    # 共享消息的情况下，如果不是自己消费的消息，将消息跳过，pulsar继续发给其他订阅者
+    # 共享消息的情况下, 如果不是自己消费的消息, 将消息跳过, pulsar继续发给其他订阅者
     def negative_acknowledge(self, record):
         self.__consumer.negative_acknowledge(record)
 
@@ -143,7 +141,7 @@ class Consumer:
 
     def unsubscribe(self):
         """
-        unsubscribe 删除当前consumer所属订阅的订阅，如果该订阅还存在其他消费者，那么会抛出异常，取消失败
+        unsubscribe 删除当前consumer所属订阅的订阅, 如果该订阅还存在其他消费者, 那么会抛出异常, 取消失败
         """
         try:
             if self.__consumer:
@@ -153,7 +151,7 @@ class Consumer:
 
     def resuscribe(self):
         """
-        resuscribe 重新以该订阅名订阅topic，首先会删除该订阅，然后再重新订阅，相当于从当前最新的消息开始消费
+        resuscribe 重新以该订阅名订阅topic, 首先会删除该订阅, 然后再重新订阅, 相当于从当前最新的消息开始消费
         """
         self.unsubscribe()
         if self.__consumer:
@@ -169,28 +167,21 @@ class Producer:
         topic: str,
         schema: dict,
         client=None,
-        batching_enabled=True
+        batching_enabled=True,
     ):
         self.__is_close = False  # 初始状态为未关闭
         if not client:
             self.__client = PulsarConnector.make_client()
             client = self.__client
 
-        if False:
-            real_schema = BytesSchema()
-        else:
-            real_schema = AvroSchema(None, schema)
+        real_schema = AvroSchema(None, schema)
 
         # 指定租户、命名空间
         self.__producer = client.create_producer(
-            topic='persistent://{tenant}/{namespace}/{topic}'.format(
-                tenant=tenant,
-                namespace=namespace,
-                topic=topic
-            ),
+            topic=f"persistent://{tenant}/{namespace}/{topic}",
             block_if_queue_full=True,
             batching_enabled=batching_enabled,
-            schema=real_schema
+            schema=real_schema,
         )
 
     def __del__(self):
@@ -205,14 +196,17 @@ class Producer:
     @classmethod
     def __default_callback(cls, message):
         """
-        default_callback pulsar 异步发送的默认回调函数，发送错误时打印相关日志，包括
+        default_callback pulsar 异步发送的默认回调函数, 发送错误时打印相关日志, 包括
         1. 发送的内容
         2. 发送错误的原因
         3. 发送的消息id
         """
+
         def callback(result, msg_id_obj):
             if result != pulsar.Result.Ok:
-                logging.warning(f"pulsar send msg fail, result:{result}, msg_id: {msg_id_obj}, message:{message}")
+                logging.warning(
+                    f"pulsar send msg fail, result:{result}, msg_id: {msg_id_obj}, message:{message}"
+                )
 
         return callback
 
@@ -224,10 +218,7 @@ class Producer:
     @classmethod
     def check_send_status(cls, result, msg_id_obj):
         if result != pulsar.Result.Ok:
-            logging.warning(
-                "pulsar send msg fail:{}, msg_id: {}"
-                .format(result, msg_id_obj)
-            )
+            logging.warning(f"pulsar send msg fail:{result}, msg_id: {msg_id_obj}")
             return False
         return True
 
@@ -235,8 +226,12 @@ class Producer:
     def check_send_status_exception(cls, result, msg_id_obj):
         if result == pulsar.Result.Ok:
             return
-        resend_error = [pulsar.Result.Timeout, pulsar.Result.NotConnected,
-                        pulsar.Result.AlreadyClosed, pulsar.Result.ConnectError]
+        resend_error = [
+            pulsar.Result.Timeout,
+            pulsar.Result.NotConnected,
+            pulsar.Result.AlreadyClosed,
+            pulsar.Result.ConnectError,
+        ]
         if result in resend_error:
             logging.error(f"pulsar send msg fail:{result}, msg_id: {msg_id_obj}")
         raise RuntimeError(f"pulsar send msg fail:{result}, msg_id: {msg_id_obj}")
@@ -249,27 +244,27 @@ class Producer:
         self.__producer.send_async(record, callback)
 
     def close(self):
-        if self.__is_close:  # 如果已经关闭，直接返回
+        if self.__is_close:  # 如果已经关闭, 直接返回
             return
 
         if self.__producer:
             self.__producer.close()  # 关闭生产者
-        if hasattr(self, '__client') and self.__client:
+        if hasattr(self, "__client") and self.__client:
             self.__client.close()  # 关闭客户端
         self.__is_close = True  # 更新为已关闭状态
 
 
 class PulsarAdminHelper:
-
     """
     新增类的函数接口
     """
+
     @staticmethod
     def ensure_tenant_namespace_topic(tenant, namespace=None, topic=None, partition=None):
         """
         确保租户、命名空间和主题按照顺序创建。
-        如果 partition 为 None，则创建非分区主题。
-        如果 partition 是一个整型且大于 0，则创建指定分区数的分区主题。
+        如果 partition 为 None, 则创建非分区主题。
+        如果 partition 是一个整型且大于 0, 则创建指定分区数的分区主题。
         """
         pulsar_admin_url = PulsarConnector.get_admin_url()
 
@@ -304,7 +299,9 @@ class PulsarAdminHelper:
             logging.info(f"Creating non-partitioned topic: {tenant}/{namespace}/{topic}")
             PulsarAdminHelper.create_topic(f"{tenant}/{namespace}/{topic}")
         elif isinstance(partition, int) and partition > 0:
-            logging.info(f"Creating partitioned topic: {tenant}/{namespace}/{topic} with {partition} partitions.")
+            logging.info(
+                f"Creating partitioned topic: {tenant}/{namespace}/{topic} with {partition} partitions."
+            )
             PulsarAdminHelper.create_partitioned_topic(f"{tenant}/{namespace}/{topic}", partition)
         else:
             raise ValueError("Invalid partition value. Must be None or a positive integer.")
@@ -314,12 +311,13 @@ class PulsarAdminHelper:
         """创建租户"""
         pulsar_admin_url = PulsarConnector.get_admin_url()
         url = f"{pulsar_admin_url}/admin/v2/tenants/{tenant}"
-        response = requests.put(url, json={
-            "allowedClusters": ["standalone"]
-        }, headers=PulsarConnector.get_header())
+        response = requests.put(
+            url, json={"allowedClusters": ["standalone"]}, headers=PulsarConnector.get_header()
+        )
         if response.status_code not in [200, 204, 409]:
             raise RuntimeError(
-                f"Failed to create tenant {tenant}: {response.status_code}: {response.status_code} {response.text}")
+                f"Failed to create tenant {tenant}: {response.status_code}: {response.status_code} {response.text}"
+            )
 
     @staticmethod
     def create_namespace(namespace):
@@ -328,7 +326,9 @@ class PulsarAdminHelper:
         url = f"{pulsar_admin_url}/admin/v2/namespaces/{namespace}"
         response = requests.put(url, headers=PulsarConnector.get_header())
         if response.status_code not in [200, 204, 409]:
-            raise RuntimeError(f"Failed to create namespace {namespace}: {response.status_code} {response.text}")
+            raise RuntimeError(
+                f"Failed to create namespace {namespace}: {response.status_code} {response.text}"
+            )
 
     @staticmethod
     def create_topic(topic):
@@ -337,12 +337,14 @@ class PulsarAdminHelper:
         url = f"{pulsar_admin_url}/admin/v2/persistent/{topic}"
         response = requests.put(url, headers=PulsarConnector.get_header())
         if response.status_code not in [200, 204, 409]:
-            raise RuntimeError(f"Failed to create topic {topic}: {response.status_code} {response.text}")
+            raise RuntimeError(
+                f"Failed to create topic {topic}: {response.status_code} {response.text}"
+            )
 
     @staticmethod
     def create_partitioned_topic(topic, partitions):
         """
-        创建分区主题。如果主题已存在，则保持幂等性，不报错。
+        创建分区主题。如果主题已存在, 则保持幂等性, 不报错。
 
         Args:
             topic (str): 完整的主题路径（包括 tenant 和 namespace）。
@@ -357,20 +359,26 @@ class PulsarAdminHelper:
         pulsar_admin_url = PulsarConnector.get_admin_url()
         url = f"{pulsar_admin_url}/admin/v2/persistent/{topic}/partitions"
 
-        response = requests.put(url, headers=PulsarConnector.get_header("text/plain"), data=str(partitions))
+        response = requests.put(
+            url, headers=PulsarConnector.get_header("text/plain"), data=str(partitions)
+        )
 
         # 检查响应状态码
         if response.status_code in [200, 204, 409]:
-            # 200 和 204 表示创建成功，409 表示主题已存在
+            # 200 和 204 表示创建成功, 409 表示主题已存在
             logging.info(
-                f"Partitioned topic {topic} with {partitions} partitions handled successfully (status: {response.status_code}).")
+                f"Partitioned topic {topic} with {partitions} partitions handled successfully (status: {response.status_code})."
+            )
         else:
             # 其他状态码为错误
-            raise RuntimeError(f"Failed to create partitioned topic {topic}: {response.status_code} {response.text}")
+            raise RuntimeError(
+                f"Failed to create partitioned topic {topic}: {response.status_code} {response.text}"
+            )
 
     """
     查询类的函数接口
     """
+
     @staticmethod
     def get_tenant_namespaces(tenant):
         """获取租户的所有命名空间"""
@@ -378,7 +386,9 @@ class PulsarAdminHelper:
         url = f"{pulsar_admin_url}/admin/v2/namespaces/{tenant}"
         response = requests.get(url, headers=PulsarConnector.get_header())
         if response.status_code != 200:
-            raise RuntimeError(f"Failed to list namespaces for tenant {tenant}: {response.status_code} {response.text}")
+            raise RuntimeError(
+                f"Failed to list namespaces for tenant {tenant}: {response.status_code} {response.text}"
+            )
         return response.json()
 
     @staticmethod
@@ -389,15 +399,17 @@ class PulsarAdminHelper:
         response = requests.get(url, headers=PulsarConnector.get_header())
         if response.status_code != 200:
             raise RuntimeError(
-                f"Failed to list topics for namespace {namespace}: {response.status_code} {response.text}")
+                f"Failed to list topics for namespace {namespace}: {response.status_code} {response.text}"
+            )
         return response.json()
 
     """
     删除类的函数接口
     """
+
     @staticmethod
     def cleanup_tenant(tenant):
-        """清理租户，确保删除所有命名空间和主题"""
+        """清理租户, 确保删除所有命名空间和主题"""
         try:
             # 获取所有命名空间
             namespaces = PulsarAdminHelper.get_tenant_namespaces(tenant)
@@ -421,11 +433,13 @@ class PulsarAdminHelper:
         topic_to_delete = topic
         prefix = "persistent://"
         if topic_to_delete.startswith(prefix):
-            topic_to_delete = topic_to_delete[len(prefix):]  # 去除前缀
+            topic_to_delete = topic_to_delete[len(prefix) :]  # 去除前缀
         url = f"{pulsar_admin_url}/admin/v2/persistent/{topic_to_delete}"
         response = requests.delete(url, headers=PulsarConnector.get_header())
         if response.status_code not in [200, 204, 404]:
-            raise RuntimeError(f"Failed to delete topic {topic_to_delete}: {response.status_code} {response.text}")
+            raise RuntimeError(
+                f"Failed to delete topic {topic_to_delete}: {response.status_code} {response.text}"
+            )
 
     @staticmethod
     def delete_namespace(namespace):
@@ -434,7 +448,9 @@ class PulsarAdminHelper:
         url = f"{pulsar_admin_url}/admin/v2/namespaces/{namespace}"
         response = requests.delete(url, headers=PulsarConnector.get_header())
         if response.status_code not in [200, 204, 404]:
-            raise RuntimeError(f"Failed to delete namespace {namespace}: {response.status_code} {response.text}")
+            raise RuntimeError(
+                f"Failed to delete namespace {namespace}: {response.status_code} {response.text}"
+            )
 
     @staticmethod
     def delete_tenant(tenant):
@@ -443,11 +459,14 @@ class PulsarAdminHelper:
         url = f"{pulsar_admin_url}/admin/v2/tenants/{tenant}"
         response = requests.delete(url, headers=PulsarConnector.get_header())
         if response.status_code not in [200, 204, 404]:
-            raise RuntimeError(f"Failed to delete tenant {tenant}: {response.status_code} {response.text}")
+            raise RuntimeError(
+                f"Failed to delete tenant {tenant}: {response.status_code} {response.text}"
+            )
 
     """
     存在性校验的函数接口
     """
+
     @staticmethod
     def is_tenant_exists(tenant):
         """检查租户是否存在"""
@@ -470,7 +489,8 @@ class PulsarAdminHelper:
 
         if response.status_code != 200:
             raise RuntimeError(
-                f"Failed to fetch namespaces for tenant {tenant}: {response.status_code} {response.text}")
+                f"Failed to fetch namespaces for tenant {tenant}: {response.status_code} {response.text}"
+            )
 
         namespaces = response.json()
         return f"{tenant}/{namespace}" in namespaces
@@ -490,7 +510,8 @@ class PulsarAdminHelper:
 
         if response.status_code != 200:
             raise RuntimeError(
-                f"Failed to fetch topics for namespace {tenant}/{namespace}: {response.status_code} {response.text}")
+                f"Failed to fetch topics for namespace {tenant}/{namespace}: {response.status_code} {response.text}"
+            )
 
         topics = response.json()
         return f"{topic_type}://{tenant}/{namespace}/{topic}" in topics
@@ -498,6 +519,7 @@ class PulsarAdminHelper:
     """
     topic详细信息相关接口
     """
+
     @staticmethod
     def get_subscription_stat(topic, subscription):
         """获取指定 topic 的某个订阅的 stat 信息"""
@@ -506,7 +528,8 @@ class PulsarAdminHelper:
         response = requests.get(url, headers=PulsarConnector.get_header())
         if response.status_code != 200:
             raise RuntimeError(
-                f"Failed to get subscription stats for topic {topic}, subscription {subscription}: {response.status_code} {response.text}")
+                f"Failed to get subscription stats for topic {topic}, subscription {subscription}: {response.status_code} {response.text}"
+            )
         return response.json()
 
     @staticmethod
@@ -516,21 +539,21 @@ class PulsarAdminHelper:
         return stat.get("msgBacklog", 0)
 
 
-import aiohttp
-
-
 class AsyncPulsarAdminHelper:
     """
-    异步获取pulsar信息的api，适用于大批量查询场景
+    异步获取pulsar信息的api, 适用于大批量查询场景
     """
+
     @staticmethod
     async def fetch_topic_backlog(topic, subscription):
         """
-        异步获取单个 topic 的 backlog。如果 topic 或 subscription 无效，则返回 "N/A"。
+        异步获取单个 topic 的 backlog。如果 topic 或 subscription 无效, 则返回 "N/A"。
         """
-        # 如果 topic 或 subscription 为空字符串或 None，直接返回 N/A
+        # 如果 topic 或 subscription 为空字符串或 None, 直接返回 N/A
         if not topic or not subscription:
             return topic or "Unknown Topic", subscription or "Unknown Subscription", "N/A"
+
+        import aiohttp
 
         async with aiohttp.ClientSession() as session:
             try:
@@ -544,22 +567,24 @@ class AsyncPulsarAdminHelper:
                     # 获取 topic 的统计数据
                     data = await response.json()
 
-                    # 获取订阅信息，如果订阅不存在返回 N/A
+                    # 获取订阅信息, 如果订阅不存在返回 N/A
                     subscription_data = data.get("subscriptions", {}).get(subscription, {})
                     backlog = subscription_data.get("msgBacklog", "N/A")
                     return topic, subscription, backlog
 
-            except Exception as e:
+            except Exception:
                 # 捕获异常并返回 N/A
                 return topic, subscription, "N/A"
 
     @staticmethod
     async def fetch_partitioned_stats_backlog(topic, subscription):
         """
-        异步获取分区（partitioned）topic的所有分区堆积量的总和，并返回该总和。
+        异步获取分区（partitioned）topic的所有分区堆积量的总和, 并返回该总和。
         """
         if not topic or not subscription:
             return topic or "Unknown Topic", subscription or "Unknown Subscription", "N/A"
+
+        import aiohttp
 
         async with aiohttp.ClientSession() as session:
             try:
@@ -575,9 +600,9 @@ class AsyncPulsarAdminHelper:
 
                     # 从返回的 JSON 中提取堆积量总和
                     subscriptions_data = data.get("subscriptions", {}).get(subscription, {})
-                    total_backlog = subscriptions_data.get('msgBacklog', "N/A")
+                    total_backlog = subscriptions_data.get("msgBacklog", "N/A")
 
                     return topic, subscription, total_backlog
 
-            except Exception as e:
+            except Exception:
                 return topic, subscription, "N/A"

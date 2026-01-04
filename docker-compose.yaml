@@ -16,7 +16,7 @@ services:
       - /home/espeon/:/data
       - ~/.ssh:/root/.ssh:rw  # 将宿主机的 .ssh 目录挂载到容器中
       - ~/.kube:/root/.kube # k8s配置映射到容器中
-      - /home/espeon/code/common/INSTALLROOT/root/.mental1104:/root/.mental1104
+      - /home/espeon/code/common/devops/INSTALLROOT/root/.mental1104:/root/.mental1104
       - /home/espeon/code/common/.env:/root/.env
     # env_file:
     #   - .env

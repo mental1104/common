@@ -188,7 +188,7 @@ TEST_F(RedisLockTest, MultiThreadStringIncrementTest) { // 同上
   // 直到成功。 3) 持锁后读取 array_key 的值；如果键不存在，解锁并跳出本轮。 4)
   // 打印线程号和当前值，转成 int 自增，再写回 Redis。 5)
   // 解锁，结束本次循环；未取到锁则打印并 sleep 10ms 再试。
-  auto thread_func = [lock_key, array_key, loop_count](int thread_id) {
+  auto thread_func = [lock_key, array_key](int thread_id) {
     RedisLock lock(redis_, lock_key);
 
     for (int i = 0; i < loop_count; ++i) {
@@ -245,7 +245,7 @@ TEST_F(RedisLockTest, MultiThreadStringIncrementTest) { // 同上
 
   // 获取 Redis 最终存储的值
   auto final_value_opt = redis_->get(array_key);
-  ASSERT_TRUE(final_value_opt.has_value());
+  ASSERT_TRUE(static_cast<bool>(final_value_opt));
 
   int final_count = std::stoi(*final_value_opt);
 

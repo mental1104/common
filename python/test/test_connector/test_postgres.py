@@ -1,8 +1,10 @@
 import os
-import pytest
-from sqlalchemy import create_engine, text, inspect, Column, Integer, String
 from contextlib import contextmanager
-from mental1104.connector.postgres import startup, Base, get_db_config, open_session
+
+import pytest
+from sqlalchemy import Column, Integer, String, create_engine, inspect, text
+
+from mental1104.connector.postgres import Base, get_db_config, open_session, startup
 
 
 @contextmanager
@@ -31,12 +33,14 @@ def delete_test_database(config):
 
         try:
             # 强制终止与目标数据库的所有连接
-            conn.execute(text(f"""
+            conn.execute(
+                text(f"""
                 SELECT pg_terminate_backend(pg_stat_activity.pid)
                 FROM pg_stat_activity
                 WHERE pg_stat_activity.datname = '{db_name}'
                   AND pid <> pg_backend_pid();
-            """))
+            """)
+            )
 
             # 删除数据库
             conn.execute(text(f"DROP DATABASE IF EXISTS {db_name}"))
@@ -47,25 +51,32 @@ def delete_test_database(config):
 
 # 定义测试 ORM 类
 class TempTable(Base):
-    __tablename__ = 'test_table'
+    __tablename__ = "test_table"
     id = Column(Integer, primary_key=True, autoincrement=True)
     name = Column(String(50), nullable=False)
 
 
 @pytest.mark.skipif(
-    not all([os.getenv('PGUSER'), os.getenv('PGPASSWORD'), os.getenv(
-        'PGHOST'), os.getenv('PGPORT'), os.getenv('PGDATABASE')]),
-    reason="环境变量未配置完整，跳过测试"
+    not all(
+        [
+            os.getenv("PGUSER"),
+            os.getenv("PGPASSWORD"),
+            os.getenv("PGHOST"),
+            os.getenv("PGPORT"),
+            os.getenv("PGDATABASE"),
+        ]
+    ),
+    reason="环境变量未配置完整, 跳过测试",
 )
 class TestDatabase:
     def setup_class(self):
         """在测试开始时初始化数据库"""
         self.config = {
-            "username": os.getenv('PGUSER'),
-            "password": os.getenv('PGPASSWORD'),
-            "host": os.getenv('PGHOST'),
-            "port": os.getenv('PGPORT'),
-            "database": "test_database"
+            "username": os.getenv("PGUSER"),
+            "password": os.getenv("PGPASSWORD"),
+            "host": os.getenv("PGHOST"),
+            "port": os.getenv("PGPORT"),
+            "database": "test_database",
         }
         delete_test_database(self.config)  # 确保测试开始前数据库被清理
         startup()
@@ -76,11 +87,11 @@ class TestDatabase:
 
     def test_orm_table_creation_and_verification(self):
         """
-        【场景背景】验证 Base 映射 + startup() 初始化后，ORM 元数据能够正确建表、
-        对表进行 CRUD，并最终清理干净。
-        【步骤输入】先调用 startup() 和 Base.metadata.create_all() 建表，再借助
-        inspector/SQL 查询校验表存在与否，随后通过 open_session() 插入一行数据。
-        【期望输出】test_table 在建表后可见、能插入并查询到“Test Entry”，最后
+        【场景背景】验证 Base 映射 + startup() 初始化后, ORM 元数据能够正确建表、
+        对表进行 CRUD, 并最终清理干净。
+        【步骤输入】先调用 startup() 和 Base.metadata.create_all() 建表, 再借助
+        inspector/SQL 查询校验表存在与否, 随后通过 open_session() 插入一行数据。
+        【期望输出】test_table 在建表后可见、能插入并查询到“Test Entry”, 最后
         使用 DROP TABLE 和 pg_tables 视图确认数据和表均被删除。
         """
         # 1. 启动数据库并创建表
@@ -106,7 +117,9 @@ class TestDatabase:
         # 4. 删除表
         # 强制使用 AUTOCOMMIT 执行 DROP 语句
         with engine.connect() as conn:
-            conn.execution_options(isolation_level="AUTOCOMMIT").execute(text("DROP TABLE IF EXISTS test_table"))
+            conn.execution_options(isolation_level="AUTOCOMMIT").execute(
+                text("DROP TABLE IF EXISTS test_table")
+            )
 
         # 5. 使用原生 SQL 校验表是否删除
         with engine.connect() as conn:

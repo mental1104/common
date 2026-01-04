@@ -9,19 +9,82 @@
 # ---- Direct imports (safe modules; no mental1104 top-level imports) ----
 from mental1104.app.anki import AnkiApkgGenerator
 from mental1104.app.pdf import extract_page_range
+from mental1104.common.i18n.context import (
+    DEFAULT_LOCALE,
+    activate,
+    get_locale,
+    locale_context,
+    reset_locale,
+)
+from mental1104.common.i18n.fastapi import I18nMiddleware
+from mental1104.common.i18n.json_localize import localize_json
+from mental1104.common.i18n.placeholder import (
+    PLACEHOLDER_PATTERN,
+    compare_placeholders,
+    extract_placeholders,
+)
+from mental1104.common.i18n.provider import FileMoProvider, I18nResourceProvider
+from mental1104.common.i18n.resolver import (
+    ChainResolver,
+    CookieResolver,
+    HeaderResolver,
+    LocaleResolver,
+    QueryResolver,
+)
+from mental1104.common.i18n.runtime import I18n, normalize_locale
+from mental1104.common.i18n.tools.check import check_po_tree
+from mental1104.common.i18n.tools.cli import main
+from mental1104.common.i18n.tools.compile import compile_po_tree, po_text_to_mo_bytes
+from mental1104.common.i18n.tools.mo_writer import write_mo
+from mental1104.common.i18n.tools.po_parser import PoEntry, parse_po
 from mental1104.concurrency.types import MPStartMethod
-from mental1104.connector.postgres import Base, SessionAwareMixin, close_session, db_connection, ensure_database_exists, ensure_tables_exist, get_db_config, get_db_url, get_session, init_database, logger, open_session, setup, startup, with_session
+from mental1104.connector.postgres import (
+    Base,
+    SessionAwareMixin,
+    close_session,
+    db_connection,
+    ensure_database_exists,
+    ensure_tables_exist,
+    get_db_config,
+    get_db_url,
+    get_session,
+    init_database,
+    logger,
+    open_session,
+    setup,
+    startup,
+    with_session,
+)
 from mental1104.connector.redis_client.redis_bloom_kv import RedisBloom
-from mental1104.debug.deciprobe import ELLIPSIS_CHAR, FUNC_FIELD_WIDTH, HEAD_PREFIX, ID_FIELD_WIDTH, SITE_FIELD_WIDTH, TRACE_IF_ENABLED, TYPE_FIELD_WIDTH, deciprobe, trace_if
+from mental1104.debug.deciprobe import (
+    ELLIPSIS_CHAR,
+    FUNC_FIELD_WIDTH,
+    HEAD_PREFIX,
+    ID_FIELD_WIDTH,
+    SITE_FIELD_WIDTH,
+    TRACE_IF_ENABLED,
+    TYPE_FIELD_WIDTH,
+    deciprobe,
+    trace_if,
+)
 from mental1104.env.environment import MissingEnvVarError, check_required_env_vars
 from mental1104.file.csv_processor import csv_writer, export_csv_from_database
 from mental1104.file.file_processor import file_iterator
 from mental1104.iterator.iterator_csv import iterator_csv
-from mental1104.plot.bench import BenchTestType, BenchmarkPlotter, BenchmarkRecord, BenchmarkSuite, GoogleBenchmarkSuite, PytestBenchmarkSuite, load_benchmark_suite
+from mental1104.plot.bench import (
+    BenchmarkPlotter,
+    BenchmarkRecord,
+    BenchmarkSuite,
+    BenchTestType,
+    GoogleBenchmarkSuite,
+    PytestBenchmarkSuite,
+    load_benchmark_suite,
+)
 from mental1104.schema.common_schema import JsonSerializable
-from mental1104.string.string_util import replace_space_with
+from mental1104.string.string_util import insert_newlines, replace_space_with
 from mental1104.timed import async_timed, get_current_time, parse_time, timed
 from mental1104.utils.bench_tasks import CpuBoundTask, DatasetFactory, IoBoundTask
+from mental1104.utils.context import RequestCtx, ctx, ctx_diag, reset_ctx, set_ctx
 from mental1104.utils.encryption import decrypt, encrypt, generate_salt
 from mental1104.utils.overload import dispatch_for
 from mental1104.utils.parse_json import JsonParserType, JsonUtil, dump_json, load_json
@@ -31,141 +94,192 @@ from mental1104.utils.util import async_delay, delay
 
 # ---- Lazy exports (risky modules; may import mental1104 at top-level) ----
 _EXPORT_MAP = {
-    'AsCompletedStrategy': 'mental1104.concurrency.coroutine',
-    'AsyncPulsarAdminHelper': 'mental1104.connector.pulsar',
-    'Consumer': 'mental1104.connector.pulsar',
-    'CoroutinePool': 'mental1104.concurrency.coroutine',
-    'FirstSuccessfulStrategy': 'mental1104.concurrency.coroutine',
-    'GatherStrategy': 'mental1104.concurrency.coroutine',
-    'ProcessExecutorCoroutinePool': 'mental1104.concurrency.coroutine',
-    'ProcessWorkerPool': 'mental1104.concurrency.sync_worker',
-    'Producer': 'mental1104.connector.pulsar',
-    'PulsarAdminHelper': 'mental1104.connector.pulsar',
-    'PulsarConnector': 'mental1104.connector.pulsar',
-    'PulsarEnvironment': 'mental1104.connector.pulsar',
-    'TaskExecutionStrategy': 'mental1104.concurrency.coroutine',
-    'ThreadExecutorCoroutinePool': 'mental1104.concurrency.coroutine',
-    'ThreadWorkerPool': 'mental1104.concurrency.sync_worker',
-    'TimeBasedTrendPlot': 'mental1104.plot.trend',
-    'TrendPlotBase': 'mental1104.plot.trend',
-    'fetch_status': 'mental1104.network.http_package',
-    'iterator_json': 'mental1104.iterator.iterator_json',
-    'json_to_yaml': 'mental1104.app.convert',
-    'yaml_to_json': 'mental1104.app.convert',
+    "AsCompletedStrategy": "mental1104.concurrency.coroutine",
+    "AsyncPulsarAdminHelper": "mental1104.connector.pulsar",
+    "Consumer": "mental1104.connector.pulsar",
+    "CoroutinePool": "mental1104.concurrency.coroutine",
+    "FirstSuccessfulStrategy": "mental1104.concurrency.coroutine",
+    "GatherStrategy": "mental1104.concurrency.coroutine",
+    "MiddlewareCallable": "mental1104.asgi.fastapi.middleware",
+    "ProcessExecutorCoroutinePool": "mental1104.concurrency.coroutine",
+    "ProcessWorkerPool": "mental1104.concurrency.sync_worker",
+    "Producer": "mental1104.connector.pulsar",
+    "PulsarAdminHelper": "mental1104.connector.pulsar",
+    "PulsarConnector": "mental1104.connector.pulsar",
+    "PulsarEnvironment": "mental1104.connector.pulsar",
+    "RequestCtxContextVarMiddlewareFactory": "mental1104.asgi.fastapi.middleware",
+    "RequestCtxMiddlewareFactory": "mental1104.asgi.fastapi.middleware",
+    "TaskExecutionStrategy": "mental1104.concurrency.coroutine",
+    "ThreadExecutorCoroutinePool": "mental1104.concurrency.coroutine",
+    "ThreadWorkerPool": "mental1104.concurrency.sync_worker",
+    "TimeBasedTrendPlot": "mental1104.plot.trend",
+    "TrendPlotBase": "mental1104.plot.trend",
+    "fetch_status": "mental1104.network.http_package",
+    "iterator_json": "mental1104.iterator.iterator_json",
+    "json_to_yaml": "mental1104.app.convert",
+    "register_all_request_ctx_middlewares": "mental1104.asgi.fastapi.middleware",
+    "register_request_ctx_middleware": "mental1104.asgi.fastapi.middleware",
+    "request_ctx_from_headers": "mental1104.asgi.fastapi.request",
+    "yaml_to_json": "mental1104.app.convert",
 }
 
 __all__ = [
-    'AnkiApkgGenerator',
-    'AsCompletedStrategy',
-    'AsyncPulsarAdminHelper',
-    'Base',
-    'BenchTestType',
-    'BenchmarkPlotter',
-    'BenchmarkRecord',
-    'BenchmarkSuite',
-    'Consumer',
-    'CoroutinePool',
-    'CpuBoundTask',
-    'DatasetFactory',
-    'ELLIPSIS_CHAR',
-    'FUNC_FIELD_WIDTH',
-    'FirstSuccessfulStrategy',
-    'GatherStrategy',
-    'GoogleBenchmarkSuite',
-    'HEAD_PREFIX',
-    'ID_FIELD_WIDTH',
-    'IoBoundTask',
-    'JsonParserType',
-    'JsonSerializable',
-    'JsonUtil',
-    'MPStartMethod',
-    'MissingEnvVarError',
-    'ProcessExecutorCoroutinePool',
-    'ProcessWorkerPool',
-    'Producer',
-    'PulsarAdminHelper',
-    'PulsarConnector',
-    'PulsarEnvironment',
-    'PytestBenchmarkSuite',
-    'RedisBloom',
-    'SITE_FIELD_WIDTH',
-    'SessionAwareMixin',
-    'TRACE_IF_ENABLED',
-    'TYPE_FIELD_WIDTH',
-    'TaskExecutionStrategy',
-    'ThreadExecutorCoroutinePool',
-    'ThreadWorkerPool',
-    'TimeBasedTrendPlot',
-    'TrendPlotBase',
-    'YamlUtil',
-    'async_delay',
-    'async_timed',
-    'check_required_env_vars',
-    'close_session',
-    'csv_writer',
-    'db_connection',
-    'deciprobe',
-    'decrypt',
-    'delay',
-    'dispatch_for',
-    'dump_json',
-    'dump_yaml',
-    'encrypt',
-    'ensure_database_exists',
-    'ensure_tables_exist',
-    'export_csv_from_database',
-    'extract_page_range',
-    'fetch_status',
-    'file_iterator',
-    'generate_salt',
-    'get_current_time',
-    'get_db_config',
-    'get_db_url',
-    'get_session',
-    'init_database',
-    'iterator_csv',
-    'iterator_json',
-    'json_to_yaml',
-    'load_benchmark_suite',
-    'load_json',
-    'logger',
-    'open_session',
-    'parse_time',
-    'parse_yaml',
-    'random_pick',
-    'replace_space_with',
-    'setup',
-    'startup',
-    'timed',
-    'trace_if',
-    'with_session',
-    'yaml_to_json',
+    "DEFAULT_LOCALE",
+    "ELLIPSIS_CHAR",
+    "FUNC_FIELD_WIDTH",
+    "HEAD_PREFIX",
+    "ID_FIELD_WIDTH",
+    "PLACEHOLDER_PATTERN",
+    "SITE_FIELD_WIDTH",
+    "TRACE_IF_ENABLED",
+    "TYPE_FIELD_WIDTH",
+    "AnkiApkgGenerator",
+    "AsCompletedStrategy",
+    "AsyncPulsarAdminHelper",
+    "Base",
+    "BenchTestType",
+    "BenchmarkPlotter",
+    "BenchmarkRecord",
+    "BenchmarkSuite",
+    "ChainResolver",
+    "Consumer",
+    "CookieResolver",
+    "CoroutinePool",
+    "CpuBoundTask",
+    "DatasetFactory",
+    "FileMoProvider",
+    "FirstSuccessfulStrategy",
+    "GatherStrategy",
+    "GoogleBenchmarkSuite",
+    "HeaderResolver",
+    "I18n",
+    "I18nMiddleware",
+    "I18nResourceProvider",
+    "IoBoundTask",
+    "JsonParserType",
+    "JsonSerializable",
+    "JsonUtil",
+    "LocaleResolver",
+    "MPStartMethod",
+    "MiddlewareCallable",
+    "MissingEnvVarError",
+    "PoEntry",
+    "ProcessExecutorCoroutinePool",
+    "ProcessWorkerPool",
+    "Producer",
+    "PulsarAdminHelper",
+    "PulsarConnector",
+    "PulsarEnvironment",
+    "PytestBenchmarkSuite",
+    "QueryResolver",
+    "RedisBloom",
+    "RequestCtx",
+    "RequestCtxContextVarMiddlewareFactory",
+    "RequestCtxMiddlewareFactory",
+    "SessionAwareMixin",
+    "TaskExecutionStrategy",
+    "ThreadExecutorCoroutinePool",
+    "ThreadWorkerPool",
+    "TimeBasedTrendPlot",
+    "TrendPlotBase",
+    "YamlUtil",
+    "activate",
+    "async_delay",
+    "async_timed",
+    "check_po_tree",
+    "check_required_env_vars",
+    "close_session",
+    "compare_placeholders",
+    "compile_po_tree",
+    "csv_writer",
+    "ctx",
+    "ctx_diag",
+    "db_connection",
+    "deciprobe",
+    "decrypt",
+    "delay",
+    "dispatch_for",
+    "dump_json",
+    "dump_yaml",
+    "encrypt",
+    "ensure_database_exists",
+    "ensure_tables_exist",
+    "export_csv_from_database",
+    "extract_page_range",
+    "extract_placeholders",
+    "fetch_status",
+    "file_iterator",
+    "generate_salt",
+    "get_current_time",
+    "get_db_config",
+    "get_db_url",
+    "get_locale",
+    "get_session",
+    "init_database",
+    "insert_newlines",
+    "iterator_csv",
+    "iterator_json",
+    "json_to_yaml",
+    "load_benchmark_suite",
+    "load_json",
+    "locale_context",
+    "localize_json",
+    "logger",
+    "main",
+    "normalize_locale",
+    "open_session",
+    "parse_po",
+    "parse_time",
+    "parse_yaml",
+    "po_text_to_mo_bytes",
+    "random_pick",
+    "register_all_request_ctx_middlewares",
+    "register_request_ctx_middleware",
+    "replace_space_with",
+    "request_ctx_from_headers",
+    "reset_ctx",
+    "reset_locale",
+    "set_ctx",
+    "setup",
+    "startup",
+    "timed",
+    "trace_if",
+    "with_session",
+    "write_mo",
+    "yaml_to_json",
 ]
 
-# 惰性导入降低循环引用概率，但模块内部仍可能互相 import 导致循环
+# 惰性导入降低循环引用概率, 但模块内部仍可能互相 import 导致循环
+
+
 def __getattr__(name):
     # PEP 562: lazy attribute access for risky modules & fallback
     try:
         modname = _EXPORT_MAP[name]
     except KeyError:
-        raise AttributeError(f'module {__name__} has no attribute {name!r}') from None
-    import importlib, types
+        raise AttributeError(f"module {__name__} has no attribute {name!r}") from None
+    import importlib
+    import types
+
     try:
         mod = importlib.import_module(modname)
     except ImportError as exc:
-        raise ImportError(f"{modname} is not available; optional dependency may be missing or unsupported on this platform") from exc
+        raise ImportError(
+            f"{modname} is not available; optional dependency may be missing or unsupported on this platform"
+        ) from exc
     obj = getattr(mod, name, None)
     if obj is None or isinstance(obj, types.ModuleType):
         # 兼容包结构：尝试从子模块 modname.name 再取一次
         try:
-            sub = importlib.import_module(f'{modname}.{name}')
-        except Exception as _e:  # noqa: F841
-            raise AttributeError(f'{modname} has no attribute {name!r}') from None
+            sub = importlib.import_module(f"{modname}.{name}")
+        except Exception as _e:
+            raise AttributeError(f"{modname} has no attribute {name!r}") from None
         obj = getattr(sub, name, None)
         if obj is None:
-            raise AttributeError(f'{modname}.{name} has no attribute {name!r}') from None
+            raise AttributeError(f"{modname}.{name} has no attribute {name!r}") from None
     globals()[name] = obj  # cache：写回模块全局（由 globals() 返回的字典）以便下次直接取
     return obj
+
 
 def __dir__():
     return sorted(list(globals().keys()) + list(__all__))

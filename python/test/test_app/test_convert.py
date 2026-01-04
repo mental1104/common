@@ -1,9 +1,9 @@
-# -*- coding: utf-8 -*-
-import pytest
-from io import StringIO, BytesIO
 from contextlib import redirect_stdout
+from io import BytesIO, StringIO
 
-from mental1104 import json_to_yaml, yaml_to_json, JsonUtil, YamlUtil, load_json, parse_yaml
+import pytest
+
+from mental1104 import JsonUtil, YamlUtil, json_to_yaml, load_json, parse_yaml, yaml_to_json
 
 JSON_PARSERS = JsonUtil.get_parser_names()
 YAML_PARSERS = YamlUtil.get_parser_names()
@@ -17,8 +17,8 @@ tags:
   - b
 """
 
-invalid_json = '{"a": [1, 2, 3,]}'    # 末尾多逗号
-invalid_yaml = "a: [1, 2, 3,,]"       # 连续逗号
+invalid_json = '{"a": [1, 2, 3,]}'  # 末尾多逗号
+invalid_yaml = "a: [1, 2, 3,,]"  # 连续逗号
 obj_simple = {"name": "中文", "age": 25, "tags": ["a", "b"]}
 
 
@@ -28,8 +28,8 @@ obj_simple = {"name": "中文", "age": 25, "tags": ["a", "b"]}
 def test_json_to_yaml_roundtrip_string(jin, yout):
     """
     【场景背景】json_to_yaml 应支持字符串输入/输出并保持数据等价。
-    【步骤输入】valid_json 字符串，指定解析/输出 parser。
-    【期望输出】返回 YAML 字符串，parse_yaml 后得到 obj_simple。
+    【步骤输入】valid_json 字符串, 指定解析/输出 parser。
+    【期望输出】返回 YAML 字符串, parse_yaml 后得到 obj_simple。
     """
     y = json_to_yaml(valid_json, in_parser=jin, out_parser=yout)
     assert isinstance(y, str)
@@ -42,8 +42,8 @@ def test_json_to_yaml_roundtrip_string(jin, yout):
 def test_yaml_to_json_roundtrip_string(yin, jout):
     """
     【场景背景】yaml_to_json 同样需完成字符串往返。
-    【步骤输入】valid_yaml，ensure_ascii=False, indent=2。
-    【期望输出】返回 JSON 字符串，load_json 后等于 obj_simple。
+    【步骤输入】valid_yaml, ensure_ascii=False, indent=2。
+    【期望输出】返回 JSON 字符串, load_json 后等于 obj_simple。
     """
     s = yaml_to_json(valid_yaml, in_parser=yin, out_parser=jout, ensure_ascii=False, indent=2)
     assert isinstance(s, str)
@@ -71,7 +71,7 @@ def test_json_to_yaml_bin_in_bin_out(jin, yout):
     """
     【场景背景】二进制输入输出需允许写入 fp。
     【步骤输入】BytesIO(valid_json) + BytesIO fp。
-    【期望输出】函数返回 None，fp 内容可 parse 成 obj_simple。
+    【期望输出】函数返回 None, fp 内容可 parse 成 obj_simple。
     """
     out = BytesIO()
     ret = json_to_yaml(BytesIO(valid_json.encode("utf-8")), in_parser=jin, out_parser=yout, fp=out)
@@ -86,7 +86,7 @@ def test_yaml_to_json_text_in_text_out(yin, jout):
     """
     【场景背景】TextIO 的 YAML 输入应输出 JSON 字符串。
     【步骤输入】StringIO(valid_yaml)。
-    【期望输出】返回字符串，load_json 后等于 obj_simple。
+    【期望输出】返回字符串, load_json 后等于 obj_simple。
     """
     ret = yaml_to_json(StringIO(valid_yaml), in_parser=yin, out_parser=jout, ensure_ascii=True)
     assert isinstance(ret, str)
@@ -99,11 +99,17 @@ def test_yaml_to_json_bin_in_bin_out(yin, jout):
     """
     【场景背景】二进制 YAML -> JSON should support streaming fp。
     【步骤输入】BytesIO(valid_yaml) 和输出 BytesIO。
-    【期望输出】函数返回 None，输出流 decode 为 JSON，再 load_json 得到 obj_simple。
+    【期望输出】函数返回 None, 输出流 decode 为 JSON, 再 load_json 得到 obj_simple。
     """
     out = BytesIO()
-    ret = yaml_to_json(BytesIO(valid_yaml.encode("utf-8")), in_parser=yin,
-                       out_parser=jout, ensure_ascii=False, indent=2, fp=out)
+    ret = yaml_to_json(
+        BytesIO(valid_yaml.encode("utf-8")),
+        in_parser=yin,
+        out_parser=jout,
+        ensure_ascii=False,
+        indent=2,
+        fp=out,
+    )
     assert ret is None
     s = out.getvalue().decode("utf-8")
     assert load_json(s, parser=jout) == obj_simple
@@ -115,7 +121,7 @@ def test_json_to_yaml_invalid_input_returns_none(jin):
     """
     【场景背景】解析阶段失败应返回 None 并打印错误。
     【步骤输入】invalid_json。
-    【期望输出】函数返回 None，stdout 含 [解析失败] 或 [转换失败]。
+    【期望输出】函数返回 None, stdout 含 [解析失败] 或 [转换失败]。
     """
     buf = StringIO()
     with redirect_stdout(buf):
@@ -190,7 +196,7 @@ def test_yaml_to_json_unknown_out_parser_returns_none():
 # ==== 失败：根类型不符 -> 返回 None ====
 def test_json_to_yaml_non_mapping_sequence_root_returns_none():
     """
-    【场景背景】转换器要求根为映射，若传入简单字符串应拒绝。
+    【场景背景】转换器要求根为映射, 若传入简单字符串应拒绝。
     【步骤输入】"123"。
     【期望输出】返回 None。
     """
@@ -221,7 +227,7 @@ def test_json_to_yaml_invalid_fp_returns_none():
     """
     【场景背景】fp 必须具备写能力。
     【步骤输入】fp=Dummy()。
-    【期望输出】函数返回 None，提示转换失败。
+    【期望输出】函数返回 None, 提示转换失败。
     """
     buf = StringIO()
     with redirect_stdout(buf):

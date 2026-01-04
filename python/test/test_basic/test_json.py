@@ -1,15 +1,16 @@
-import pytest
 import json
-from io import StringIO, BytesIO
 from contextlib import redirect_stdout
+from io import BytesIO, StringIO
+
+import pytest
 
 # 关键：沿用既有入口与只读视图
-from mental1104 import load_json, dump_json, JsonUtil, JsonParserType
+from mental1104 import JsonParserType, JsonUtil, dump_json, load_json
 
-PARSERS = JsonUtil.get_parsers()             # MappingProxyType，只读
+PARSERS = JsonUtil.get_parsers()  # MappingProxyType, 只读
 PARSER_TYPES = JsonParserType.available()
 
-invalid_json = '''
+invalid_json = """
 {
   "user": {
     "name": "Espeon",
@@ -21,7 +22,7 @@ invalid_json = '''
     }
   }
 }
-'''
+"""
 valid_json = '{"name": "Espeon", "age": 25}'
 obj_simple = {"name": "中文", "age": 25, "tags": ["a", "b"]}
 
@@ -43,8 +44,8 @@ class TestParseJson:
     def test_invalid_json_from_str_returns_none_and_context_if_supported(self, parser_type):
         """
         【场景背景】字符串解析失败时返回 None 并打印错误上下文。
-        【步骤输入】invalid_json，通过 redirect_stdout 捕获输出。
-        【期望输出】result is None，输出含 [解析失败]；若底层抛异常带位置信息，
+        【步骤输入】invalid_json, 通过 redirect_stdout 捕获输出。
+        【期望输出】result is None, 输出含 [解析失败]; 若底层抛异常带位置信息,
         额外包含 [错误上下文] 和 ^。
         """
         buf = StringIO()
@@ -55,7 +56,7 @@ class TestParseJson:
         assert result is None
         assert "[解析失败]" in output
 
-        # 仅当底层解析器提供位置信息时，才校验上下文指示
+        # 仅当底层解析器提供位置信息时, 才校验上下文指示
         try:
             parser_name = parser_type.value
             PARSERS[parser_name](invalid_json)
@@ -82,7 +83,7 @@ class TestParseJson:
         """
         【场景背景】文本流解析失败时也应提示错误。
         【步骤输入】StringIO(invalid_json)。
-        【期望输出】返回 None 并打印 [解析失败]，不强求上下文指示。
+        【期望输出】返回 None 并打印 [解析失败], 不强求上下文指示。
         """
         buf = StringIO()
         with redirect_stdout(buf):
@@ -91,7 +92,7 @@ class TestParseJson:
 
         assert result is None
         assert "[解析失败]" in output
-        # 注意：文件流情况下不强求打印 [错误上下文] 与指针，
+        # 注意：文件流情况下不强求打印 [错误上下文] 与指针,
         # 不同实现/路径下未必有片段与 ^（尤其 orjson 走 loads 时）。
 
     # ==== 新增：二进制文件流（BinaryIO） ====
@@ -112,7 +113,7 @@ class TestParseJson:
         """
         【场景背景】二进制流解析失败也需要友好提示。
         【步骤输入】BytesIO(invalid_json)。
-        【期望输出】result 为 None，输出包含 [解析失败]。
+        【期望输出】result 为 None, 输出包含 [解析失败]。
         """
         buf = StringIO()
         with redirect_stdout(buf):
@@ -125,7 +126,7 @@ class TestParseJson:
 
     def test_cpp_backend_if_available(self):
         """
-        当 C++ 导出层可用时，应能解析成功；不可用则跳过。
+        当 C++ 导出层可用时, 应能解析成功; 不可用则跳过。
         """
         if "cpp" not in JsonUtil.get_parser_names():
             pytest.skip("C++ export backend not available")
@@ -141,7 +142,7 @@ class TestDumpJson:
         """
         【场景背景】默认 dump_json 返回字符串并对非 ASCII 进行 \\u 转义。
         【步骤输入】dump_json(obj_simple)。
-        【期望输出】字符串中存在 \\u 序列，load_json 后与原对象一致。
+        【期望输出】字符串中存在 \\u 序列, load_json 后与原对象一致。
         """
         s = dump_json(obj_simple, parser=parser_type)
         assert isinstance(s, str)
@@ -157,7 +158,7 @@ class TestDumpJson:
         """
         【场景背景】关闭 ensure_ascii 并指定 indent 时应输出原生中文与缩进。
         【步骤输入】ensure_ascii=False, indent=2。
-        【期望输出】序列化结果含“中文”和换行/空格，反序列化恢复原对象。
+        【期望输出】序列化结果含“中文”和换行/空格, 反序列化恢复原对象。
         """
         s = dump_json(obj_simple, parser=parser_type, ensure_ascii=False, indent=2)
         assert isinstance(s, str)
@@ -173,7 +174,7 @@ class TestDumpJson:
         """
         【场景背景】传入 TextIO 时函数应写入流并返回 None。
         【步骤输入】StringIO + ensure_ascii=False。
-        【期望输出】文件内容含中文且换行，读取后能解析成功。
+        【期望输出】文件内容含中文且换行, 读取后能解析成功。
         """
         fp = StringIO()
         ret = dump_json(obj_simple, fp, parser=parser_type, ensure_ascii=False, indent=2)
@@ -188,9 +189,9 @@ class TestDumpJson:
     @pytest.mark.parametrize("parser_type", PARSER_TYPES)
     def test_write_to_binary_stream(self, parser_type):
         """
-        【场景背景】BinaryIO 输出必须是 bytes，内容遵循 ensure_ascii。
+        【场景背景】BinaryIO 输出必须是 bytes, 内容遵循 ensure_ascii。
         【步骤输入】BytesIO + ensure_ascii=True。
-        【期望输出】fp.getvalue() 为 bytes，包含 \\u，load_json 后还原。
+        【期望输出】fp.getvalue() 为 bytes, 包含 \\u, load_json 后还原。
         """
         fp = BytesIO()
         ret = dump_json(obj_simple, fp, parser=parser_type, ensure_ascii=True)
@@ -208,7 +209,7 @@ class TestDumpJson:
         """
         【场景背景】dump_json 的第一个参数必须是 dict 或 list。
         【步骤输入】传入 tuple ("a","b")。
-        【期望输出】TypeError，提醒调用方修正类型。
+        【期望输出】TypeError, 提醒调用方修正类型。
         """
         with pytest.raises(TypeError):
             dump_json(("a", "b"))  # 仅支持 dict 或 list
@@ -218,7 +219,7 @@ class TestDumpJson:
         """
         【场景背景】parser 只能是枚举值或别名。
         【步骤输入】parser="__not_exist__"。
-        【期望输出】ValueError，避免调用未注册解析器。
+        【期望输出】ValueError, 避免调用未注册解析器。
         """
         with pytest.raises(ValueError):
             dump_json({"a": 1}, parser="__not_exist__")
@@ -226,17 +227,17 @@ class TestDumpJson:
     # ==== orjson 特性：indent≠2 时应回退到标准库语义 ====
     def test_orjson_indent_not_2_falls_back_to_stdlib(self):
         """
-        【场景背景】orjson 只支持 indent=2；其他值应退回内置 json。
+        【场景背景】orjson 只支持 indent=2; 其他值应退回内置 json。
         【步骤输入】indent=4 时序列化对象。
         【期望输出】输出与 json.dumps(..., indent=4) 完全一致。
         """
         orjson_parser = next((p for p in PARSER_TYPES if p.value == "orjson"), None)
         if orjson_parser is None:
-            pytest.skip("orjson 未安装，跳过该用例")
+            pytest.skip("orjson 未安装, 跳过该用例")
         obj = {"a": [1, 2, 3], "b": {"x": 1}}
         out = dump_json(obj, parser=orjson_parser, ensure_ascii=False, indent=4)
         expected = json.dumps(obj, ensure_ascii=False, indent=4)
-        # 精确一致，表示按预期回退到标准库格式
+        # 精确一致, 表示按预期回退到标准库格式
         assert out == expected
 
     # ==== ensure_ascii=False + BinaryIO：应写入原生 UTF-8 中文 ====
@@ -258,10 +259,11 @@ class TestDumpJson:
     @pytest.mark.parametrize("parser_type", PARSER_TYPES)
     def test_invalid_fp_type_raises(self, parser_type):
         """
-        【场景背景】fp 需实现 write，任意自定义对象应导致 TypeError。
+        【场景背景】fp 需实现 write, 任意自定义对象应导致 TypeError。
         【步骤输入】Dummy()。
         【期望输出】TypeError。
         """
+
         class Dummy:
             pass
 

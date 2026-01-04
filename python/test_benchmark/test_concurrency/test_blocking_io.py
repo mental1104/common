@@ -1,8 +1,8 @@
 """Benchmarks covering synchronous blocking I/O workloads."""
+
 from __future__ import annotations
 
 import pytest
-
 from test_benchmark.test_concurrency.common import (
     BLOCKING_IDS,
     BLOCKING_IO_CASES,
