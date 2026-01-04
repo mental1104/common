@@ -245,7 +245,7 @@ TEST_F(RedisLockTest, MultiThreadStringIncrementTest) { // 同上
 
   // 获取 Redis 最终存储的值
   auto final_value_opt = redis_->get(array_key);
-  ASSERT_TRUE(final_value_opt.has_value());
+  ASSERT_TRUE(static_cast<bool>(final_value_opt));
 
   int final_count = std::stoi(*final_value_opt);
 
