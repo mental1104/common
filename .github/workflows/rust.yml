@@ -66,10 +66,7 @@ jobs:
         run: ./dev fmt-rust
       - name: Build Rust
         run: ./dev build-rust
-      - name: Test Rust
-        run: ./dev test-rust
       - name: Coverage Rust
-        if: ${{ matrix.toolchain == 'stable' }}
         run: ./dev coverage-rust
       - name: Vet Rust
         if: ${{ matrix.toolchain == 'stable' }}
@@ -110,8 +107,8 @@ jobs:
         run: ./dev setup-rust
       - name: Build Rust
         run: ./dev build-rust
-      - name: Test Rust
-        run: ./dev test-rust
+      - name: Coverage Rust
+        run: ./dev coverage-rust
 
   windows:
     name: Windows / Rust stable
@@ -140,5 +137,5 @@ jobs:
         run: python -m devtool.cli setup-rust
       - name: Build Rust
         run: python -m devtool.cli build-rust
-      - name: Test Rust
-        run: python -m devtool.cli test-rust
+      - name: Coverage Rust
+        run: python -m devtool.cli coverage-rust

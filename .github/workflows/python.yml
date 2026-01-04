@@ -69,8 +69,8 @@ jobs:
         run: ./dev setup-python
       - name: Build Python
         run: ./dev build-python
-      - name: Test Python
-        run: ./dev test-python
+      - name: Coverage Python
+        run: ./dev coverage-python
 
   linux-integration:
     name: Linux / Python 3.12 / coverage
@@ -161,8 +161,6 @@ jobs:
         run: ./dev fmt-python
       - name: Build Python
         run: ./dev build-python
-      - name: Test Python
-        run: ./dev test-python
       - name: Coverage Python
         run: ./dev coverage-python
       - name: Vet Python
@@ -212,8 +210,8 @@ jobs:
         run: ./dev setup-python
       - name: Build Python
         run: ./dev build-python
-      - name: Test Python
-        run: ./dev test-python
+      - name: Coverage Python
+        run: ./dev coverage-python
 
   windows:
     name: Windows / Python ${{ matrix.python }}
@@ -254,5 +252,5 @@ jobs:
         run: python -m devtool.cli setup-python
       - name: Build Python
         run: python -m devtool.cli build-python
-      - name: Test Python
-        run: python -m devtool.cli test-python
+      - name: Coverage Python
+        run: python -m devtool.cli coverage-python

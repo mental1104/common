@@ -70,8 +70,8 @@ jobs:
         run: ./dev fmt-cpp
       - name: Build C++
         run: ./dev build-cpp --config Debug
-      - name: Test C++
-        run: ./dev test-cpp
+      - name: Coverage C++
+        run: ./dev coverage-cpp
       - name: Vet C++
         if: ${{ matrix.compiler == 'gcc' && matrix.cxx_std == '23' }}
         run: ./dev vet-cpp
@@ -164,8 +164,6 @@ jobs:
         run: ./dev setup-cpp --config Debug
       - name: Build C++
         run: ./dev build-cpp --config Debug
-      - name: Test C++
-        run: ./dev test-cpp
       - name: Test redis-plus-plus
         run: ./dev test-redispp --config Debug
       - name: Coverage C++
@@ -212,8 +210,8 @@ jobs:
         run: ./dev setup-cpp --config Debug
       - name: Build C++
         run: ./dev build-cpp --config Debug
-      - name: Test C++
-        run: ./dev test-cpp
+      - name: Coverage C++
+        run: ./dev coverage-cpp
 
   windows:
     name: Windows / MSVC / C++${{ matrix.cxx_std }}
@@ -248,5 +246,5 @@ jobs:
         run: python -m devtool.cli build-export-cpp --config Debug
       - name: Build C++
         run: python -m devtool.cli build-cpp --config Debug
-      - name: Test C++
-        run: python -m devtool.cli test-cpp
+      - name: Coverage C++
+        run: python -m devtool.cli coverage-cpp
