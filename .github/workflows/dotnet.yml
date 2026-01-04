@@ -47,8 +47,8 @@ jobs:
         run: dotnet restore mental1104.sln
       - name: Build
         run: dotnet build mental1104.sln --configuration Release --no-restore
-      - name: Test
-        run: dotnet test mental1104.sln --configuration Release --no-build ${{ env.DOTNET_TEST_LOGGER }}
+      - name: Coverage
+        run: dotnet test mental1104.sln --configuration Release --no-build --collect:"XPlat Code Coverage" ${{ env.DOTNET_TEST_LOGGER }}
 
   macos:
     name: macOS / .NET ${{ matrix.dotnet }}
@@ -75,8 +75,8 @@ jobs:
         run: dotnet restore mental1104.sln
       - name: Build
         run: dotnet build mental1104.sln --configuration Release --no-restore
-      - name: Test
-        run: dotnet test mental1104.sln --configuration Release --no-build ${{ env.DOTNET_TEST_LOGGER }}
+      - name: Coverage
+        run: dotnet test mental1104.sln --configuration Release --no-build --collect:"XPlat Code Coverage" ${{ env.DOTNET_TEST_LOGGER }}
 
   windows:
     name: Windows / .NET ${{ matrix.dotnet }}
@@ -103,5 +103,5 @@ jobs:
         run: dotnet restore mental1104.sln
       - name: Build
         run: dotnet build mental1104.sln --configuration Release --no-restore
-      - name: Test
-        run: dotnet test mental1104.sln --configuration Release --no-build ${{ env.DOTNET_TEST_LOGGER }}
+      - name: Coverage
+        run: dotnet test mental1104.sln --configuration Release --no-build --collect:"XPlat Code Coverage" ${{ env.DOTNET_TEST_LOGGER }}
