@@ -5,12 +5,17 @@ background tasks can read it without explicit parameters.
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.requests import Request
-from starlette.types import ASGIApp
 
 from .context import activate, reset_locale
-from .resolver import LocaleResolver
+
+if TYPE_CHECKING:
+    from starlette.requests import Request
+    from starlette.types import ASGIApp
+
+    from .resolver import LocaleResolver
 
 
 class I18nMiddleware(BaseHTTPMiddleware):

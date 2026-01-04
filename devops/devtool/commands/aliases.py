@@ -1,9 +1,8 @@
 from __future__ import annotations
 
-from argparse import ArgumentParser, REMAINDER
+from argparse import REMAINDER, ArgumentParser
 from types import SimpleNamespace
 
-from devtool.commands import register
 import devtool.commands.bench as bench
 import devtool.commands.build as build
 import devtool.commands.clean as clean
@@ -14,6 +13,7 @@ import devtool.commands.install as install
 import devtool.commands.test as test
 import devtool.commands.uninstall as uninstall
 import devtool.commands.vet as vet
+from devtool.commands import register
 
 
 def _add_common(parser: ArgumentParser, *, jobs: bool = True, verbose: bool = True) -> None:

@@ -4,12 +4,19 @@ from fastapi.testclient import TestClient
 
 from mental1104.common.i18n.context import get_locale
 from mental1104.common.i18n.fastapi import I18nMiddleware
-from mental1104.common.i18n.resolver import ChainResolver, CookieResolver, HeaderResolver, QueryResolver
+from mental1104.common.i18n.resolver import (
+    ChainResolver,
+    CookieResolver,
+    HeaderResolver,
+    QueryResolver,
+)
 
 
 def test_chain_resolver_priority_and_fastapi_integration():
     app = FastAPI()
-    resolver = ChainResolver([QueryResolver(), HeaderResolver(), CookieResolver()], default_locale="zh")
+    resolver = ChainResolver(
+        [QueryResolver(), HeaderResolver(), CookieResolver()], default_locale="zh"
+    )
     app.add_middleware(I18nMiddleware, resolver=resolver)
 
     @app.get("/locale")

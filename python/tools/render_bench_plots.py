@@ -1,27 +1,33 @@
 #!/usr/bin/env python3
-"""命令行脚本：读取 JSON 基准结果并输出 PNG 图表。"""
+"""命令行脚本:读取 JSON 基准结果并输出 PNG 图表。"""
+
 from __future__ import annotations
 
 import argparse
-from pathlib import Path
 import sys
+from pathlib import Path
+from typing import TYPE_CHECKING, Sequence
+
+if TYPE_CHECKING:
+    from mental1104.plot import BenchmarkPlotter
 
 _PKG_ROOT = Path(__file__).resolve().parents[1]
-if str(_PKG_ROOT) not in sys.path:
-    sys.path.insert(0, str(_PKG_ROOT))
-
-from mental1104.plot import BenchTestType, BenchmarkPlotter, load_benchmark_suite
 
 
-def _parse_args() -> argparse.Namespace:
+def _ensure_repo_on_path() -> None:
+    if str(_PKG_ROOT) not in sys.path:
+        sys.path.insert(0, str(_PKG_ROOT))
+
+
+def _parse_args(bench_choices: Sequence[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="读取 benchmark JSON 并生成 PNG，可选矩阵/排序/对比三种布局。"
+        description="读取 benchmark JSON 并生成 PNG,可选矩阵/排序/对比三种布局。"
     )
     parser.add_argument("--input", required=True, help="Path to benchmark JSON file.")
     parser.add_argument(
         "--test-type",
         required=True,
-        choices=[BenchTestType.PYTEST_BENCHMARK, BenchTestType.GOOGLE_BENCHMARK],
+        choices=list(bench_choices),
         help="Benchmark framework name.",
     )
     parser.add_argument("--output", help="Optional output image path.")
@@ -48,8 +54,12 @@ def _parse_args() -> argparse.Namespace:
         help="Sort direction for ranking & matrix charts.",
     )
     parser.add_argument("--group-field", help="Comparison chart: meta field for group (e.g., arg).")
-    parser.add_argument("--variant-field", help="Comparison chart: meta field for variant (e.g., variant).")
-    parser.add_argument("--filter", action="append", metavar="KEY=VALUE", help="Comparison chart filters.")
+    parser.add_argument(
+        "--variant-field", help="Comparison chart: meta field for variant (e.g., variant)."
+    )
+    parser.add_argument(
+        "--filter", action="append", metavar="KEY=VALUE", help="Comparison chart filters."
+    )
     return parser.parse_args()
 
 
@@ -67,7 +77,7 @@ def _parse_filters(pairs: list[str] | None) -> dict[str, str]:
 
 
 def _preferred_metric(plotter: BenchmarkPlotter) -> str | None:
-    """优先返回 real_time_ms，没有则退回任意指标。"""
+    """优先返回 real_time_ms,没有则退回任意指标。"""
     metrics = plotter.available_metrics()
     if "real_time_ms" in metrics:
         return "real_time_ms"
@@ -75,8 +85,11 @@ def _preferred_metric(plotter: BenchmarkPlotter) -> str | None:
 
 
 def main() -> None:
-    """主流程：加载 suite -> 选择图表 -> 调用 Plotter 输出。"""
-    args = _parse_args()
+    """主流程:加载 suite -> 选择图表 -> 调用 Plotter 输出。"""
+    _ensure_repo_on_path()
+    from mental1104.plot import BenchmarkPlotter, BenchTestType, load_benchmark_suite
+
+    args = _parse_args((BenchTestType.PYTEST_BENCHMARK, BenchTestType.GOOGLE_BENCHMARK))
     suite = load_benchmark_suite(
         test_type=args.test_type,
         result_path=args.input,
@@ -107,7 +120,9 @@ def main() -> None:
             ascending=ascending,
         )
     elif args.chart == "ranking":
-        metric = args.metric or (args.metrics[0] if args.metrics else None) or _preferred_metric(plotter)
+        metric = (
+            args.metric or (args.metrics[0] if args.metrics else None) or _preferred_metric(plotter)
+        )
         if metric is None:
             raise SystemExit("No metrics available for ranking chart.")
         image = plotter.plot_ranking(

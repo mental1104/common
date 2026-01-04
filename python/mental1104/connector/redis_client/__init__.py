@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 
 import os
 import time
 import uuid
+
 import redis
 
 
@@ -31,18 +31,20 @@ class RedisConnection:
         self.client = redis.Redis(
             host=self.host,
             port=self.port,
-            password=self.password if self.password not in (None, '') else None,
-            decode_responses=self.decode_responses
+            password=self.password if self.password not in (None, "") else None,
+            decode_responses=self.decode_responses,
         )
         return self.client
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         try:
-            # 如果 client 提供 close() 方法，则关闭连接
+            # 如果 client 提供 close() 方法, 则关闭连接
             if self.client and hasattr(self.client, "close"):
                 self.client.close()
         except Exception:
             pass
+
+
 # -------------------------------
 # 分布式锁实现（API: try_lock, unlock）
 # -------------------------------
@@ -53,7 +55,7 @@ class RedisLock:
         """
         :param redis_client: redis.Redis 实例
         :param name: 锁的名称（即 redis 的 key）
-        :param lock_expire: 锁超时时间（秒），防止死锁
+        :param lock_expire: 锁超时时间（秒）, 防止死锁
         """
         self.redis_client = redis_client
         self.name = name
@@ -62,10 +64,10 @@ class RedisLock:
 
     def try_lock(self, wait_timeout=5, retry_delay=0.01):
         """
-        尝试获取锁，最多等待 wait_timeout 秒（默认 5 秒）。
+        尝试获取锁, 最多等待 wait_timeout 秒（默认 5 秒）。
         :param wait_timeout: 等待的最长时间（秒）
         :param retry_delay: 每次重试间隔（秒）
-        :return: 获取到锁返回 True，超时返回 False
+        :return: 获取到锁返回 True, 超时返回 False
         """
         end_time = time.time() + wait_timeout
         while time.time() < end_time:
@@ -80,10 +82,10 @@ class RedisLock:
         :return: 脚本执行结果
         """
         lua_script = """
-        if redis.call("get", KEYS[1]) == ARGV[1] then 
+        if redis.call("get", KEYS[1]) == ARGV[1] then
             return redis.call("del", KEYS[1])
-        else 
-            return 0 
+        else
+            return 0
         end
         """
         script = self.redis_client.register_script(lua_script)

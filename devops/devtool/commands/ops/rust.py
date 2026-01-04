@@ -10,7 +10,6 @@ from typing import Mapping
 
 from devtool.commands.common import RUST_DIR, run, strip_proxies
 
-
 _CARGO_LLVM_COV_MIN_RUSTC = (1, 87, 0)
 _CARGO_LLVM_COV_FALLBACK_VERSIONS = ("0.6.20", "0.6.19", "0.6.18")
 
@@ -172,5 +171,6 @@ def vet(env: Mapping[str, str]) -> None:
 
 
 def guard(env: Mapping[str, str], *, mode: str | None = None) -> None:
+    _ = mode
     # Simplified guard: defer to sanitizers configured by user
     test(env, file_pattern=None, filter_expr=None)

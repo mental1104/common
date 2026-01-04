@@ -4,9 +4,9 @@ import logging
 import os
 from typing import Optional
 
-from ._strategy import Strategy, StrategyError, BackendUnavailable
-from ._pybind_strategy import PyBindStrategy, PyBindUnavailable
-from ._ctypes_strategy import CTypesStrategy, CTypesUnavailable
+from ._ctypes_strategy import CTypesStrategy
+from ._pybind_strategy import PyBindStrategy
+from ._strategy import BackendUnavailable, Strategy, StrategyError
 
 logger = logging.getLogger(__name__)
 
@@ -22,12 +22,20 @@ def _init_default() -> Strategy:
     if allow_fallback_val is None:
         allow_fallback_val = os.getenv("EXPORT_LAYER_ALLOW_FALLBACK", "1")
     allow_fallback = allow_fallback_val != "0"
-    if env_choice:
-        candidates = [env_choice]
-    else:
-        candidates = ["pybind11", "ctypes"]
+    candidates = [env_choice] if env_choice else ["pybind11", "ctypes"]
 
     errors = []
+
+    def _try_strategy(factory: type[Strategy], *, log_prefix: str) -> Strategy | None:
+        try:
+            strategy = factory()
+        except BackendUnavailable as exc:
+            errors.append(exc)
+            logger.warning("mental1104_export_layer backend unavailable: %s", exc)
+            return None
+        logger.info(log_prefix, strategy.name)
+        return strategy
+
     for name in candidates:
         factory: type[Strategy]
         if name == "pybind11":
@@ -38,26 +46,20 @@ def _init_default() -> Strategy:
             errors.append(StrategyError(f"Unknown strategy name {name!r}"))
             continue
 
-        try:
-            _default_strategy = factory()
-            logger.info("Using mental1104_export_layer backend: %s", _default_strategy.name)
+        strategy = _try_strategy(factory, log_prefix="Using mental1104_export_layer backend: %s")
+        if strategy is not None:
+            _default_strategy = strategy
             return _default_strategy
-        except BackendUnavailable as exc:
-            errors.append(exc)
-            logger.warning("mental1104_export_layer backend unavailable: %s", exc)
-            if env_choice and not allow_fallback:
-                break
+        if env_choice and not allow_fallback:
+            break
 
     # Re-try with fallback order if explicit env choice failed and fallback is allowed.
     if env_choice and allow_fallback and not _default_strategy:
         for factory in (PyBindStrategy, CTypesStrategy):
-            try:
-                _default_strategy = factory()
-                logger.info("Using mental1104_export_layer backend (fallback): %s", _default_strategy.name)
+            strategy = _try_strategy(factory, log_prefix="Using mental1104_export_layer backend (fallback): %s")
+            if strategy is not None:
+                _default_strategy = strategy
                 return _default_strategy
-            except BackendUnavailable as exc:
-                errors.append(exc)
-                logger.warning("mental1104_export_layer backend unavailable: %s", exc)
 
     raise StrategyError("No usable mental1104_export_layer backend", errors)
 

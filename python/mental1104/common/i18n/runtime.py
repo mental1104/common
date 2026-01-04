@@ -45,27 +45,26 @@ class I18n:
         self.provider = provider
         self.default_locale = normalize_locale(default_locale, default_locale)
         self.supported = (
-            {normalize_locale(loc, self.default_locale) for loc in supported}
-            if supported
-            else None
+            {normalize_locale(loc, self.default_locale) for loc in supported} if supported else None
         )
+
+        def _load(locale: str, domain: str):
+            mo_bytes = self.provider.get_mo(locale, domain)
+            if not mo_bytes:
+                return gettext.NullTranslations()
+            try:
+                return gettext.GNUTranslations(BytesIO(mo_bytes))
+            except Exception:
+                # Keep runtime robust: if MO is corrupted, fall back to null
+                return gettext.NullTranslations()
+
+        self._load = functools.lru_cache(maxsize=128)(_load)
 
     def _pick_locale(self, locale: Optional[str]) -> str:
         normalized = normalize_locale(locale, self.default_locale)
         if self.supported is not None and normalized not in self.supported:
             return self.default_locale
         return normalized
-
-    @functools.lru_cache(maxsize=128)
-    def _load(self, locale: str, domain: str):
-        mo_bytes = self.provider.get_mo(locale, domain)
-        if not mo_bytes:
-            return gettext.NullTranslations()
-        try:
-            return gettext.GNUTranslations(BytesIO(mo_bytes))
-        except Exception:
-            # Keep runtime robust: if MO is corrupted, fall back to null
-            return gettext.NullTranslations()
 
     def t(self, msgid: str, *, domain: str = "messages", locale: Optional[str] = None) -> str:
         chosen = self._pick_locale(locale or get_locale())

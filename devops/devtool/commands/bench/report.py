@@ -1,11 +1,14 @@
 from __future__ import annotations
 
-from argparse import ArgumentParser
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from devtool.commands import register
 from devtool.commands.common import base_env
 from devtool.context import sh
+
+if TYPE_CHECKING:
+    from argparse import ArgumentParser
 
 
 @register("bench-report")

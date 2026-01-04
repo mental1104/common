@@ -3,17 +3,14 @@ import os
 import threading
 import time
 import uuid
-
 from functools import lru_cache
 
 import pytest
-
-psycopg2 = pytest.importorskip("psycopg2")
 from psycopg2 import errorcodes
-from sqlalchemy import Column, Integer, String, select, text, create_engine
-from sqlalchemy.exc import TimeoutError
-import mental1104.connector.postgres as connector_pg
+from sqlalchemy import Column, Integer, String, create_engine, select, text
+from sqlalchemy.exc import TimeoutError as SATimeoutError
 
+import mental1104.connector.postgres as connector_pg
 from mental1104.connector.postgres import (
     Base,
     SessionAwareMixin,
@@ -25,7 +22,7 @@ from mental1104.connector.postgres import (
     with_session,
 )
 
-
+psycopg2 = pytest.importorskip("psycopg2")
 logging.basicConfig()
 logging.getLogger("sqlalchemy.pool").setLevel(logging.DEBUG)
 logger = logging.getLogger(__name__)
@@ -35,7 +32,7 @@ MISSING_ENV = [var for var in REQUIRED_ENV_VARS if not os.getenv(var)]
 
 pytestmark = pytest.mark.skipif(
     bool(MISSING_ENV),
-    reason="PG* 环境变量未配置完整，跳过 PostgreSQL 连接器集成测试",
+    reason="PG* 环境变量未配置完整, 跳过 PostgreSQL 连接器集成测试",
 )
 
 
@@ -66,7 +63,7 @@ class AutoSessionEntity(SessionAwareMixin, Base):
     @classmethod
     def list_names(cls, session=None):
         """
-        以创建顺序返回所有 name 字段，验证查询类方法的注入效果。
+        以创建顺序返回所有 name 字段, 验证查询类方法的注入效果。
         """
         query = session.query(cls).order_by(cls.id)
         return [row.name for row in query.all()]
@@ -74,7 +71,7 @@ class AutoSessionEntity(SessionAwareMixin, Base):
     @staticmethod
     def count_rows(session=None):
         """
-        统计表内记录数量，覆盖 staticmethod 注入路径。
+        统计表内记录数量, 覆盖 staticmethod 注入路径。
         """
         return session.query(AutoSessionEntity).count()
 
@@ -236,7 +233,7 @@ def _wait_for(predicate, expected, timeout=5.0, interval=0.05):
         if last_value == expected:
             return last_value
         time.sleep(interval)
-    raise AssertionError(f"等待超时：期望 {expected}，实际 {last_value}")
+    raise AssertionError(f"等待超时：期望 {expected}, 实际 {last_value}")
 
 
 def _reset_pool(engine, config):
@@ -248,12 +245,12 @@ def _reset_pool(engine, config):
 
 def test_open_session_reuses_single_connection(engine, db_config):
     """
-    【场景背景】验证 open_session() 作为上层事务边界时，整个调用栈应复用同一
-    个 Session/连接，以免在 DAO 间来回穿 session。
-    【步骤输入】在 with open_session(): 块内多次调用 insert_probe / load_probe，
+    【场景背景】验证 open_session() 作为上层事务边界时, 整个调用栈应复用同一
+    个 Session/连接, 以免在 DAO 间来回穿 session。
+    【步骤输入】在 with open_session(): 块内多次调用 insert_probe / load_probe,
     并重复调用 get_session() 获取当前 Session。
-    【期望输出】连接池 checkedout 上升 1 表示只借出一个连接，两个 get_session()
-    返回完全相同的对象且底层 DBAPI connection 也一致，退出上下文后连接数恢复。
+    【期望输出】连接池 checkedout 上升 1 表示只借出一个连接, 两个 get_session()
+    返回完全相同的对象且底层 DBAPI connection 也一致, 退出上下文后连接数恢复。
     """
     _reset_pool(engine, db_config)
 
@@ -281,12 +278,12 @@ def test_open_session_reuses_single_connection(engine, db_config):
 
 def test_pool_pre_ping_recovers_after_backend_killed(engine, db_config):
     """
-    【场景背景】pool_pre_ping=True 时应在连接被服务器杀掉后自动检测并置换，
+    【场景背景】pool_pre_ping=True 时应在连接被服务器杀掉后自动检测并置换,
     这是保障长连接稳定性的关键特性。
-    【步骤输入】第一次 open_session() 查询 pg_backend_pid() 记住连接，随后
-    通过 pg_terminate_backend 主动杀死该 PID，再次进入 open_session()。
-    【期望输出】第二次获取的会话 PID 应与旧值不同，说明连接被重建；并且
-    insert_probe/load_probe 还能成功执行，证明业务层无需额外重试即可恢复。
+    【步骤输入】第一次 open_session() 查询 pg_backend_pid() 记住连接, 随后
+    通过 pg_terminate_backend 主动杀死该 PID, 再次进入 open_session()。
+    【期望输出】第二次获取的会话 PID 应与旧值不同, 说明连接被重建; 并且
+    insert_probe/load_probe 还能成功执行, 证明业务层无需额外重试即可恢复。
     """
     if not _can_terminate_backends(db_config):
         pytest.skip("当前数据库用户没有 pg_terminate_backend 权限")
@@ -316,12 +313,12 @@ def test_pool_pre_ping_recovers_after_backend_killed(engine, db_config):
 
 def test_lazy_session_requires_manual_close(engine, db_config):
     """
-    【场景背景】当调用方绕过 open_session() 而直接依赖 get_session() 懒加载时，
-    需要手动管理事务提交与连接释放，否则连接池可能被耗尽。
-    【步骤输入】直接调用 get_session() 执行查询与插入，但不 commit；另开
-    open_session() 检查数据库视图，并在最后显示 close_session()。
-    【期望输出】连接池 checkedout 增加 1 且未经提交的新行对其他 Session 不可见，
-    调用 close_session() 后连接数降回基线，证明资源释放仍需调用方负责。
+    【场景背景】当调用方绕过 open_session() 而直接依赖 get_session() 懒加载时,
+    需要手动管理事务提交与连接释放, 否则连接池可能被耗尽。
+    【步骤输入】直接调用 get_session() 执行查询与插入, 但不 commit; 另开
+    open_session() 检查数据库视图, 并在最后显示 close_session()。
+    【期望输出】连接池 checkedout 增加 1 且未经提交的新行对其他 Session 不可见,
+    调用 close_session() 后连接数降回基线, 证明资源释放仍需调用方负责。
     """
     _reset_pool(engine, db_config)
 
@@ -353,10 +350,10 @@ def test_lazy_session_requires_manual_close(engine, db_config):
 def test_session_aware_mixin_auto_wrap(engine, db_config):
     """
     【场景背景】SessionAwareMixin 应自动为声明 session 参数的 classmethod/staticmethod
-    注入 with_session，消除 DAO 层逐个装饰的需求。
-    【步骤输入】定义 AutoSessionEntity 继承 mixin，在 open_session() 中调用 create、
-    list_names、count_rows，整个过程不显式传 session。
-    【期望输出】成功插入两条记录，list_names 返回插入顺序，count_rows 返回数量，
+    注入 with_session, 消除 DAO 层逐个装饰的需求。
+    【步骤输入】定义 AutoSessionEntity 继承 mixin, 在 open_session() 中调用 create、
+    list_names、count_rows, 整个过程不显式传 session。
+    【期望输出】成功插入两条记录, list_names 返回插入顺序, count_rows 返回数量,
     证明 session 被自动注入。
     """
     _reset_pool(engine, db_config)
@@ -378,12 +375,12 @@ def test_session_aware_mixin_auto_wrap(engine, db_config):
 
 def test_concurrent_sessions_are_isolated_and_pool_reused(engine, db_config):
     """
-    【场景背景】多线程/协程并发获取 open_session() 时，连接池应该
-    为每个上下文分配独立 Session/连接，但仍然复用池内连接而不是频繁创建。
-    【步骤输入】启动多个线程并行调用 open_session()，各自插入一条 SessionProbe
+    【场景背景】多线程/协程并发获取 open_session() 时, 连接池应该
+    为每个上下文分配独立 Session/连接, 但仍然复用池内连接而不是频繁创建。
+    【步骤输入】启动多个线程并行调用 open_session(), 各自插入一条 SessionProbe
     记录并读取 pg_backend_pid()。
-    【期望输出】每个线程观察到不同的 Session 对象，pid 可能复用但数量不会无限增长；
-    所有数据都成功插入，证明 Session 隔离且连接池可复用。
+    【期望输出】每个线程观察到不同的 Session 对象, pid 可能复用但数量不会无限增长;
+    所有数据都成功插入, 证明 Session 隔离且连接池可复用。
     """
     _reset_pool(engine, db_config)
 
@@ -427,17 +424,17 @@ def test_concurrent_sessions_are_isolated_and_pool_reused(engine, db_config):
 
 def test_pool_timeout_when_concurrency_exceeds_capacity(engine, db_config):
     """
-    【场景背景】连接池默认 pool_size=20、max_overflow=10，当并发请求超过 30 条
-    时，SQLAlchemy 会在等待 pool_timeout（默认 30s）后抛出 QueuePoolLimitError。
-    【步骤输入】同时启动大量线程（例如 40 个）竞争连接，故意让部分线程持有连接
-    较长时间，从而触发池容量上限。
-    【期望输出】有线程抛出 QueuePoolLimitError，证明池在资源耗尽时会阻塞/超时；
+    【场景背景】连接池默认 pool_size=20、max_overflow=10, 当并发请求超过 30 条
+    时, SQLAlchemy 会在等待 pool_timeout（默认 30s）后抛出 QueuePoolLimitError。
+    【步骤输入】同时启动大量线程（例如 40 个）竞争连接, 故意让部分线程持有连接
+    较长时间, 从而触发池容量上限。
+    【期望输出】有线程抛出 QueuePoolLimitError, 证明池在资源耗尽时会阻塞/超时;
     并在测试结束后归还连接。
     """
     _reset_pool(engine, db_config)
 
     original_engine = engine
-    # 使用一个独立的 engine，限制 pool_size=1, max_overflow=0, timeout=0.1s
+    # 使用一个独立的 engine, 限制 pool_size=1, max_overflow=0, timeout=0.1s
     limited_engine = create_engine(
         original_engine.url.render_as_string(hide_password=False),
         pool_pre_ping=True,
@@ -488,8 +485,8 @@ def test_pool_timeout_when_concurrency_exceeds_capacity(engine, db_config):
         limited_engine.dispose()
         _reset_pool(original_engine, db_config)
 
-    assert any(isinstance(e, TimeoutError) or "QueuePool limit" in str(e) for e in errors), (
-        "预期QueuePoolLimitError未触发，可能需要调整线程数或等待时间"
+    assert any(isinstance(e, SATimeoutError) or "QueuePool limit" in str(e) for e in errors), (
+        "预期QueuePoolLimitError未触发, 可能需要调整线程数或等待时间"
     )
 
     _wait_for(lambda: engine.pool.checkedout(), 0)

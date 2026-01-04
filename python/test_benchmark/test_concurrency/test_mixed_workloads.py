@@ -1,8 +1,8 @@
 """Benchmarks combining I/O waits with CPU work."""
+
 from __future__ import annotations
 
 import pytest
-
 from test_benchmark.test_concurrency.common import (
     MIXED_CASES,
     MIXED_IDS,

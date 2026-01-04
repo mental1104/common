@@ -1,17 +1,16 @@
-from functools import wraps
 import json
-from mental1104.utils.parse_json import load_json
+from functools import wraps
 
 
 def iterator_json(func):
     """
-    装饰器，用于处理 JSON 文件，将其内容解析为 Python 对象，并传递给被装饰函数。
-    若输入文件路径是一个目录，则会假定这个目录下的所有文件都是合法的json，递归式地处理每个文件。
-    如果解析失败或文件不存在，则返回 None 作为默认值。
+    装饰器, 用于处理 JSON 文件, 将其内容解析为 Python 对象, 并传递给被装饰函数。
+    若输入文件路径是一个目录, 则会假定这个目录下的所有文件都是合法的json, 递归式地处理每个文件。
+    如果解析失败或文件不存在, 则返回 None 作为默认值。
     Args:
-        func (function): 被装饰的函数，接受一个参数（解析后的 JSON 数据）。
+        func (function): 被装饰的函数, 接受一个参数（解析后的 JSON 数据）。
     Returns:
-        function: 包装后的函数，接受一个文件路径参数。
+        function: 包装后的函数, 接受一个文件路径参数。
     Raises:
         json.JSONDecodeError: 如果 JSON 文件解析失败。
         FileNotFoundError: 如果指定的文件不存在。
@@ -26,10 +25,11 @@ def iterator_json(func):
         # 或者处理目录下的所有 JSON 文件
         process_json('path/to/directory')
     """
+
     @wraps(func)
     def wrapper(file_path):
         try:
-            with open(file_path, 'r', encoding='utf-8') as f:
+            with open(file_path, encoding="utf-8") as f:
                 data = json.load(f)  # 解析 JSON 文件
             return func(data)  # 将解析后的数据传递给被装饰函数
         except FileNotFoundError:

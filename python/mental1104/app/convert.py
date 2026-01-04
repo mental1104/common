@@ -1,10 +1,12 @@
-# -*- coding: utf-8 -*-
 from __future__ import annotations
-import io
-from typing import Any
 
-from mental1104.utils.parse_json import load_json, dump_json
-from mental1104.utils.parse_yaml import parse_yaml, dump_yaml
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    import io
+
+from mental1104.utils.parse_json import dump_json, load_json
+from mental1104.utils.parse_yaml import dump_yaml, parse_yaml
 
 
 def json_to_yaml(
@@ -18,7 +20,7 @@ def json_to_yaml(
 ) -> str | None:
     """
     将 JSON（字符串或文件流）转换为 YAML。
-    约定：失败一律返回 None，并打印原因；成功时返回字符串或写入 fp 后返回 None。
+    约定：失败一律返回 None, 并打印原因; 成功时返回字符串或写入 fp 后返回 None。
     """
     # 解析阶段
     try:
@@ -52,7 +54,7 @@ def yaml_to_json(
 ) -> str | None:
     """
     将 YAML（字符串或文件流）转换为 JSON。
-    约定：失败一律返回 None，并打印原因；成功时返回字符串或写入 fp 后返回 None。
+    约定：失败一律返回 None, 并打印原因; 成功时返回字符串或写入 fp 后返回 None。
     """
     # 解析阶段
     try:

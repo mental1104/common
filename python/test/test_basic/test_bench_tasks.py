@@ -46,9 +46,9 @@ class TestCpuBoundTask:
 
     def test_spin_computation(self):
         """
-        【场景背景】spin(n) 用于模拟 CPU 计算，应返回平方和。
+        【场景背景】spin(n) 用于模拟 CPU 计算, 应返回平方和。
         【步骤输入】n=3 与 n=0。
-        【期望输出】分别为 5 与 0，与数学推导一致。
+        【期望输出】分别为 5 与 0, 与数学推导一致。
         """
         # 手算可验证的序列：0^2 + 1^2 + 2^2 = 5
         assert CpuBoundTask.spin(3) == 5
@@ -69,7 +69,7 @@ class TestDatasetFactory:
         """
         【场景背景】DatasetFactory 应生成结构可靠的 JSON 数据集。
         【步骤输入】n_objects=5, payload_repeat=2。
-        【期望输出】长度为 5，id 连续，payload 有旋转差异，嵌套字段符合约束。
+        【期望输出】长度为 5, id 连续, payload 有旋转差异, 嵌套字段符合约束。
         """
         dataset = DatasetFactory.build_json_dataset(n_objects=5, payload_repeat=2)
         assert len(dataset) == 5

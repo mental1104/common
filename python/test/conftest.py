@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 
 import pathlib
 import sys
 import types
 
 import pytest
+
+from mental1104.common.i18n.tools.compile import po_text_to_mo_bytes
 
 # Ensure commonly used plugins are loaded for all tests.
 pytest_plugins = ("pytest_mock",)
@@ -33,8 +34,6 @@ if "pypdf" not in sys.modules:
     stub.PdfReader = _StubReader
     stub.PdfWriter = _StubWriter
     sys.modules["pypdf"] = stub
-
-from mental1104.common.i18n.tools.compile import po_text_to_mo_bytes
 
 
 @pytest.fixture

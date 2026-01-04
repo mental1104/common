@@ -6,8 +6,6 @@ import shlex
 import subprocess
 from pathlib import Path
 from typing import Mapping, Sequence
-from typing import Mapping
-
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -44,10 +42,7 @@ def sh(cmd: str | Sequence[str], cwd: Path | None = None, env: Mapping[str, str]
         display = " ".join(shlex.quote(str(x)) for x in args)
     if _should_echo_cmd(env):
         print(f"[dev][DEBUG] ({workdir})$ {display}")
-    if env:
-        run_env = {k: str(v) for k, v in env.items()}
-    else:
-        run_env = os.environ.copy()
+    run_env = {k: str(v) for k, v in env.items()} if env else os.environ.copy()
     subprocess.run(args, cwd=str(workdir), check=True, env=run_env)
 
 

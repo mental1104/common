@@ -1,10 +1,13 @@
 from __future__ import annotations
 
-from argparse import ArgumentParser
+from typing import TYPE_CHECKING
 
 from devtool.commands import register
 from devtool.commands.common import base_env
 from devtool.commands.ops import cpp as cpp_ops
+
+if TYPE_CHECKING:
+    from argparse import ArgumentParser
 
 
 @register("test-redispp")

@@ -1,14 +1,15 @@
 from __future__ import annotations
 
+import re
 import shlex
 import shutil
 import subprocess
-import re
-from pathlib import Path
-from typing import Iterable, Mapping, Optional
+from typing import TYPE_CHECKING, Iterable, Mapping, Optional
 
 from devtool.commands.common import ROOT, run
 
+if TYPE_CHECKING:
+    from pathlib import Path
 
 _CONTAINER_NAME_RE = re.compile(r"container_name:\s*(.+)", re.IGNORECASE)
 

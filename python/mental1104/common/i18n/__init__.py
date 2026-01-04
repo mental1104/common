@@ -6,21 +6,21 @@ compilation live in the tools layer for CI/publishing.
 """
 
 from .context import activate, get_locale, locale_context, reset_locale
-from .runtime import I18n, normalize_locale
-from .provider import FileMoProvider, I18nResourceProvider
 from .json_localize import localize_json
 from .placeholder import compare_placeholders, extract_placeholders
+from .provider import FileMoProvider, I18nResourceProvider
+from .runtime import I18n, normalize_locale
 
 __all__ = [
-    "activate",
-    "get_locale",
-    "locale_context",
-    "reset_locale",
-    "I18n",
-    "normalize_locale",
     "FileMoProvider",
+    "I18n",
     "I18nResourceProvider",
-    "localize_json",
+    "activate",
     "compare_placeholders",
     "extract_placeholders",
+    "get_locale",
+    "locale_context",
+    "localize_json",
+    "normalize_locale",
+    "reset_locale",
 ]

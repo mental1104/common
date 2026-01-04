@@ -11,14 +11,11 @@ from pathlib import Path
 from typing import Iterable
 
 DEVOPS_DIR = Path(__file__).resolve().parents[1]
-if str(DEVOPS_DIR) not in sys.path:
-    sys.path.insert(0, str(DEVOPS_DIR))
-
 DEVTOOL_DIR = Path(__file__).resolve().parent
 
-from devtool.context import ROOT as CTX_ROOT
-
-from devtool.commands import CONFIGURATORS
+def _ensure_devops_on_path() -> None:
+    if str(DEVOPS_DIR) not in sys.path:
+        sys.path.insert(0, str(DEVOPS_DIR))
 
 
 _SKIP_FILES = {
@@ -36,6 +33,9 @@ def _format_cmd(cmd: object) -> str:
 
 
 def _subprocess_location(tb) -> str:
+    _ensure_devops_on_path()
+    from devtool.context import ROOT as CTX_ROOT
+
     frames = traceback.extract_tb(tb) if tb else []
     chain: list[str] = []
     for frame in frames:
@@ -54,6 +54,7 @@ def _subprocess_location(tb) -> str:
 
 
 def _import_command_modules() -> None:
+    _ensure_devops_on_path()
     pkg = importlib.import_module("devtool.commands")
     prefix = pkg.__name__ + "."
     for module in pkgutil.walk_packages(pkg.__path__, prefix):  # type: ignore[attr-defined]
@@ -64,11 +65,14 @@ def _import_command_modules() -> None:
 
 
 def _build_parser() -> argparse.ArgumentParser:
+    _ensure_devops_on_path()
+    from devtool.commands import CONFIGURATORS
+
     parser = argparse.ArgumentParser(description="Developer utilities entrypoint.")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     _import_command_modules()
-    for name, configurator in CONFIGURATORS.items():
+    for configurator in CONFIGURATORS.values():
         configurator(subparsers)
     return parser
 
