@@ -1,4 +1,5 @@
 """Compatibility shim exposing timed helpers at legacy path."""
+
 from __future__ import annotations
 
 from .utils import timed as _timed_module

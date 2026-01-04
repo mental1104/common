@@ -11,9 +11,23 @@
 #include <mutex>
 #include <queue>
 #include <thread>
+#include <type_traits>
 #include <vector>
 
 namespace mental1104 {
+
+namespace detail {
+
+#if (defined(_MSVC_LANG) && _MSVC_LANG >= 201703L) || \
+    (!defined(_MSVC_LANG) && __cplusplus >= 201703L)
+template <typename F, typename... Args>
+using threadpool_invoke_result_t = std::invoke_result_t<F, Args...>;
+#else
+template <typename F, typename... Args>
+using threadpool_invoke_result_t = typename std::result_of<F(Args...)>::type;
+#endif
+
+} // namespace detail
 
 // ===================== 基本 sleep 工具 =====================
 
@@ -37,7 +51,9 @@ public:
 
   template <typename F, typename... Args>
   auto submit(F &&f,
-              Args &&...args) -> std::future<std::invoke_result_t<F, Args...>>;
+              Args &&...args)
+      -> std::future<
+          mental1104::detail::threadpool_invoke_result_t<F, Args...>>;
 
 private:
   std::vector<std::thread> workers;
@@ -51,8 +67,8 @@ private:
 // 模板实现必须留在头文件
 template <typename F, typename... Args>
 auto ThreadPool::submit(F &&f, Args &&...args)
-    -> std::future<std::invoke_result_t<F, Args...>> {
-  using ReturnType = std::invoke_result_t<F, Args...>;
+    -> std::future<mental1104::detail::threadpool_invoke_result_t<F, Args...>> {
+  using ReturnType = mental1104::detail::threadpool_invoke_result_t<F, Args...>;
 
   auto task = std::make_shared<std::packaged_task<ReturnType()>>(
       std::bind(std::forward<F>(f), std::forward<Args>(args)...));

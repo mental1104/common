@@ -1,0 +1,256 @@
+name: Python
+
+on:
+  push:
+    paths:
+      - "python/**"
+      - "devops/**"
+      - ".github/workflows/python.yml"
+  pull_request:
+    paths:
+      - "python/**"
+      - "devops/**"
+      - ".github/workflows/python.yml"
+  workflow_dispatch:
+    inputs:
+      enable_python_314:
+        description: "Run Python 3.14 jobs (pre-release)"
+        type: boolean
+        default: true
+      verbose_logs:
+        description: "Enable verbose test output"
+        type: boolean
+        default: true
+
+env:
+  PYTEST_ADDOPTS: ${{ (vars.CI_VERBOSE_LOGS == 'false' || (github.event_name == 'workflow_dispatch' && (github.event.inputs.verbose_logs == false || github.event.inputs.verbose_logs == 'false'))) && '' || '-s -vv' }}
+  PYTHONUNBUFFERED: ${{ (vars.CI_VERBOSE_LOGS == 'false' || (github.event_name == 'workflow_dispatch' && (github.event.inputs.verbose_logs == false || github.event.inputs.verbose_logs == 'false'))) && '' || '1' }}
+
+jobs:
+  linux:
+    name: Linux / Python ${{ matrix.python }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson((github.event.inputs.enable_python_314 == false || github.event.inputs.enable_python_314 == 'false' || vars.CI_ENABLE_PYTHON_314 == 'false') && '{"include":[{"python":"3.8","python_spec":"3.8"},{"python":"3.9","python_spec":"3.9"},{"python":"3.10","python_spec":"3.10"},{"python":"3.11","python_spec":"3.11"},{"python":"3.13","python_spec":"3.13"}]}' || '{"include":[{"python":"3.8","python_spec":"3.8"},{"python":"3.9","python_spec":"3.9"},{"python":"3.10","python_spec":"3.10"},{"python":"3.11","python_spec":"3.11"},{"python":"3.13","python_spec":"3.13"},{"python":"3.14","python_spec":"3.14-dev","prerelease":true}]}') }}
+    env:
+      PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/devops
+    defaults:
+      run:
+        shell: bash
+        working-directory: ${{ github.workspace }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: false
+          fetch-depth: 0
+      - name: Init submodules (sparse Boost)
+        run: |
+          python3 - <<'PY'
+          import sys
+          from devtool.commands.common import base_env
+          from devtool.commands.ops import cpp as cpp_ops
+          sys.exit(cpp_ops.git_submodules(base_env()) or 0)
+          PY
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python_spec }}
+          allow-prereleases: ${{ matrix.prerelease == true }}
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: pip-${{ runner.os }}-${{ hashFiles('python/requirements.txt') }}
+          restore-keys: |
+            pip-${{ runner.os }}-
+      - name: Setup Python
+        run: ./dev setup-python
+      - name: Build Python
+        run: ./dev build-python
+      - name: Coverage Python
+        run: ./dev coverage-python
+
+  linux-integration:
+    name: Linux / Python 3.12 / coverage
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: app
+        ports:
+          - "5432:5432"
+        options: >-
+          --health-cmd="pg_isready -U test"
+          --health-interval=5s --health-timeout=5s --health-retries=5
+      redis:
+        image: redis/redis-stack-server:7.2.0-v7
+        ports:
+          - "6379:6379"
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=5s --health-timeout=3s --health-retries=5
+    env:
+      PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/devops
+      DATABASE_URL: postgresql://test:test@localhost:5432/app
+      REDIS_URL: redis://localhost:6379/0
+      PGUSER: test
+      PGPASSWORD: test
+      PGDATABASE: app
+      PGHOST: localhost
+      PGPORT: "5432"
+      REDIS_HOST: localhost
+      REDIS_PORT: "6379"
+      PULSAR_HOST: localhost
+      PULSAR_BROKER_PORT: "6650"
+      PULSAR_ADMIN_PORT: "8080"
+      PULSAR_TOKEN: ""
+      PULSAR_SCHEMA_PATH: "/tmp/pulsar/schema"
+      PULSAR_DATA_PATH: "/tmp/pulsar/data"
+    defaults:
+      run:
+        shell: bash
+        working-directory: ${{ github.workspace }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: false
+          fetch-depth: 0
+      - name: Init submodules (sparse Boost)
+        run: |
+          python3 - <<'PY'
+          import sys
+          from devtool.commands.common import base_env
+          from devtool.commands.ops import cpp as cpp_ops
+          sys.exit(cpp_ops.git_submodules(base_env()) or 0)
+          PY
+      - name: Start Pulsar (standalone -nss)
+        run: |
+          docker rm -f pulsar || true
+          docker run -d --name pulsar \
+            -p ${PULSAR_BROKER_PORT}:${PULSAR_BROKER_PORT} -p ${PULSAR_ADMIN_PORT}:${PULSAR_ADMIN_PORT} \
+            apachepulsar/pulsar:3.2.0 \
+            bin/pulsar standalone -nss
+      - name: Wait for postgres/redis/pulsar
+        run: |
+          for i in {1..40}; do
+            (echo > /dev/tcp/127.0.0.1/${PGPORT}) && (echo > /dev/tcp/127.0.0.1/${REDIS_PORT}) && (echo > /dev/tcp/127.0.0.1/${PULSAR_ADMIN_PORT}) && exit 0
+            sleep 2
+          done
+          echo "services not ready" >&2
+          exit 1
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: pip-${{ runner.os }}-${{ hashFiles('python/requirements.txt') }}
+          restore-keys: |
+            pip-${{ runner.os }}-
+      - name: Setup Python
+        run: ./dev setup-python
+      - name: Format Python
+        run: ./dev fmt-python
+      - name: Build Python
+        run: ./dev build-python
+      - name: Coverage Python
+        run: ./dev coverage-python
+      - name: Vet Python
+        run: ./dev vet-python
+      - name: Guard Python
+        run: ./dev guard-python
+
+  macos:
+    name: macOS / Python ${{ matrix.python }}
+    runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson((github.event.inputs.enable_python_314 == false || github.event.inputs.enable_python_314 == 'false' || vars.CI_ENABLE_PYTHON_314 == 'false') && '{"include":[{"python":"3.8","python_spec":"3.8"},{"python":"3.9","python_spec":"3.9"},{"python":"3.10","python_spec":"3.10"},{"python":"3.11","python_spec":"3.11"},{"python":"3.12","python_spec":"3.12"},{"python":"3.13","python_spec":"3.13"}]}' || '{"include":[{"python":"3.8","python_spec":"3.8"},{"python":"3.9","python_spec":"3.9"},{"python":"3.10","python_spec":"3.10"},{"python":"3.11","python_spec":"3.11"},{"python":"3.12","python_spec":"3.12"},{"python":"3.13","python_spec":"3.13"},{"python":"3.14","python_spec":"3.14-dev","prerelease":true}]}') }}
+    env:
+      PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/devops
+    defaults:
+      run:
+        shell: bash
+        working-directory: ${{ github.workspace }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: false
+          fetch-depth: 0
+      - name: Init submodules (sparse Boost)
+        run: |
+          python3 - <<'PY'
+          import sys
+          from devtool.commands.common import base_env
+          from devtool.commands.ops import cpp as cpp_ops
+          sys.exit(cpp_ops.git_submodules(base_env()) or 0)
+          PY
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python_spec }}
+          allow-prereleases: ${{ matrix.prerelease == true }}
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/Library/Caches/pip
+          key: pip-${{ runner.os }}-${{ hashFiles('python/requirements.txt') }}
+          restore-keys: |
+            pip-${{ runner.os }}-
+      - name: Setup Python
+        run: ./dev setup-python
+      - name: Build Python
+        run: ./dev build-python
+      - name: Coverage Python
+        run: ./dev coverage-python
+
+  windows:
+    name: Windows / Python ${{ matrix.python }}
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson((github.event.inputs.enable_python_314 == false || github.event.inputs.enable_python_314 == 'false' || vars.CI_ENABLE_PYTHON_314 == 'false') && '{"include":[{"python":"3.8","python_spec":"3.8"},{"python":"3.9","python_spec":"3.9"},{"python":"3.10","python_spec":"3.10"},{"python":"3.11","python_spec":"3.11"},{"python":"3.12","python_spec":"3.12"},{"python":"3.13","python_spec":"3.13"}]}' || '{"include":[{"python":"3.8","python_spec":"3.8"},{"python":"3.9","python_spec":"3.9"},{"python":"3.10","python_spec":"3.10"},{"python":"3.11","python_spec":"3.11"},{"python":"3.12","python_spec":"3.12"},{"python":"3.13","python_spec":"3.13"},{"python":"3.14","python_spec":"3.14-dev","prerelease":true}]}') }}
+    env:
+      PYTHON: python
+      PYTHONPATH: ${{ github.workspace }};${{ github.workspace }}/devops
+      PYTHONUTF8: "1"
+      PYTHONIOENCODING: "utf-8"
+    defaults:
+      run:
+        shell: pwsh
+        working-directory: ${{ github.workspace }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: false
+          fetch-depth: 0
+      - name: Init submodules (sparse Boost)
+        run: python -c "import sys;from devtool.commands.common import base_env;from devtool.commands.ops import cpp as cpp_ops;sys.exit(cpp_ops.git_submodules(base_env()) or 0)"
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python_spec }}
+          allow-prereleases: ${{ matrix.prerelease == true }}
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~\AppData\Local\pip\Cache
+          key: pip-${{ runner.os }}-${{ hashFiles('python/requirements.txt') }}
+          restore-keys: |
+            pip-${{ runner.os }}-
+      - name: Setup Python
+        run: python -m devtool.cli setup-python
+      - name: Build Python
+        run: python -m devtool.cli build-python
+      - name: Coverage Python
+        run: python -m devtool.cli coverage-python

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
+
+import contextlib
 
 import redis
 
@@ -10,6 +11,7 @@ import redis
 # Redis 布隆过滤器封装
 # -------------------------------
 
+
 class RedisBloom:
     """
     负责：
@@ -18,8 +20,8 @@ class RedisBloom:
       - 提供 add / exists 接口
 
     注意：
-      - 如果服务器没有 Bloom 模块，enabled=False，
-        exists() 退化为“总是返回 True”（不影响正确性，只影响性能）。
+      - 如果服务器没有 Bloom 模块, enabled=False,
+        exists() 退化为“总是返回 True”（不影响正确性, 只影响性能）。
     """
 
     def __init__(
@@ -40,7 +42,7 @@ class RedisBloom:
         try:
             modules = self.client.execute_command("MODULE", "LIST")
         except redis.RedisError:
-            # 连接失败/权限问题等，直接认为不可用
+            # 连接失败/权限问题等, 直接认为不可用
             return False
 
         has_bf = False
@@ -56,7 +58,7 @@ class RedisBloom:
 
         # 2. 初始化布隆过滤器 key（BF.RESERVE）
         try:
-            # 如果 key 已存在，这里会抛 ResponseError，可以忽略
+            # 如果 key 已存在, 这里会抛 ResponseError, 可以忽略
             self.client.execute_command(
                 "BF.RESERVE",
                 self.filter_key,
@@ -64,7 +66,7 @@ class RedisBloom:
                 self.capacity,
             )
         except redis.ResponseError as e:
-            # 常见情况：key 已存在，直接忽略
+            # 常见情况：key 已存在, 直接忽略
             msg = str(e).lower()
             if "item exists" in msg or "exists" in msg:
                 pass
@@ -79,19 +81,17 @@ class RedisBloom:
     def add(self, item: str) -> None:
         if not self.enabled:
             return
-        # 失败不会影响主逻辑，这里简单忽略异常即可
-        try:
+        # 失败不会影响主逻辑, 这里简单忽略异常即可
+        with contextlib.suppress(redis.RedisError):
             self.client.execute_command("BF.ADD", self.filter_key, item)
-        except redis.RedisError:
-            pass
 
     def exists(self, item: str) -> bool:
         """
         返回：
-          - True：可能存在，需要访问 Redis GET 验证
-          - False：肯定不存在，可以直接认为 miss
+          - True：可能存在, 需要访问 Redis GET 验证
+          - False：肯定不存在, 可以直接认为 miss
 
-        当 Bloom 不可用时，返回 True，等价于“不做任何优化”。
+        当 Bloom 不可用时, 返回 True, 等价于“不做任何优化”。
         """
         if not self.enabled:
             return True
@@ -100,5 +100,5 @@ class RedisBloom:
             res = self.client.execute_command("BF.EXISTS", self.filter_key, item)
             return bool(res)
         except redis.RedisError:
-            # 出问题时直接退化为“总是 True”，避免误删有效 key
+            # 出问题时直接退化为“总是 True”, 避免误删有效 key
             return True

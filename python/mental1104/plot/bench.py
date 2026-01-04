@@ -1,10 +1,12 @@
 """Benchmark plotting helpers with typed result suites."""
+
 from __future__ import annotations
 
 import json
 import math
 import re
-from abc import ABC, abstractmethod
+import sys
+from abc import ABC
 from collections import defaultdict
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -14,7 +16,7 @@ import matplotlib.pyplot as plt
 
 
 class BenchTestType(str):
-    """基准框架类型常量，避免各处硬编码字符串。"""
+    """基准框架类型常量, 避免各处硬编码字符串。"""
 
     PYTEST_BENCHMARK = "pytest-benchmark"
     GOOGLE_BENCHMARK = "google-benchmark"
@@ -29,7 +31,10 @@ _TIME_UNIT_TO_SECONDS = {
 }
 
 
-@dataclass(slots=True)
+_DATACLASS_KW = {"slots": True} if sys.version_info >= (3, 10) else {}
+
+
+@dataclass(**_DATACLASS_KW)
 class BenchmarkRecord:
     label: str
     metrics: dict[str, float]
@@ -37,7 +42,8 @@ class BenchmarkRecord:
 
 
 class BenchmarkSuite(ABC):
-    """统一的基准数据容器，负责暴露 records/metrics 等基础能力。"""
+    """统一的基准数据容器, 负责暴露 records/metrics 等基础能力。"""
+
     test_type: BenchTestType
 
     def __init__(self, records: Sequence[BenchmarkRecord]):
@@ -55,7 +61,7 @@ class BenchmarkSuite(ABC):
 
 
 class PytestBenchmarkSuite(BenchmarkSuite):
-    """针对 pytest-benchmark 的解析逻辑，将统计字段映射到统一指标。"""
+    """针对 pytest-benchmark 的解析逻辑, 将统计字段映射到统一指标。"""
 
     test_type = BenchTestType.PYTEST_BENCHMARK
 
@@ -65,10 +71,10 @@ class PytestBenchmarkSuite(BenchmarkSuite):
         for row in payload.get("benchmarks", []):
             stats = row.get("stats", {})
             metrics: dict[str, float] = {}
-            for field in ("min", "max", "mean", "median", "stddev", "iqr"):
-                value = stats.get(field)
+            for stat_field in ("min", "max", "mean", "median", "stddev", "iqr"):
+                value = stats.get(stat_field)
                 if value is not None:
-                    metrics[f"{field}_ms"] = float(value) * 1000.0
+                    metrics[f"{stat_field}_ms"] = float(value) * 1000.0
             if "ops" in stats:
                 metrics["ops"] = float(stats["ops"])
             for fallback in ("median_ms", "mean_ms", "min_ms"):
@@ -82,17 +88,21 @@ class PytestBenchmarkSuite(BenchmarkSuite):
                 "iterations": stats.get("iterations"),
                 "case": row.get("fullname") or row.get("name"),
             }
-            records.append(BenchmarkRecord(label=meta["case"] or "unknown", metrics=metrics, meta=meta))
+            records.append(
+                BenchmarkRecord(label=meta["case"] or "unknown", metrics=metrics, meta=meta)
+            )
         return cls(records)
 
 
 class GoogleBenchmarkSuite(BenchmarkSuite):
-    """针对 Google Benchmark JSON 的解析器，自动拆解名称中的参数/统计信息。"""
+    """针对 Google Benchmark JSON 的解析器, 自动拆解名称中的参数/统计信息。"""
 
     test_type = BenchTestType.GOOGLE_BENCHMARK
 
     @classmethod
-    def from_payload(cls, payload: Any, *, include_aggregates: bool = False) -> GoogleBenchmarkSuite:
+    def from_payload(
+        cls, payload: Any, *, include_aggregates: bool = False
+    ) -> GoogleBenchmarkSuite:
         records: list[BenchmarkRecord] = []
         for row in payload.get("benchmarks", []):
             if not include_aggregates and row.get("aggregate_name"):
@@ -119,7 +129,9 @@ class GoogleBenchmarkSuite(BenchmarkSuite):
 
     @staticmethod
     def _parse_name(name: str) -> dict[str, Any]:
-        prefix, rest = (name.split("/", 1) + [""])[:2]
+        parts = name.split("/", 1)
+        prefix = parts[0]
+        rest = parts[1] if len(parts) > 1 else ""
         stat = None
         arg = rest
         if "_" in rest:
@@ -141,7 +153,7 @@ class GoogleBenchmarkSuite(BenchmarkSuite):
         }
 
 
-# 基于类型的工厂映射，供 CLI / plotter 统一构造 suite
+# 基于类型的工厂映射, 供 CLI / plotter 统一构造 suite
 SUITE_FACTORIES: dict[BenchTestType, Callable[..., BenchmarkSuite]] = {
     BenchTestType.PYTEST_BENCHMARK: PytestBenchmarkSuite.from_payload,
     BenchTestType.GOOGLE_BENCHMARK: GoogleBenchmarkSuite.from_payload,
@@ -155,7 +167,7 @@ def load_benchmark_suite(
     result_data: Any | None = None,
     include_aggregates: bool = False,
 ) -> BenchmarkSuite:
-    """从文件或内存对象加载 suite，外部调用只需指定类型即可。"""
+    """从文件或内存对象加载 suite, 外部调用只需指定类型即可。"""
     if result_data is None and result_path is None:
         raise ValueError("需要提供 result_data 或 result_path。")
     if result_data is None:
@@ -198,7 +210,7 @@ class BenchmarkPlotter:
         if not rows:
             raise ValueError(f"没有记录包含 {metric}")
         if ascending is None:
-            ascending = metric.endswith("_ms") or metric.endswith("_s")
+            ascending = metric.endswith(("_ms", "_s"))
         rows.sort(key=lambda item: item[1], reverse=not ascending)
         if top_n:
             rows = rows[:top_n]
@@ -248,7 +260,7 @@ class BenchmarkPlotter:
             raise ValueError("没有可用指标。")
         order_metric = sort_by or metric_list[0]
         if ascending is None:
-            ascending = order_metric.endswith("_ms") or order_metric.endswith("_s")
+            ascending = order_metric.endswith(("_ms", "_s"))
         usable = [rec for rec in self.records if any(m in rec.metrics for m in metric_list)]
         usable.sort(
             key=lambda rec: rec.metrics.get(order_metric, math.inf if ascending else -math.inf),
@@ -284,7 +296,11 @@ class BenchmarkPlotter:
             for bar, value in zip(bars, values):
                 if not math.isfinite(value):
                     continue
-                weight = "bold" if target is not None and math.isclose(value, target, rel_tol=1e-9) else "normal"
+                weight = (
+                    "bold"
+                    if target is not None and math.isclose(value, target, rel_tol=1e-9)
+                    else "normal"
+                )
                 ax.text(
                     value,
                     bar.get_y() + bar.get_height() / 2,
@@ -296,7 +312,11 @@ class BenchmarkPlotter:
                 )
         fig.suptitle(title or f"{self.suite.test_type} · 案例矩阵")
         fig.tight_layout()
-        output = Path(output_path) if output_path else self._default_output_path(f"{order_metric}_matrix")
+        output = (
+            Path(output_path)
+            if output_path
+            else self._default_output_path(f"{order_metric}_matrix")
+        )
         output.parent.mkdir(parents=True, exist_ok=True)
         fig.savefig(output)
         plt.close(fig)
@@ -351,7 +371,9 @@ class BenchmarkPlotter:
         ax.set_title(title or f"{self.suite.test_type} · {metric} 比较")
         ax.legend()
         ax.grid(axis="y", linestyle="--", alpha=0.4)
-        output = Path(output_path) if output_path else self._default_output_path(f"{metric}_comparison")
+        output = (
+            Path(output_path) if output_path else self._default_output_path(f"{metric}_comparison")
+        )
         output.parent.mkdir(parents=True, exist_ok=True)
         fig.tight_layout()
         fig.savefig(output)
@@ -366,7 +388,7 @@ class BenchmarkPlotter:
         return Path.cwd() / f"{self.suite.test_type}_{suffix}.png"
 
     def _default_metric_list(self) -> list[str]:
-        """默认只关心 real_time_ms，若不存在则退回其它任意指标。"""
+        """默认只关心 real_time_ms, 若不存在则退回其它任意指标。"""
         metrics = self.available_metrics()
         if "real_time_ms" in metrics:
             return ["real_time_ms"]
@@ -404,7 +426,7 @@ def _match_filters(rec: BenchmarkRecord, filters: dict[str, str] | None) -> bool
     return True
 
 
-# 统一的浅色调配色，方便在不同图表间保持视觉一致性
+# 统一的浅色调配色, 方便在不同图表间保持视觉一致性
 _PALETTE = [
     "#5B8FF9",
     "#5AD8A6",
@@ -418,5 +440,5 @@ _PALETTE = [
 
 
 def _color(idx: int) -> str:
-    """按照索引循环取色，避免颜色数量不足。"""
+    """按照索引循环取色, 避免颜色数量不足。"""
     return _PALETTE[idx % len(_PALETTE)]

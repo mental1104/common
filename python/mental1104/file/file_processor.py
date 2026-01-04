@@ -1,15 +1,14 @@
 import os
-
 from functools import wraps
 
 
 def file_iterator(process_function):
     """
-    装饰器，用于遍历指定目录下的所有文件，或者直接处理给定的文件路径，并对每个文件执行给定的处理函数。
+    装饰器, 用于遍历指定目录下的所有文件, 或者直接处理给定的文件路径, 并对每个文件执行给定的处理函数。
     Args:
-        process_function (function): 被装饰的函数，接受一个文件路径作为参数。
+        process_function (function): 被装饰的函数, 接受一个文件路径作为参数。
     Returns:
-        function: 包装后的函数，接受一个文件路径参数。
+        function: 包装后的函数, 接受一个文件路径参数。
     Raises:
         ValueError: 如果输入路径既不是文件也不是目录。
     例如：
@@ -20,13 +19,14 @@ def file_iterator(process_function):
         process_file('path/to/directory')  # 处理目录下的所有文件
         process_file('path/to/file.txt')    # 直接处理单个文件
     """
+
     @wraps(process_function)
     def wrapper(input_path):
         norm_input = os.path.normpath(input_path)
-        # 如果输入路径是文件，直接处理该文件
+        # 如果输入路径是文件, 直接处理该文件
         if os.path.isfile(norm_input):
             process_function(norm_input)  # 传递文件的完整路径
-        # 如果输入路径是目录，递归遍历该目录下的所有文件
+        # 如果输入路径是目录, 递归遍历该目录下的所有文件
         elif os.path.isdir(norm_input):
             process_directory(norm_input)
         else:
@@ -37,10 +37,10 @@ def file_iterator(process_function):
         for entry in os.listdir(directory):
             full_path = os.path.normpath(os.path.join(directory, entry))
             if os.path.isdir(full_path):
-                # 如果是目录，递归调用
+                # 如果是目录, 递归调用
                 process_directory(full_path)
             elif os.path.isfile(full_path):
-                # 如果是文件，处理该文件
+                # 如果是文件, 处理该文件
                 process_function(full_path)
 
     return wrapper

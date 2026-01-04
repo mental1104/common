@@ -3,8 +3,6 @@
 #include <cmath>
 #include <gtest/gtest.h>
 
-typedef boost::multiprecision::mpfr_float high_precision;
-
 // 测试 ECalculator 类
 TEST(ECalculatorTest, Calculate) {
   int precision = 20; // 设置精度为20位

@@ -1,9 +1,10 @@
 """Shared helpers for coroutine pool benchmarks."""
+
 from __future__ import annotations
 
 import asyncio
 import functools
-from typing import Iterable, Sequence
+from typing import Sequence
 
 import pytest
 
@@ -18,7 +19,6 @@ from mental1104.concurrency.sync_worker import (
     ThreadWorkerPool,
 )
 from mental1104.utils.bench_tasks import CpuBoundTask, IoBoundTask
-
 
 ASYNC_KIND = "async"
 SYNC_KIND = "sync"
@@ -156,7 +156,10 @@ def make_blocking_io_async_tasks(n_tasks: int, delay_ms: int, payload_len: int):
 
 
 def make_blocking_io_sync_tasks(n_tasks: int, delay_ms: int, payload_len: int):
-    return [functools.partial(IoBoundTask.blocking_io_task, delay_ms, payload_len) for _ in range(n_tasks)]
+    return [
+        functools.partial(IoBoundTask.blocking_io_task, delay_ms, payload_len)
+        for _ in range(n_tasks)
+    ]
 
 
 def _run_coro_partial_sync(coro_factory: functools.partial) -> int:

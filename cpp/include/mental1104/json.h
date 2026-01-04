@@ -3,8 +3,15 @@
 #include <cstddef>
 #include <cstring>
 #include <string>
-#include <string_view>
+#include <utility>
+
+#include "mental1104/meta/compiler_support.h"
+
+#if M1104_HAS_CXX17
 #include <variant>
+#else
+#include <boost/variant2/variant.hpp>
+#endif
 
 extern "C" {
 #if __has_include(<cJSON/cJSON.h>)
@@ -24,12 +31,32 @@ extern "C" {
 
 namespace mental1104 {
 
+namespace json_detail {
+#if M1104_HAS_CXX17
+using std::get;
+using std::get_if;
+using std::holds_alternative;
+using std::monostate;
+template <typename... T>
+using variant = std::variant<T...>;
+#else
+using boost::variant2::get;
+using boost::variant2::get_if;
+using boost::variant2::holds_alternative;
+using boost::variant2::monostate;
+template <typename... T>
+using variant = boost::variant2::variant<T...>;
+#endif
+} // namespace json_detail
+
 enum class JsonParser { CJSON, RapidJSON };
 
 struct ParseResult;
-ParseResult parse_json(std::string_view, JsonParser);
+ParseResult parse_json(const string_view &, JsonParser);
 ParseResult parse_json(const char *, std::size_t, JsonParser);
+#if M1104_HAS_CXX17
 ParseResult parse_json(const std::string &, JsonParser);
+#endif
 
 class JsonValueView;
 class JsonDoc;
@@ -51,7 +78,7 @@ struct KeyBuf {
       cstr = heap;
     }
   }
-  KeyBuf(std::string_view k) : KeyBuf(k.data(), k.size()) {}
+  KeyBuf(string_view k) : KeyBuf(k.data(), k.size()) {}
   ~KeyBuf() { delete[] heap; }
 };
 } // namespace detail
@@ -74,34 +101,38 @@ public:
   JsonDoc &operator=(const JsonDoc &) = delete;
 
   bool valid() const noexcept {
-    return !std::holds_alternative<std::monostate>(impl_);
+    return !json_detail::holds_alternative<json_detail::monostate>(impl_);
   }
   JsonParser backend() const noexcept { return backend_; }
 
   JsonValueView root() const;
 
 private:
-  using Impl = std::variant<std::monostate, cJSON *, rapidjson::Document>;
+  using Impl =
+      json_detail::variant<json_detail::monostate, cJSON *,
+                           rapidjson::Document>;
   Impl impl_;
   JsonParser backend_{JsonParser::CJSON};
 
   void reset() noexcept {
-    if (std::holds_alternative<cJSON *>(impl_)) {
-      if (auto *p = std::get<cJSON *>(impl_))
+    if (json_detail::holds_alternative<cJSON *>(impl_)) {
+      if (auto *p = json_detail::get<cJSON *>(impl_))
         cJSON_Delete(p);
     }
-    impl_.emplace<std::monostate>();
+    impl_.emplace<json_detail::monostate>();
     backend_ = JsonParser::CJSON;
   }
   void move_from(JsonDoc &&other) noexcept {
     impl_ = std::move(other.impl_);
     backend_ = other.backend_;
-    other.impl_.emplace<std::monostate>();
+    other.impl_.emplace<json_detail::monostate>();
   }
 
-  friend ParseResult parse_json(std::string_view, JsonParser);
+  friend ParseResult parse_json(const string_view &, JsonParser);
   friend ParseResult parse_json(const char *, std::size_t, JsonParser);
+#if M1104_HAS_CXX17
   friend ParseResult parse_json(const std::string &, JsonParser);
+#endif
 
   friend class JsonValueView;
 };
@@ -118,51 +149,51 @@ public:
   }
 
   bool is_valid() const noexcept {
-    return !std::holds_alternative<std::monostate>(node_);
+    return !json_detail::holds_alternative<json_detail::monostate>(node_);
   }
   bool is_object() const noexcept {
-    if (auto p = std::get_if<const cJSON *>(&node_))
+    if (auto p = json_detail::get_if<const cJSON *>(&node_))
       return *p && cJSON_IsObject(*p);
-    if (auto p = std::get_if<const rapidjson::Value *>(&node_))
+    if (auto p = json_detail::get_if<const rapidjson::Value *>(&node_))
       return *p && (*p)->IsObject();
     return false;
   }
   bool is_array() const noexcept {
-    if (auto p = std::get_if<const cJSON *>(&node_))
+    if (auto p = json_detail::get_if<const cJSON *>(&node_))
       return *p && cJSON_IsArray(*p);
-    if (auto p = std::get_if<const rapidjson::Value *>(&node_))
+    if (auto p = json_detail::get_if<const rapidjson::Value *>(&node_))
       return *p && (*p)->IsArray();
     return false;
   }
   bool is_string() const noexcept {
-    if (auto p = std::get_if<const cJSON *>(&node_))
+    if (auto p = json_detail::get_if<const cJSON *>(&node_))
       return *p && cJSON_IsString(*p);
-    if (auto p = std::get_if<const rapidjson::Value *>(&node_))
+    if (auto p = json_detail::get_if<const rapidjson::Value *>(&node_))
       return *p && (*p)->IsString();
     return false;
   }
   bool is_bool() const noexcept {
-    if (auto p = std::get_if<const cJSON *>(&node_))
+    if (auto p = json_detail::get_if<const cJSON *>(&node_))
       return *p && cJSON_IsBool(*p);
-    if (auto p = std::get_if<const rapidjson::Value *>(&node_))
+    if (auto p = json_detail::get_if<const rapidjson::Value *>(&node_))
       return *p && (*p)->IsBool();
     return false;
   }
   bool is_number() const noexcept {
-    if (auto p = std::get_if<const cJSON *>(&node_))
+    if (auto p = json_detail::get_if<const cJSON *>(&node_))
       return *p && cJSON_IsNumber(*p);
-    if (auto p = std::get_if<const rapidjson::Value *>(&node_))
+    if (auto p = json_detail::get_if<const rapidjson::Value *>(&node_))
       return *p && (*p)->IsNumber();
     return false;
   }
 
-  bool has(std::string_view key) const noexcept {
+  bool has(string_view key) const noexcept {
     if (!is_object())
       return false;
-    if (auto p = std::get_if<const cJSON *>(&node_)) {
+    if (auto p = json_detail::get_if<const cJSON *>(&node_)) {
       detail::KeyBuf kb(key);
       return cJSON_GetObjectItemCaseSensitive(*p, kb.cstr) != nullptr;
-    } else if (auto p2 = std::get_if<const rapidjson::Value *>(&node_)) {
+    } else if (auto p2 = json_detail::get_if<const rapidjson::Value *>(&node_)) {
       auto it = (*p2)->FindMember(rapidjson::StringRef(
           key.data(), static_cast<rapidjson::SizeType>(key.size())));
       return it != (*p2)->MemberEnd();
@@ -170,14 +201,14 @@ public:
     return false;
   }
 
-  JsonValueView get(std::string_view key) const noexcept {
+  JsonValueView get(string_view key) const noexcept {
     if (!is_object())
       return {};
-    if (auto p = std::get_if<const cJSON *>(&node_)) {
+    if (auto p = json_detail::get_if<const cJSON *>(&node_)) {
       detail::KeyBuf kb(key);
       cJSON *item = cJSON_GetObjectItemCaseSensitive(*p, kb.cstr);
       return item ? JsonValueView::from_cjson(item) : JsonValueView{};
-    } else if (auto p2 = std::get_if<const rapidjson::Value *>(&node_)) {
+    } else if (auto p2 = json_detail::get_if<const rapidjson::Value *>(&node_)) {
       auto it = (*p2)->FindMember(rapidjson::StringRef(
           key.data(), static_cast<rapidjson::SizeType>(key.size())));
       return (it != (*p2)->MemberEnd()) ? JsonValueView::from_rapid(&it->value)
@@ -187,23 +218,23 @@ public:
   }
 
   std::size_t size() const noexcept {
-    if (auto p = std::get_if<const cJSON *>(&node_)) {
+    if (auto p = json_detail::get_if<const cJSON *>(&node_)) {
       return (*p && cJSON_IsArray(*p))
                  ? static_cast<std::size_t>(cJSON_GetArraySize(*p))
                  : 0;
-    } else if (auto p2 = std::get_if<const rapidjson::Value *>(&node_)) {
+    } else if (auto p2 = json_detail::get_if<const rapidjson::Value *>(&node_)) {
       return (*p2 && (*p2)->IsArray()) ? (*p2)->Size() : 0;
     }
     return 0;
   }
 
   JsonValueView at(std::size_t i) const noexcept {
-    if (auto p = std::get_if<const cJSON *>(&node_)) {
+    if (auto p = json_detail::get_if<const cJSON *>(&node_)) {
       if (*p && cJSON_IsArray(*p)) {
         cJSON *it = cJSON_GetArrayItem(*p, static_cast<int>(i));
         return it ? JsonValueView::from_cjson(it) : JsonValueView{};
       }
-    } else if (auto p2 = std::get_if<const rapidjson::Value *>(&node_)) {
+    } else if (auto p2 = json_detail::get_if<const rapidjson::Value *>(&node_)) {
       if (*p2 && (*p2)->IsArray() && i < (*p2)->Size()) {
         return JsonValueView::from_rapid(
             &(*p2)->GetArray()[static_cast<rapidjson::SizeType>(i)]);
@@ -212,35 +243,35 @@ public:
     return {};
   }
 
-  std::string_view as_string(std::string_view def = {}) const noexcept {
-    if (auto p = std::get_if<const cJSON *>(&node_)) {
+  string_view as_string(string_view def = {}) const noexcept {
+    if (auto p = json_detail::get_if<const cJSON *>(&node_)) {
       return (*p && cJSON_IsString(*p) && (*p)->valuestring)
-                 ? std::string_view((*p)->valuestring)
+                 ? string_view((*p)->valuestring)
                  : def;
-    } else if (auto p2 = std::get_if<const rapidjson::Value *>(&node_)) {
+    } else if (auto p2 = json_detail::get_if<const rapidjson::Value *>(&node_)) {
       return (*p2 && (*p2)->IsString())
-                 ? std::string_view((*p2)->GetString(),
-                                    (*p2)->GetStringLength())
+                 ? string_view((*p2)->GetString(),
+                               (*p2)->GetStringLength())
                  : def;
     }
     return def;
   }
 
   bool as_bool(bool def = false) const noexcept {
-    if (auto p = std::get_if<const cJSON *>(&node_)) {
+    if (auto p = json_detail::get_if<const cJSON *>(&node_)) {
       return (*p && cJSON_IsBool(*p)) ? cJSON_IsTrue(*p) : def;
-    } else if (auto p2 = std::get_if<const rapidjson::Value *>(&node_)) {
+    } else if (auto p2 = json_detail::get_if<const rapidjson::Value *>(&node_)) {
       return (*p2 && (*p2)->IsBool()) ? (*p2)->GetBool() : def;
     }
     return def;
   }
 
   long long as_i64(long long def = 0) const noexcept {
-    if (auto p = std::get_if<const cJSON *>(&node_)) {
+    if (auto p = json_detail::get_if<const cJSON *>(&node_)) {
       return (*p && cJSON_IsNumber(*p))
                  ? static_cast<long long>((*p)->valuedouble)
                  : def;
-    } else if (auto p2 = std::get_if<const rapidjson::Value *>(&node_)) {
+    } else if (auto p2 = json_detail::get_if<const rapidjson::Value *>(&node_)) {
       const rapidjson::Value *v = *p2;
       if (!v)
         return def;
@@ -259,9 +290,9 @@ public:
   }
 
   double as_f64(double def = 0.0) const noexcept {
-    if (auto p = std::get_if<const cJSON *>(&node_)) {
+    if (auto p = json_detail::get_if<const cJSON *>(&node_)) {
       return (*p && cJSON_IsNumber(*p)) ? (*p)->valuedouble : def;
-    } else if (auto p2 = std::get_if<const rapidjson::Value *>(&node_)) {
+    } else if (auto p2 = json_detail::get_if<const rapidjson::Value *>(&node_)) {
       return (*p2 && (*p2)->IsNumber()) ? (*p2)->GetDouble() : def;
     }
     return def;
@@ -273,8 +304,8 @@ public:
   }
 
 private:
-  using Node =
-      std::variant<std::monostate, const cJSON *, const rapidjson::Value *>;
+  using Node = json_detail::variant<json_detail::monostate, const cJSON *,
+                                    const rapidjson::Value *>;
   explicit JsonValueView(Node n) : node_(n) {}
   Node node_;
 
@@ -292,15 +323,15 @@ struct ParseResult {
 inline JsonValueView JsonDoc::root() const {
   if (!valid())
     return JsonValueView{};
-  if (std::holds_alternative<cJSON *>(impl_)) {
-    return JsonValueView::from_cjson(std::get<cJSON *>(impl_));
+  if (json_detail::holds_alternative<cJSON *>(impl_)) {
+    return JsonValueView::from_cjson(json_detail::get<cJSON *>(impl_));
   } else {
-    const rapidjson::Document &d = std::get<rapidjson::Document>(impl_);
+    const rapidjson::Document &d = json_detail::get<rapidjson::Document>(impl_);
     return JsonValueView::from_rapid(static_cast<const rapidjson::Value *>(&d));
   }
 }
 
-inline ParseResult parse_json(std::string_view text, JsonParser parser) {
+inline ParseResult parse_json(const string_view &text, JsonParser parser) {
   ParseResult r;
   if (parser == JsonParser::CJSON) {
     cJSON *root =
@@ -337,10 +368,12 @@ inline ParseResult parse_json(std::string_view text, JsonParser parser) {
 }
 inline ParseResult parse_json(const char *data, std::size_t len,
                               JsonParser parser) {
-  return parse_json(std::string_view(data, len), parser);
+  return parse_json(string_view(data, len), parser);
 }
+#if M1104_HAS_CXX17
 inline ParseResult parse_json(const std::string &s, JsonParser parser) {
-  return parse_json(std::string_view(s), parser);
+  return parse_json(string_view(s), parser);
 }
+#endif
 
 } // namespace mental1104

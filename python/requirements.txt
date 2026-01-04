@@ -1,5 +1,5 @@
 matplotlib
-psycopg2-binary>=2.9 
+psycopg2-binary>=2.9 ; sys_platform != "win32" and (python_version >= "3.9" or sys_platform != "darwin")
 sqlalchemy 
 requests 
 redis>=5.0 
@@ -8,6 +8,9 @@ pulsar-client[avro] ; sys_platform != "win32"
 pycryptodome 
 aiohttp 
 genanki
+fastapi
+starlette
+httpx
 pytest
 pytest-asyncio
 pytest-mock
@@ -16,12 +19,14 @@ pytest-leaks ; sys_platform != "win32"
 memray ; sys_platform != "win32"
 autopep8
 coverage
+typing_extensions
 tzdata ; sys_platform == "win32"
+backports.zoneinfo ; python_version < "3.9"
 ruamel.yaml
 ruff
 ujson
 orjson
-semgrep
+semgrep ; sys_platform != "win32"
 pybind11
 pypdf
 mental1104_export_layer @ file://../export/python

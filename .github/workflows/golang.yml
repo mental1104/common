@@ -1,0 +1,147 @@
+name: Go
+
+on:
+  push:
+    paths:
+      - "golang/**"
+      - "devops/**"
+      - ".github/workflows/golang.yml"
+  pull_request:
+    paths:
+      - "golang/**"
+      - "devops/**"
+      - ".github/workflows/golang.yml"
+  workflow_dispatch:
+    inputs:
+      enable_go_prerelease:
+        description: "Run Go 1.24/1.25 jobs (pre-release)"
+        type: boolean
+        default: true
+      verbose_logs:
+        description: "Enable verbose test output"
+        type: boolean
+        default: true
+
+env:
+  GO_TEST_V: ${{ (vars.CI_VERBOSE_LOGS == 'false' || (github.event_name == 'workflow_dispatch' && (github.event.inputs.verbose_logs == false || github.event.inputs.verbose_logs == 'false'))) && '' || '-v' }}
+
+jobs:
+  linux:
+    name: Linux / Go ${{ matrix.go }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson((github.event.inputs.enable_go_prerelease == false || github.event.inputs.enable_go_prerelease == 'false' || vars.CI_ENABLE_GO_PRERELEASE == 'false') && '{"go":["1.22.x","1.23.x"]}' || '{"go":["1.22.x","1.23.x","1.24.x","1.25.x"]}') }}
+    env:
+      PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/devops
+    defaults:
+      run:
+        shell: bash
+        working-directory: ${{ github.workspace }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: false
+          fetch-depth: 0
+      - name: Init submodules (sparse Boost)
+        run: |
+          python3 - <<'PY'
+          import sys
+          from devtool.commands.common import base_env
+          from devtool.commands.ops import cpp as cpp_ops
+          sys.exit(cpp_ops.git_submodules(base_env()) or 0)
+          PY
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ matrix.go }}
+          check-latest: true
+      - name: Setup Go deps
+        run: ./dev setup-go
+      - name: Format Go
+        if: ${{ matrix.go == '1.22.x' }}
+        run: ./dev fmt-go
+      - name: Build Go
+        run: ./dev build-go
+      - name: Coverage Go
+        env:
+          GOFLAGS: ${{ (vars.CI_VERBOSE_LOGS == 'false' || (github.event_name == 'workflow_dispatch' && (github.event.inputs.verbose_logs == false || github.event.inputs.verbose_logs == 'false'))) && '' || '-v' }}
+        run: ./dev coverage-go
+      - name: Vet Go
+        if: ${{ matrix.go == '1.22.x' }}
+        run: ./dev vet-go
+      - name: Guard Go
+        if: ${{ matrix.go == '1.22.x' }}
+        run: ./dev guard-go
+
+  macos:
+    name: macOS / Go ${{ matrix.go }}
+    runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson((github.event.inputs.enable_go_prerelease == false || github.event.inputs.enable_go_prerelease == 'false' || vars.CI_ENABLE_GO_PRERELEASE == 'false') && '{"go":["1.22.x","1.23.x"]}' || '{"go":["1.22.x","1.23.x","1.24.x","1.25.x"]}') }}
+    env:
+      PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/devops
+    defaults:
+      run:
+        shell: bash
+        working-directory: ${{ github.workspace }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: false
+          fetch-depth: 0
+      - name: Init submodules (sparse Boost)
+        run: |
+          python3 - <<'PY'
+          import sys
+          from devtool.commands.common import base_env
+          from devtool.commands.ops import cpp as cpp_ops
+          sys.exit(cpp_ops.git_submodules(base_env()) or 0)
+          PY
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ matrix.go }}
+          check-latest: true
+      - name: Setup Go deps
+        run: ./dev setup-go
+      - name: Build Go
+        run: ./dev build-go
+      - name: Coverage Go
+        run: ./dev coverage-go
+
+  windows:
+    name: Windows / Go ${{ matrix.go }}
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson((github.event.inputs.enable_go_prerelease == false || github.event.inputs.enable_go_prerelease == 'false' || vars.CI_ENABLE_GO_PRERELEASE == 'false') && '{"go":["1.22.x","1.23.x"]}' || '{"go":["1.22.x","1.23.x","1.24.x","1.25.x"]}') }}
+    env:
+      PYTHON: python
+      PYTHONPATH: ${{ github.workspace }};${{ github.workspace }}/devops
+    defaults:
+      run:
+        shell: pwsh
+        working-directory: ${{ github.workspace }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: false
+          fetch-depth: 0
+      - name: Init submodules (sparse Boost)
+        run: python -c "import sys;from devtool.commands.common import base_env;from devtool.commands.ops import cpp as cpp_ops;sys.exit(cpp_ops.git_submodules(base_env()) or 0)"
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ matrix.go }}
+          check-latest: true
+      - name: Setup Go deps
+        run: python -m devtool.cli setup-go
+      - name: Build Go
+        run: python -m devtool.cli build-go
+      - name: Coverage Go
+        run: python -m devtool.cli coverage-go

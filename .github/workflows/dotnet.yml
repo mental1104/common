@@ -1,0 +1,122 @@
+name: .NET
+
+on:
+  push:
+    paths:
+      - "dotnet/**"
+      - "devops/**"
+      - ".github/workflows/dotnet.yml"
+  pull_request:
+    paths:
+      - "dotnet/**"
+      - "devops/**"
+      - ".github/workflows/dotnet.yml"
+  workflow_dispatch:
+    inputs:
+      verbose_logs:
+        description: "Enable verbose test output"
+        type: boolean
+        default: true
+
+env:
+  DOTNET_TEST_LOGGER: ${{ (vars.CI_VERBOSE_LOGS == 'false' || (github.event_name == 'workflow_dispatch' && (github.event.inputs.verbose_logs == false || github.event.inputs.verbose_logs == 'false'))) && '' || 'console;verbosity=detailed' }}
+
+jobs:
+  linux:
+    name: Linux / .NET ${{ matrix.dotnet }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        dotnet: ["8.0.x"]
+    defaults:
+      run:
+        shell: bash
+        working-directory: dotnet
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: false
+          fetch-depth: 0
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ matrix.dotnet }}
+      - name: Restore
+        run: dotnet restore mental1104.sln
+      - name: Build
+        run: dotnet build mental1104.sln --configuration Release --no-restore
+      - name: Coverage
+        run: |
+          if [ -n "${DOTNET_TEST_LOGGER}" ]; then
+            dotnet test mental1104.sln --configuration Release --no-build --collect:"XPlat Code Coverage" --logger "${DOTNET_TEST_LOGGER}"
+          else
+            dotnet test mental1104.sln --configuration Release --no-build --collect:"XPlat Code Coverage"
+          fi
+
+  macos:
+    name: macOS / .NET ${{ matrix.dotnet }}
+    runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        dotnet: ["8.0.x"]
+    defaults:
+      run:
+        shell: bash
+        working-directory: dotnet
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: false
+          fetch-depth: 0
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ matrix.dotnet }}
+      - name: Restore
+        run: dotnet restore mental1104.sln
+      - name: Build
+        run: dotnet build mental1104.sln --configuration Release --no-restore
+      - name: Coverage
+        run: |
+          if [ -n "${DOTNET_TEST_LOGGER}" ]; then
+            dotnet test mental1104.sln --configuration Release --no-build --collect:"XPlat Code Coverage" --logger "${DOTNET_TEST_LOGGER}"
+          else
+            dotnet test mental1104.sln --configuration Release --no-build --collect:"XPlat Code Coverage"
+          fi
+
+  windows:
+    name: Windows / .NET ${{ matrix.dotnet }}
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        dotnet: ["8.0.x"]
+    defaults:
+      run:
+        shell: pwsh
+        working-directory: dotnet
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: false
+          fetch-depth: 0
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ matrix.dotnet }}
+      - name: Restore
+        run: dotnet restore mental1104.sln
+      - name: Build
+        run: dotnet build mental1104.sln --configuration Release --no-restore
+      - name: Coverage
+        run: |
+          if ($env:DOTNET_TEST_LOGGER) {
+            dotnet test mental1104.sln --configuration Release --no-build --collect:"XPlat Code Coverage" --logger $env:DOTNET_TEST_LOGGER
+          } else {
+            dotnet test mental1104.sln --configuration Release --no-build --collect:"XPlat Code Coverage"
+          }

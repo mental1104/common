@@ -233,7 +233,7 @@ mental1104.InString("golang", "go")
   * `Contains` 直接支持数组（反射路径），
   * 泛型路径用 `arr[:]` 转成 slice。
 
-需要的话，我可以再给你加一个 `Makefile`（`test`、`bench` 目标）或在 `README.md` 里放性能对比（反射 vs 泛型）。
+需要的话，我可以再在 `README.md` 里放性能对比（反射 vs 泛型）。
 
 
 ## 性能测试

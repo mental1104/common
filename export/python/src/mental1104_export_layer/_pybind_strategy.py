@@ -1,7 +1,12 @@
+from __future__ import annotations
+
 import importlib
-from types import ModuleType
+from typing import TYPE_CHECKING
 
 from ._strategy import BackendUnavailable, Strategy
+
+if TYPE_CHECKING:
+    from types import ModuleType
 
 MODULE_NAME = "mental1104_export_layer_pybind"
 

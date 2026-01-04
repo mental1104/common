@@ -1,6 +1,8 @@
-import pytest
 import os
-from mental1104 import check_required_env_vars, MissingEnvVarError
+
+import pytest
+
+from mental1104 import MissingEnvVarError, check_required_env_vars
 
 
 class TestEnvironment:
@@ -11,15 +13,15 @@ class TestEnvironment:
 
     def test_check_required_env_vars_all_present(self, mock_env):
         """
-        【场景背景】当所有必需环境变量都存在时，校验函数不应抛错。
-        【步骤输入】mock os.environ，并设置 ENV_VAR_1/2。
-        【期望输出】check_required_env_vars 返回正常；若抛错则测试失败。
+        【场景背景】当所有必需环境变量都存在时, 校验函数不应抛错。
+        【步骤输入】mock os.environ, 并设置 ENV_VAR_1/2。
+        【期望输出】check_required_env_vars 返回正常; 若抛错则测试失败。
         """
         # 准备测试数据：所有环境变量存在
         required_env_vars = ["ENV_VAR_1", "ENV_VAR_2"]
-        mock_env.update({var: "value" for var in required_env_vars})
+        mock_env.update(dict.fromkeys(required_env_vars, "value"))
 
-        # 调用测试方法，验证没有抛出异常
+        # 调用测试方法, 验证没有抛出异常
         try:
             check_required_env_vars(required_env_vars)
         except MissingEnvVarError:
@@ -28,13 +30,15 @@ class TestEnvironment:
     def test_check_required_env_vars_missing_var(self, mock_env):
         """
         【场景背景】缺少任何一个环境变量时应抛 MissingEnvVarError。
-        【步骤输入】只设置 ENV_VAR_1，漏掉 ENV_VAR_2。
+        【步骤输入】只设置 ENV_VAR_1, 漏掉 ENV_VAR_2。
         【期望输出】with pytest.raises 捕获 MissingEnvVarError 且匹配缺失变量名。
         """
         # 准备测试数据：部分环境变量缺失
         required_env_vars = ["ENV_VAR_1", "ENV_VAR_2"]
         mock_env.update({"ENV_VAR_1": "value"})  # 只设置了一个变量
 
-        # 调用测试方法，验证是否抛出 MissingEnvVarError 异常
-        with pytest.raises(MissingEnvVarError, match="Missing required environment variables: ENV_VAR_2"):
+        # 调用测试方法, 验证是否抛出 MissingEnvVarError 异常
+        with pytest.raises(
+            MissingEnvVarError, match="Missing required environment variables: ENV_VAR_2"
+        ):
             check_required_env_vars(required_env_vars)

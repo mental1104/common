@@ -681,6 +681,45 @@ inline spdlog::level::level_enum to_spd_level(LogLevel lvl) {
 }
 #endif
 
+template <typename T> struct is_printf_arg {
+  using Decayed = typename std::decay<T>::type;
+  static constexpr bool value =
+      (std::is_arithmetic<Decayed>::value ||
+       std::is_enum<Decayed>::value || std::is_pointer<Decayed>::value) &&
+      !std::is_same<Decayed, std::string>::value &&
+      !std::is_same<Decayed, string_view>::value;
+};
+
+template <typename... Args> struct are_printf_args_safe;
+
+template <> struct are_printf_args_safe<> : std::true_type {};
+
+template <typename T, typename... Rest>
+struct are_printf_args_safe<T, Rest...>
+    : std::integral_constant<bool, is_printf_arg<T>::value &&
+                                       are_printf_args_safe<Rest...>::value> {};
+
+template <typename... Args>
+std::string format_printf_impl(std::true_type, string_view fmt,
+                               Args &&...args) {
+  std::string fmt_cstr(fmt);
+  int size =
+      std::snprintf(nullptr, 0, fmt_cstr.c_str(), std::forward<Args>(args)...);
+  if (size <= 0) {
+    return to_string(fmt, " ", std::forward<Args>(args)...);
+  }
+  std::string buf(static_cast<size_t>(size), '\0');
+  std::snprintf(buf.data(), static_cast<size_t>(size) + 1, fmt_cstr.c_str(),
+                std::forward<Args>(args)...);
+  return buf;
+}
+
+template <typename... Args>
+std::string format_printf_impl(std::false_type, string_view fmt,
+                               Args &&...args) {
+  return to_string(fmt, " ", std::forward<Args>(args)...);
+}
+
 template <typename... Args>
 // format_printf：用 snprintf 风格格式化。先把 string_view 复制成以 '\0' 结尾的
 // std::string，第一次 snprintf(nullptr,0,...) 计算所需长度，失败则退回
@@ -688,28 +727,8 @@ template <typename... Args>
 // 覆盖终止符），最终返回缓冲内容 （保留 size 个有效字符，终止符被丢弃在 string
 // 末尾）。
 std::string format_printf(string_view fmt, Args &&...args) {
-  std::string fmt_cstr(
-      fmt); // 把 string_view 拷贝成独立 string，保证 '\0'
-            // 结尾且与调用方缓冲解耦；即便 C++11/14 下 string_view 是 string
-            // 的别名，也会复制一份，便于传给 snprintf。
-  // 第一次 snprintf 传空指针和 0
-  // 长度，用于探测最终格式化后的长度；这是标准用法，返回值即为所需字节数（不含终止符）。
-  int size =
-      std::snprintf(nullptr, 0, fmt_cstr.c_str(), std::forward<Args>(args)...);
-  if (size <= 0) {
-    // snprintf 返回非正值时视为格式化失败，退回 to_string
-    // 简单拼接原格式串和参数，避免直接丢弃信息。
-    return to_string(fmt, " ", std::forward<Args>(args)...);
-  }
-  // size 是 int，string 构造/后续 snprintf 形参是
-  // size_t，显式转换避免隐式窄化或签名匹配歧义。
-  std::string buf(static_cast<size_t>(size), '\0');
-  // snprintf
-  // 用法：传入目标缓冲大小（含终止符位置）和格式串，这里第二次调用把结果写到
-  // buf.data()，长度用 size+1 预留 '\0'。
-  std::snprintf(buf.data(), static_cast<size_t>(size) + 1, fmt_cstr.c_str(),
-                std::forward<Args>(args)...);
-  return buf;
+  return format_printf_impl(are_printf_args_safe<Args...>{}, fmt,
+                            std::forward<Args>(args)...);
 }
 
 inline bool has_brace_format(string_view fmt) {

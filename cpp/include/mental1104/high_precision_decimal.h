@@ -4,7 +4,9 @@
 #include <iostream>
 #include <sstream>
 
-typedef boost::multiprecision::mpfr_float high_precision;
+typedef boost::multiprecision::number<boost::multiprecision::mpfr_float_backend<0>,
+                                      boost::multiprecision::et_off>
+    high_precision;
 
 class InfiniteDecimalCalculator {
 protected:
@@ -17,7 +19,7 @@ public:
       : decimal_precision(precision),
         binary_precision(
             static_cast<int>(std::ceil(precision * std::log2(10)))) {
-    boost::multiprecision::mpfr_float::default_precision(binary_precision);
+    high_precision::default_precision(binary_precision);
   }
 
   // [修改] 声明为 const，便于在 const 场景调用，同时不改变语义
