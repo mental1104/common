@@ -95,22 +95,24 @@ class TestRedisLock:
         【步骤输入】并发启动多个子进程，分别执行 try_lock -> 累加计数 -> unlock。
         【期望输出】计数器最终值等于进程数，说明每次只有一个进程能成功进入临界区。
         """
-        def worker(counter, redis_params):
+        def worker(counter, redis_params, key):
             with RedisConnection(
                 host=redis_params["host"],
                 port=redis_params["port"],
                 password=redis_params["auth"]
             ) as client:
-                key = "mp_test:distributed_lock"
-                # 每个进程清理自己用到的 key
-                client.delete(key)
                 lock = RedisLock(client, key, lock_expire=5)
-                if lock.try_lock(wait_timeout=5):
-                    try:
-                        time.sleep(0.05)
-                        counter.value += 1
-                    finally:
-                        lock.unlock()
+                deadline = time.time() + 10
+                while time.time() < deadline:
+                    if lock.try_lock(wait_timeout=1):
+                        try:
+                            time.sleep(0.02)
+                            counter.value += 1
+                            return
+                        finally:
+                            lock.unlock()
+                    time.sleep(0.01)
+                raise RuntimeError("worker failed to acquire redis lock in time")
 
         redis_params = {
             "host": os.environ.get("REDIS_HOST", "localhost"),
@@ -119,14 +121,17 @@ class TestRedisLock:
         }
         process_count = 20
         counter = multiprocessing.Value('i', 0)
+        key = "mp_test:distributed_lock"
+        redis_client.delete(key)
         processes = []
         for _ in range(process_count):
-            p = multiprocessing.Process(target=worker, args=(counter, redis_params))
+            p = multiprocessing.Process(target=worker, args=(counter, redis_params, key))
             processes.append(p)
             p.start()
         for p in processes:
             p.join()
 
+        assert all(p.exitcode == 0 for p in processes), f"子进程异常退出: {[p.exitcode for p in processes]}"
         assert counter.value == process_count, f"多进程测试失败：最终计数应等于进程数，当前计数为 {counter.value}"
 
     def test_multi_process_redis_resource(self, redis_client):
