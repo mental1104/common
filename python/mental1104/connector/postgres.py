@@ -6,9 +6,20 @@ from contextvars import ContextVar
 from functools import wraps
 from types import FunctionType
 
-import psycopg2
-from psycopg2 import DatabaseError, OperationalError
-from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
+try:
+    import psycopg2
+    from psycopg2 import DatabaseError, OperationalError
+    from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
+except ImportError:
+    psycopg2 = None  # type: ignore[assignment]
+
+    class DatabaseError(Exception):
+        pass
+
+    class OperationalError(Exception):
+        pass
+
+    ISOLATION_LEVEL_AUTOCOMMIT = None
 from sqlalchemy import create_engine, inspect as sa_inspect
 from sqlalchemy.exc import TimeoutError as SQLAlchemyTimeoutError
 from sqlalchemy.orm import declarative_base, sessionmaker
@@ -23,6 +34,11 @@ Base = declarative_base()
 _session_ctx: ContextVar = ContextVar("mental1104_postgres_session", default=None)
 _SESSION_TOKEN_KEY = "_session_token"
 _CREATE_TABLES_ON_STARTUP = True
+
+
+def _require_psycopg2() -> None:
+    if psycopg2 is None:
+        raise RuntimeError("psycopg2 is required for PostgreSQL support; install psycopg2-binary.")
 
 
 def get_db_config():
@@ -60,6 +76,7 @@ def get_db_url(config=None):
 
 def ensure_database_exists(config):
     """确保数据库存在，不存在时尝试创建，失败则记录日志"""
+    _require_psycopg2()
     try:
         conn = psycopg2.connect(
             dbname="postgres",  # 连接到默认的 postgres 数据库
@@ -113,6 +130,7 @@ def init_database(create_table, func, engine):
 
 def startup():
     """初始化数据库连接并确保表和数据库存在"""
+    _require_psycopg2()
     config = get_db_config()
     ensure_database_exists(config)
 
@@ -291,6 +309,7 @@ def db_connection(db_type, db_params):
     def decorator(func):
         @wraps(func)
         def wrapper(*args, **kwargs):
+            _require_psycopg2()
             conn = None
             cursor = None
             try:
