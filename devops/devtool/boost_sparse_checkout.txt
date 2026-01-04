@@ -31,6 +31,8 @@
 /libs/move
 /libs/move/include
 /libs/mpl
+/libs/mp11
+/libs/mp11/include
 /libs/multiprecision
 /libs/multiprecision/include
 /libs/optional
@@ -58,4 +60,6 @@
 /libs/type_traits
 /libs/utility
 /libs/utility/include
+/libs/variant2
+/libs/variant2/include
 /libs/winapi

@@ -398,6 +398,26 @@ macro(m1104_register_components)
       LIB_GLOBS "libredis++*.so*" "libredis++*.a" "libredis++*.dylib"
       INC_REL src
   )
+  set(_redispp_std "")
+  if(DEFINED ENV{REDISPP_CXX_STD})
+    set(_redispp_std "$ENV{REDISPP_CXX_STD}")
+  elseif(DEFINED ENV{CXX_STD})
+    set(_redispp_std "$ENV{CXX_STD}")
+  elseif(DEFINED CMAKE_CXX_STANDARD)
+    set(_redispp_std "${CMAKE_CXX_STANDARD}")
+  endif()
+  if(_redispp_std)
+    if(TARGET REDISPP::headers)
+      target_compile_definitions(REDISPP::headers INTERFACE
+        M1104_REDISPP_CXX_STANDARD=${_redispp_std}
+      )
+    endif()
+    if(TARGET REDISPP::lib)
+      target_compile_definitions(REDISPP::lib INTERFACE
+        M1104_REDISPP_CXX_STANDARD=${_redispp_std}
+      )
+    endif()
+  endif()
 
   register_component(CJSON "lib/cJSON"
       LIB_GLOBS "libcjson*.so*" "libcjson*.a" "libcjson*.dylib"

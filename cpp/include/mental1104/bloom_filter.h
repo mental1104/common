@@ -180,15 +180,21 @@ public:
   }
 
   // 如果你确实需要访问底层对象，可以提供一个带锁执行的 helper
-  template <typename Fn> auto with_lock(Fn &&fn) {
+  template <typename Fn>
+  auto with_lock(Fn &&fn)
+      -> decltype(std::forward<Fn>(fn)(
+          std::declval<underlying_type &>())) {
     std::unique_lock<mental1104::detail::shared_mutex_t> lk(mutex_);
-    return fn(bf_);
+    return std::forward<Fn>(fn)(bf_);
   }
 
-  template <typename Fn> auto with_shared_lock(Fn &&fn) const {
+  template <typename Fn>
+  auto with_shared_lock(Fn &&fn) const
+      -> decltype(std::forward<Fn>(fn)(
+          std::declval<const underlying_type &>())) {
     mental1104::detail::shared_lock_t<mental1104::detail::shared_mutex_t> lk(
         mutex_);
-    return fn(bf_);
+    return std::forward<Fn>(fn)(bf_);
   }
 
 private:

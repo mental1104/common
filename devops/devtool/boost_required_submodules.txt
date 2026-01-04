@@ -22,6 +22,7 @@ libs/lexical_cast
 libs/math
 libs/move
 libs/mpl
+libs/mp11
 libs/multiprecision
 libs/optional
 libs/predef
@@ -39,4 +40,5 @@ libs/tuple
 libs/type_index
 libs/type_traits
 libs/utility
+libs/variant2
 libs/winapi

@@ -21,19 +21,19 @@ static void run_case(JsonParser backend) {
   auto root = r.doc.root();
   ASSERT_TRUE(root.is_object());
 
-  EXPECT_EQ(root.get("name").as_string(), std::string_view("Espeon"));
+  EXPECT_EQ(root.get("name").as_string(), string_view("Espeon"));
   EXPECT_EQ(root.get("age").as_i64(), 25);
   EXPECT_TRUE(root.get("active").as_bool());
 
   auto hobbies = root.get("hobbies");
   ASSERT_TRUE(hobbies.is_array());
   ASSERT_EQ(hobbies.size(), 2u);
-  EXPECT_EQ(hobbies.at(0).as_string(), std::string_view("cpp"));
-  EXPECT_EQ(hobbies.at(1).as_string(), std::string_view("rust"));
+  EXPECT_EQ(hobbies.at(0).as_string(), string_view("cpp"));
+  EXPECT_EQ(hobbies.at(1).as_string(), string_view("rust"));
 
   auto addr = root.get("address");
   ASSERT_TRUE(addr.is_object());
-  EXPECT_EQ(addr.get("city").as_string(), std::string_view("Shenzhen"));
+  EXPECT_EQ(addr.get("city").as_string(), string_view("Shenzhen"));
   EXPECT_EQ(addr.get("zip").as_i64(), 518000);
 }
 
