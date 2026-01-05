@@ -59,7 +59,6 @@ ignore = [
   "UP006",
   "UP007",
   "UP045",
-  "I001",
   "E402"
 ]
 
@@ -68,6 +67,6 @@ combine-as-imports = true
 known-first-party = ["mental1104"]
 
 [lint.per-file-ignores]
-"python/test/**/*.py" = ["ARG001", "ARG002", "ARG003"]
-"python/test_benchmark/**/*.py" = ["ARG001", "ARG002", "ARG003"]
+"python/test/**/*.py" = ["ARG001", "ARG002", "ARG003", "I001"]
+"python/test_benchmark/**/*.py" = ["ARG001", "ARG002", "ARG003", "I001"]
 
