@@ -12,11 +12,17 @@ def configure(subparsers: ArgumentParser):
     parser = subparsers.add_parser("build-export-cpp", help="Build export/cpp bridge")
     parser.add_argument("--config", default="Debug", help="CMake build type")
     parser.add_argument("--jobs", type=int, help="Parallelism hint")
+    parser.add_argument("--build-verbose", action="store_true", default=None, help="Print full CMake build commands")
     parser.add_argument("-v", "--verbose", action="store_true", help="Verbose output")
     parser.set_defaults(_runner=run)
     return run
 
 
 def run(args):
-    env = base_env(verbose=args.verbose, jobs=args.jobs, cpp_build_type=args.config)
+    env = base_env(
+        verbose=args.verbose,
+        jobs=args.jobs,
+        cpp_build_type=args.config,
+        build_verbose=getattr(args, "build_verbose", None),
+    )
     export_ops.build_export_cpp(env)

@@ -78,7 +78,7 @@ Python + C++ 混合工程，使用统一的 `dev` 命令驱动（macOS/Linux：`
 
 - `./dev git-submodules`：自动修复/拉取子模块。
 - `./dev setup-cpp`：构建 `cpp/lib/*/build` 并执行顶层 cmake 配置。
-- `./dev build cpp [--config Debug|Release]`
+- `./dev build cpp [--config Debug|Release] [--build-verbose]`
 - `./dev test cpp [--filter <gtest>] [--file <ctest>]`
 - `./dev coverage cpp`（默认使用 gcovr，缺失时回退 lcov）
 - `./dev fmt cpp` / `./dev bench cpp` / `./dev install cpp` / `./dev uninstall cpp` / `./dev clean cpp`
@@ -113,6 +113,7 @@ Python + C++ 混合工程，使用统一的 `dev` 命令驱动（macOS/Linux：`
 | `PIP3`           | `pip3`                            | pip 命令                                 |
 | `CMAKE` / `CTEST`| `cmake` / `ctest`                 | C++ 工具链                               |
 | `GCOV`           | `gcov`                            | C++ 覆盖率工具（传给 gcovr/gcov）              |
+| `BUILD_VERBOSE`  | `0`                               | CMake 构建是否输出完整编译命令（1 开启）          |
 | `SUDO`           | 非 root 时为 `sudo`                  | 安装目标默认使用；可设为空禁用                       |
 | `BREAK_FLAG`     | Ubuntu: `--break-system-packages` | pip 系统安装时的兼容参数                         |
 | `COMPOSE_BIN`    | `docker compose`                  | docker compose 可执行（可填 docker-compose）      |
