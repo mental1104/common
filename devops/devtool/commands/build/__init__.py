@@ -13,6 +13,7 @@ def configure(subparsers: ArgumentParser):
     parser.add_argument("target", choices=["python", "cpp", "go", "rust", "all"], nargs="?", default="all", help="Target to build")
     parser.add_argument("--config", default="Debug", help="CMake build type for C++ targets")
     parser.add_argument("--jobs", type=int, help="Parallelism hint")
+    parser.add_argument("--build-verbose", action="store_true", default=None, help="Print full CMake build commands")
     parser.add_argument("-v", "--verbose", action="store_true", help="Verbose output for tools")
     parser.set_defaults(_runner=run)
     return run
@@ -26,7 +27,12 @@ def _build_cpp(env):
 
 
 def run(args):
-    env = base_env(verbose=args.verbose, jobs=args.jobs, cpp_build_type=args.config)
+    env = base_env(
+        verbose=args.verbose,
+        jobs=args.jobs,
+        cpp_build_type=args.config,
+        build_verbose=getattr(args, "build_verbose", None),
+    )
     target = args.target
     if target in ("python", "all"):
         python_ops.build(env)

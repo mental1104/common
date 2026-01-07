@@ -4,13 +4,28 @@
 #include <cmath>
 #include <cstddef>
 #include <functional>
+#include <mutex>
 #include <string>
+#include <utility>
 #include <vector>
 
+#include "mental1104/concurrency/lock/shared_mutex.h"
 #include "mental1104/meta/compiler_support.h"
 
 // 通用模板版布隆过滤器
-template <typename Key, typename Hash = std::hash<Key>> class BasicBloomFilter {
+// Hash 默认是 std::hash<Key>，可替换为自定义哈希（要求可调用且返回 size_t）。
+// 要求 Key 可被 Hash 处理（例如 std::hash<Key> 有特化或自定义 Hash 支持）。
+// 最小示例（特化 std::hash 或自定义 Hash）：
+// struct Foo { int x; };
+// namespace std { template<> struct hash<Foo> {
+//   size_t operator()(const Foo &f) const noexcept { return std::hash<int>()(f.x); }
+// }; }
+// struct FooHash { size_t operator()(const Foo &f) const noexcept {
+//   return std::hash<int>()(f.x);
+// } };
+// BasicBloomFilter<Foo, FooHash> bf(n, p);
+template <typename Key, typename Hash = std::hash<Key>> 
+class BasicBloomFilter {
 public:
   using key_type = Key;
   using hash_type = Hash;
@@ -25,6 +40,9 @@ protected:
   std::size_t hash(const key_type &key, std::size_t seed) const {
     std::size_t h = hash_fn(key);
     // 和你原先的写法保持一致：XOR + 一个固定常数
+    // 这是简单的 hash mix：用 seed*常数扰动基础 hash；常数 0x5bd1e995 来自 MurmurHash2 的 mix 思路。
+    // 作用：用一个基础 hash 派生近似独立的 k 个索引，改善分布/降低相关性，避免每次都重新计算昂贵哈希。
+    // 可参考 Kirsch/Mitzenmacher 2006 "Less Hashing, Same Performance"（双重哈希派生 k 个下标）。
     return (h ^ (seed * 0x5bd1e995u)) % m;
   }
 
@@ -86,59 +104,39 @@ public:
 // 原有所有代码、单测继续用 BloomFilter 就行
 using BloomFilter = BasicBloomFilter<std::string, std::hash<std::string>>;
 
-#include <mutex>
-#if M1104_HAS_CXX14 && M1104_HAS_INCLUDE(<shared_mutex>)
-#include <shared_mutex>
-#endif
-#include <utility>
-
-namespace mental1104 {
-namespace detail {
-#if M1104_HAS_CXX17 && M1104_HAS_INCLUDE(<shared_mutex>)
-using shared_mutex_t = std::shared_mutex;
-template <typename Mutex> using shared_lock_t = std::shared_lock<Mutex>;
-#elif M1104_HAS_CXX14 && M1104_HAS_INCLUDE(<shared_mutex>)
-using shared_mutex_t = std::shared_timed_mutex;
-template <typename Mutex> using shared_lock_t = std::shared_lock<Mutex>;
-#else
-using shared_mutex_t = std::mutex;
-template <typename Mutex> using shared_lock_t = std::unique_lock<Mutex>;
-#endif
-} // namespace detail
-} // namespace mental1104
-
 // 粗粒度“大锁”版本：一把 shared_mutex 包整个 BloomFilter
 // 1. 读（contains）用 shared_lock，可并发
 // 2. 写（insert）用 unique_lock，串行
 //
 // 模板版包装：可用于任意 BasicBloomFilter<Key, Hash>
 template <typename Key, typename Hash = std::hash<Key>>
-class ThreadSafeBloomFilter {
+class CoarseLockBloomFilter {
 public:
   using key_type = Key;
   using hash_type = Hash;
   using underlying_type = BasicBloomFilter<Key, Hash>;
 
   // 构造：保持和 BasicBloomFilter 一致
-  explicit ThreadSafeBloomFilter(std::size_t n, double p,
+  explicit CoarseLockBloomFilter(std::size_t n, double p,
                                  const hash_type &hash = hash_type())
       : bf_(n, p, hash) {}
 
   // 禁止拷贝，允许移动（根据你需要也可以自行放开）
-  ThreadSafeBloomFilter(const ThreadSafeBloomFilter &) = delete;
-  ThreadSafeBloomFilter &operator=(const ThreadSafeBloomFilter &) = delete;
+  CoarseLockBloomFilter(const CoarseLockBloomFilter &) = delete;
+  CoarseLockBloomFilter &operator=(const CoarseLockBloomFilter &) = delete;
 
-  ThreadSafeBloomFilter(ThreadSafeBloomFilter &&other) noexcept {
+  CoarseLockBloomFilter(CoarseLockBloomFilter &&other) noexcept {
     std::unique_lock<mental1104::detail::shared_mutex_t> lk_other(other.mutex_);
     bf_ = std::move(other.bf_);
   }
 
-  ThreadSafeBloomFilter &operator=(ThreadSafeBloomFilter &&other) noexcept {
+  CoarseLockBloomFilter &operator=(CoarseLockBloomFilter &&other) noexcept {
     if (this == &other)
       return *this;
     // 避免死锁：按地址排序上锁
-    ThreadSafeBloomFilter *first = this < &other ? this : &other;
-    ThreadSafeBloomFilter *second = this < &other ? &other : this;
+    CoarseLockBloomFilter *first = this < &other ? this : &other;
+    CoarseLockBloomFilter *second = this < &other ? &other : this;
+    // std::unique_lock 是 C++11 引入的（<mutex>）。
     std::unique_lock<mental1104::detail::shared_mutex_t> lk1(first->mutex_);
     std::unique_lock<mental1104::detail::shared_mutex_t> lk2(second->mutex_);
     bf_ = std::move(other.bf_);
@@ -172,7 +170,7 @@ public:
     return bf_.getK();
   }
 
-  const std::vector<bool> getBitArraySnapshot() const {
+  std::vector<bool> getBitArraySnapshot() const {
     mental1104::detail::shared_lock_t<mental1104::detail::shared_mutex_t> lk(
         mutex_);
     // 返回一份拷贝，避免把内部引用暴露出去引起 data race
@@ -202,13 +200,13 @@ private:
   underlying_type bf_;
 };
 
-// 常用：字符串版线程安全 BloomFilter
-// 用法：ThreadSafeStringBloomFilter bf(n, p); 和原来 BloomFilter 一样用
+// 常用：字符串版粗粒度锁 BloomFilter
+// 用法：CoarseLockStringBloomFilter bf(n, p); 和原来 BloomFilter 一样用
 // insert/contains
-using ThreadSafeStringBloomFilter =
-    ThreadSafeBloomFilter<std::string, std::hash<std::string>>;
+using CoarseLockStringBloomFilter =
+    CoarseLockBloomFilter<std::string, std::hash<std::string>>;
 
 // 如果你想保持命名风格，也可以再别名一个更短的名字：
-// using TSBloomFilter = ThreadSafeStringBloomFilter;
+// using CLBloomFilter = CoarseLockStringBloomFilter;
 
 #endif // __MENTAL1104_BLOOM_FILTER

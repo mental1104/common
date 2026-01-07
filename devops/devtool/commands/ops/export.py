@@ -36,4 +36,4 @@ def build_export_cpp(env: Mapping[str, str]) -> None:
     if pybind_dir:
         args.append(f"-Dpybind11_DIR={pybind_dir}")
     run(args, env=env, cwd=Path("export") / "cpp")
-    run([env["CMAKE"], "--build", str(EXPORT_CPP_BUILD_DIR)], env=env)
+    run([env["CMAKE"], "--build", str(EXPORT_CPP_BUILD_DIR)], env=cpp_ops.cmake_build_env(env))
