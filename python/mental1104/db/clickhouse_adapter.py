@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from contextlib import suppress
 from dataclasses import dataclass
 from typing import Any, Mapping, Optional
 from urllib.parse import urlparse
@@ -24,10 +25,8 @@ class ClickHouseExecutor:
         return result.result_rows
 
     def close(self) -> None:
-        try:
+        with suppress(Exception):
             self.client.close()
-        except Exception:
-            pass
 
 
 class ClickHouseSessionAware:

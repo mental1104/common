@@ -69,6 +69,7 @@ This file captures recent work plus portability guidance, grouped by language.
 - Python setup: install poetry-core alongside pip/setuptools/wheel to support PEP 517 builds with --no-build-isolation (macOS asyncmy).
 - Python setup: install Cython to build asyncmy from source on Python 3.13.
 - Python deps: add greenlet to satisfy SQLAlchemy asyncio on macOS.
+- Coverage: omit `python/test` from Python coverage runs.
 - DB registry now keys by `(DBKind, db_name)`; `db_name` defaults to `default`.
 - Scopes now take kind first: `session_scope(DBKind.X, db_name="default")` and async variants.
 - Added scope aliases: `pg_session_scope`, `mysql_session_scope`, `sqlite_session_scope`, `ck_session_scope` and matching `*_tx_scope`.
