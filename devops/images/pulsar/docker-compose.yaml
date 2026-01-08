@@ -5,8 +5,8 @@ services:
     networks:
       - shared_network
     ports:
-      - "6650:6650"
-      - "8080:8080"
+      - "${PULSAR_BROKER_PORT:-6650}:6650"
+      - "${PULSAR_ADMIN_PORT:-8080}:8080"
     volumes: 
       - pulsar-data:/pulsar/data
 

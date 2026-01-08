@@ -1,5 +1,10 @@
 matplotlib
 psycopg2-binary>=2.9 ; sys_platform != "win32" and (python_version >= "3.9" or sys_platform != "darwin")
+psycopg
+pymysql
+asyncmy
+aiosqlite
+clickhouse-connect
 sqlalchemy 
 requests 
 redis>=5.0 
@@ -30,3 +35,4 @@ semgrep ; sys_platform != "win32"
 pybind11
 pypdf
 mental1104_export_layer @ file://../export/python
+clickhouse_sqlalchemy

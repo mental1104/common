@@ -6,7 +6,7 @@ services:
       - shared_network
     command: jobmanager
     ports:
-      - "8081:8081"    # Flink Web UI
+      - "${FLINK_WEB_PORT:-8081}:8081"    # Flink Web UI
     environment:
       - |
         FLINK_PROPERTIES=

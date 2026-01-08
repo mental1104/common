@@ -5,7 +5,7 @@ services:
     networks:
       - shared_network
     ports:
-      - "80:80"
+      - "${NGINX_PORT:-80}:80"
 
 networks:
   shared_network:
