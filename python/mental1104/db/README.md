@@ -50,6 +50,42 @@ register_db(
 )
 ```
 
+## Redis
+
+Register once per process, then use redis scopes:
+
+```
+from mental1104.db import register_redis, redis_session_scope, redis_params_from_env
+
+register_redis(name="cache", params=redis_params_from_env())
+with redis_session_scope("cache") as client:
+    client.set("k", "v")
+```
+
+Redis cluster:
+
+```
+from mental1104.db import RedisMode
+
+register_redis(
+    name="cache",
+    params=redis_params_from_env(),
+    mode=RedisMode.CLUSTER,
+    options={"startup_nodes": "10.0.0.1:6379,10.0.0.2:6379"},
+)
+```
+
+Redis sentinel:
+
+```
+register_redis(
+    name="cache",
+    params=redis_params_from_env(),
+    mode=RedisMode.SENTINEL,
+    options={"sentinels": "10.0.0.10:26379,10.0.0.11:26379", "service_name": "mymaster"},
+)
+```
+
 ## Migration Hook
 
 `set_migration_handler()` + `run_migrations()` define an integration point
