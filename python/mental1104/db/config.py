@@ -13,6 +13,11 @@ class DBKind(str, Enum):
     CLICKHOUSE = "clickhouse"
 
 
+class ClickHouseProfile(str, Enum):
+    DEFAULT = "default"
+    DISTRIBUTED = "distributed"
+
+
 @dataclass(frozen=True)
 class ConnParams:
     ip: str

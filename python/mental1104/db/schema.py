@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from typing import Any, Callable, Iterable, Mapping, Optional
+from typing import Any, Callable, Iterable, List, Mapping, Optional, Tuple
 
 from sqlalchemy.engine import Engine
 from sqlalchemy.ext.asyncio import AsyncEngine
 
-from .config import ConnParams, DBKind, SASettings
+from .config import ClickHouseProfile, ConnParams, DBKind, SASettings
 from .orm_base import Base
 from .registry import DBConfig, DEFAULT_REGISTRY, DBRegistry
 
@@ -34,6 +34,7 @@ def register_db_and_create(
     params: Optional[ConnParams] = None,
     db_name: str = "default",
     options: Optional[Mapping[str, Any]] = None,
+    profile: Optional[ClickHouseProfile | str] = None,
     sa: Optional[SASettings] = None,
     registry: DBRegistry = DEFAULT_REGISTRY,
     base: Base = Base,
@@ -47,6 +48,7 @@ def register_db_and_create(
         params=params,
         db_name=db_name,
         options=options,
+        profile=profile,
         sa=sa,
         allow_overwrite=allow_overwrite,
     )
@@ -62,6 +64,7 @@ async def register_db_and_create_async(
     params: Optional[ConnParams] = None,
     db_name: str = "default",
     options: Optional[Mapping[str, Any]] = None,
+    profile: Optional[ClickHouseProfile | str] = None,
     sa: Optional[SASettings] = None,
     registry: DBRegistry = DEFAULT_REGISTRY,
     base: Base = Base,
@@ -75,6 +78,7 @@ async def register_db_and_create_async(
         params=params,
         db_name=db_name,
         options=options,
+        profile=profile,
         sa=sa,
         allow_overwrite=allow_overwrite,
     )
@@ -94,8 +98,26 @@ def create_all(
     cfg = registry.get_config(kind, db_name)
     if cfg.kind == DBKind.CLICKHOUSE and registry.is_clickhouse_connect(kind, db_name):
         raise RuntimeError("clickhouse-connect does not support SQLAlchemy create_all")
+    target_tables = list(tables) if tables else list(base.metadata.tables.values())
+    cluster_applied: List[Tuple[Any, Optional[str]]] = []
+    if cfg.kind == DBKind.CLICKHOUSE:
+        cluster = cfg.cluster
+        if cfg.profile == ClickHouseProfile.DISTRIBUTED and not cluster:
+            raise RuntimeError(
+                "ClickHouse distributed profile requires cluster name. "
+                "Set options={'cluster': '...'} or options={'on_cluster': '...'}."
+            )
+        if cluster:
+            for table in target_tables:
+                opts = table.dialect_options["clickhouse"]
+                cluster_applied.append((table, opts.get("cluster")))
+                opts["cluster"] = cluster
     engine: Engine = registry.get_engine(kind, db_name)
-    base.metadata.create_all(bind=engine, tables=list(tables) if tables else None)
+    try:
+        base.metadata.create_all(bind=engine, tables=target_tables if tables else None)
+    finally:
+        for table, prev in cluster_applied:
+            table.dialect_options["clickhouse"]["cluster"] = prev
 
 
 async def create_all_async(
@@ -122,8 +144,26 @@ def drop_all(
     cfg = registry.get_config(kind, db_name)
     if cfg.kind == DBKind.CLICKHOUSE and registry.is_clickhouse_connect(kind, db_name):
         raise RuntimeError("clickhouse-connect does not support SQLAlchemy drop_all")
+    target_tables = list(tables) if tables else list(base.metadata.tables.values())
+    cluster_applied: List[Tuple[Any, Optional[str]]] = []
+    if cfg.kind == DBKind.CLICKHOUSE:
+        cluster = cfg.cluster
+        if cfg.profile == ClickHouseProfile.DISTRIBUTED and not cluster:
+            raise RuntimeError(
+                "ClickHouse distributed profile requires cluster name. "
+                "Set options={'cluster': '...'} or options={'on_cluster': '...'}."
+            )
+        if cluster:
+            for table in target_tables:
+                opts = table.dialect_options["clickhouse"]
+                cluster_applied.append((table, opts.get("cluster")))
+                opts["cluster"] = cluster
     engine: Engine = registry.get_engine(kind, db_name)
-    base.metadata.drop_all(bind=engine, tables=list(tables) if tables else None)
+    try:
+        base.metadata.drop_all(bind=engine, tables=target_tables if tables else None)
+    finally:
+        for table, prev in cluster_applied:
+            table.dialect_options["clickhouse"]["cluster"] = prev
 
 
 async def drop_all_async(

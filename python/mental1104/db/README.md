@@ -37,6 +37,19 @@ with session_scope(DBKind.CLICKHOUSE, "analytics_ch") as ch:
     rows = ch.select("SELECT 1")
 ```
 
+ClickHouse distributed defaults (auto inject global IN/JOIN settings):
+
+```
+from mental1104.db import ClickHouseProfile
+
+register_db(
+    DBKind.CLICKHOUSE,
+    dsn="clickhouse+http://...",
+    profile=ClickHouseProfile.DISTRIBUTED,
+    options={"cluster": "my_cluster"},
+)
+```
+
 ## Migration Hook
 
 `set_migration_handler()` + `run_migrations()` define an integration point
