@@ -5,8 +5,8 @@ services:
     networks:
       - shared_network
     ports:
-      - "6379:6379"
-      - "8001:8001"   # RedisInsight 可视化
+      - "${REDIS_PORT:-6379}:6379"
+      - "${REDIS_INSIGHT_PORT:-8001}:8001"   # RedisInsight 可视化
     volumes:
       - redis-data:/data
     environment:

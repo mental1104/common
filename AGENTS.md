@@ -57,3 +57,29 @@ This file captures recent work plus portability guidance, grouped by language.
 #### Warnings-as-Errors Culture
 - Several third-party components and CI configurations treat warnings as errors (`-Werror` or `/WX`), so new warnings can fail builds.
 - Code should be warning-clean across GCC/Clang/MSVC (unused params, narrowing, sign conversions, missing initializers, etc.).
+
+## Python
+
+### Recent Work (context)
+- DB registry now keys by `(DBKind, db_name)`; `db_name` defaults to `default`.
+- Scopes now take kind first: `session_scope(DBKind.X, db_name="default")` and async variants.
+- Added scope aliases: `pg_session_scope`, `mysql_session_scope`, `sqlite_session_scope`, `ck_session_scope` and matching `*_tx_scope`.
+- Added `AutoSessionDAO` (auto-injects `db` keyword param) and optional singleton support.
+- Added `register_db_and_create` / `register_db_and_create_async` (register + optional create_all).
+
+### DB Usage (latest)
+- Register once per process: `register_db(DBKind.POSTGRES, dsn=..., db_name="default")`.
+- Optional create: `register_db_and_create(DBKind.POSTGRES, dsn=..., create=True)`.
+- Read: `session_scope(DBKind.X)`; write/mixed: `tx_scope(DBKind.X)`.
+- Async: `async_session_scope(DBKind.X)` / `async_tx_scope(DBKind.X)`.
+- DAO pattern: `AutoSessionDAO` methods should be `def create(self, ..., *, db)` and called inside scope without passing `db`.
+- Multi-DB flow: open separate scopes per DB; pass `db=` explicitly when nesting to avoid ContextVar overwrite.
+
+### Connection Methods (common DSNs)
+- PostgreSQL: `postgresql+psycopg://user:pass@host:port/db`.
+- MySQL: `mysql+pymysql://user:pass@host:port/db`.
+- SQLite (params): `ConnParams(ip="path.sqlite3")` or `ConnParams(ip=":memory:")`.
+- SQLite (dsn): `sqlite+pysqlite:///path.sqlite3`.
+- ClickHouse (SQLAlchemy dialect): use dialect-specific DSN (if installed).
+- ClickHouse (clickhouse-connect): `register_db(DBKind.CLICKHOUSE, dsn="clickhouse://...", options={"driver": "connect"})`.
+  ClickHouse `tx_scope` is a no-op wrapper; no ACID transactions.
