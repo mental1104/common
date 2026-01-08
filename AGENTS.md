@@ -2,6 +2,9 @@
 
 This file captures recent work plus portability guidance, grouped by language.
 
+## General
+- 有关于仓库的公共规范在每次更新完代码后都往AGENTS.md里及时更新。
+
 ## C++
 
 ### Recent Work (context)
@@ -83,3 +86,21 @@ This file captures recent work plus portability guidance, grouped by language.
 - ClickHouse (SQLAlchemy dialect): use dialect-specific DSN (if installed).
 - ClickHouse (clickhouse-connect): `register_db(DBKind.CLICKHOUSE, dsn="clickhouse://...", options={"driver": "connect"})`.
   ClickHouse `tx_scope` is a no-op wrapper; no ACID transactions.
+- ClickHouse distributed: `profile=ClickHouseProfile.DISTRIBUTED` with `options={"cluster": "cluster_name"}`; `create_all/drop_all` auto inject `ON CLUSTER`.
+
+### Redis (db/redis)
+- Register once: `register_redis(params=redis_params_from_env())`; use `redis_session_scope()` for read/write.
+- Cluster: `mode=RedisMode.CLUSTER` + `options={"startup_nodes": "host1:6379,host2:6379"}` or env `REDIS_MODE=cluster` + `REDIS_CLUSTER_NODES`.
+- Sentinel: `mode=RedisMode.SENTINEL` + `options={"sentinels": "...", "service_name": "mymaster"}` or env `REDIS_MODE=sentinel` + `REDIS_SENTINELS` + `REDIS_SENTINEL_SERVICE`.
+- ContextVar helpers: `ctx_redis_client()` / `require_ctx_redis_client()`; `RedisSessionAware` mixin provides `_redis()`.
+
+### MongoDB (db/nosql, sync)
+- Register once: `register_mongo(params=mongo_params_from_env())`; use `mongo_session_scope()` for read/write.
+- ContextVar helpers: `ctx_mongo_session()` / `require_ctx_mongo_session()`; `MongoSessionAware` provides `_mongo()`.
+- `mongo_tx_scope()` starts a session + transaction; requires replica set or sharded cluster support.
+- `AutoMongoSessionDAO` can auto-inject a `mongo` parameter from ContextVar; DAO methods should accept `*, mongo`.
+
+### MongoDB (db/nosql, async)
+- Use `async_mongo_session_scope()` / `async_mongo_tx_scope()`; `AsyncMongoSessionAware` provides `_amongo()`.
+- Requires `motor` dependency; same env vars as sync.
+- `AutoMongoSessionDAO` also wraps async DAO methods and injects `mongo`.

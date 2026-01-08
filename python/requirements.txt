@@ -8,6 +8,8 @@ clickhouse-connect
 sqlalchemy 
 requests 
 redis>=5.0 
+pymongo
+motor
 pulsar-client>=2.10 ; sys_platform != "win32"
 pulsar-client[avro] ; sys_platform != "win32"
 pycryptodome 

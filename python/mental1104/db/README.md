@@ -86,6 +86,31 @@ register_redis(
 )
 ```
 
+## MongoDB (sync)
+
+```
+from mental1104.db import mongo_params_from_env, register_mongo, mongo_session_scope
+
+register_mongo(params=mongo_params_from_env())
+with mongo_session_scope() as mongo:
+    coll = mongo.db["demo_users"]
+    coll.insert_one({"name": "alice"})
+    print(list(coll.find({"name": "alice"})))
+```
+
+## MongoDB (async)
+
+```
+from mental1104.db import mongo_params_from_env, register_mongo, async_mongo_session_scope
+
+register_mongo(params=mongo_params_from_env())
+async with async_mongo_session_scope() as mongo:
+    coll = mongo.db["demo_users"]
+    await coll.insert_one({"name": "alice"})
+    rows = [doc async for doc in coll.find({"name": "alice"})]
+    print(rows)
+```
+
 ## Migration Hook
 
 `set_migration_handler()` + `run_migrations()` define an integration point
