@@ -1,5 +1,5 @@
 from .clickhouse_adapter import ClickHouseExecutor, ClickHouseSessionAware
-from .config import ConnParams, DBKind, SASettings, conn_params_from_env
+from .config import ClickHouseProfile, ConnParams, DBKind, SASettings, conn_params_from_env
 from .dao import AutoSessionDAO, SessionAwareDAO, make_async_dao, singleton_dao
 from .factory import (
     create_async_sqlalchemy_client,
@@ -52,6 +52,7 @@ from .session_context import (
 from .uow import AsyncUnitOfWork, UnitOfWork
 __all__ = [
     "DBKind",
+    "ClickHouseProfile",
     "ConnParams",
     "SASettings",
     "conn_params_from_env",

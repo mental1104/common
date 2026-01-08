@@ -9,7 +9,8 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 
 from .client_async import AsyncSQLAlchemyClient
 from .client_sync import SQLAlchemyClient
-from .config import ConnParams, DBKind, SASettings
+from .config import ClickHouseProfile, ConnParams, DBKind, SASettings
+from .clickhouse_profiles import resolve_clickhouse_profile
 from .clickhouse_adapter import ClickHouseExecutor, make_clickhouse_executor
 from .factory import (
     create_async_sqlalchemy_client,
@@ -27,6 +28,8 @@ class DBConfig:
     params: Optional[ConnParams] = None
     sa: SASettings = field(default_factory=SASettings)
     options: Mapping[str, Any] = field(default_factory=dict)
+    profile: Optional[ClickHouseProfile] = None
+    cluster: Optional[str] = None
 
 
 class DBRegistry:
@@ -48,6 +51,7 @@ class DBRegistry:
         *,
         db_name: str = "default",
         options: Optional[Mapping[str, Any]] = None,
+        profile: Optional[ClickHouseProfile | str] = None,
         sa: Optional[SASettings] = None,
         allow_overwrite: bool = False,
     ) -> DBConfig:
@@ -56,13 +60,21 @@ class DBRegistry:
         key = self._key(kind, db_name)
         if not allow_overwrite and key in self._configs:
             raise ValueError(f"db '{db_name}' with kind '{kind.value}' already registered")
+        resolved_profile = None
+        cluster = None
+        if kind == DBKind.CLICKHOUSE:
+            resolved_profile, cluster, merged_options = resolve_clickhouse_profile(options, profile)
+        else:
+            merged_options = dict(options or {})
         config = DBConfig(
             kind=kind,
             db_name=db_name,
             dsn=dsn,
             params=params,
             sa=sa or SASettings(),
-            options=dict(options or {}),
+            options=merged_options,
+            profile=resolved_profile,
+            cluster=cluster,
         )
         self._configs[key] = config
         return config
@@ -185,6 +197,7 @@ def register_db(
     *,
     db_name: str = "default",
     options: Optional[Mapping[str, Any]] = None,
+    profile: Optional[ClickHouseProfile | str] = None,
     sa: Optional[SASettings] = None,
     allow_overwrite: bool = False,
 ) -> DBConfig:
@@ -194,6 +207,7 @@ def register_db(
         params=params,
         db_name=db_name,
         options=options,
+        profile=profile,
         sa=sa,
         allow_overwrite=allow_overwrite,
     )
