@@ -8,6 +8,7 @@ This file captures recent work plus portability guidance, grouped by language.
 ## C++
 
 ### Recent Work (context)
+- Bloom filter test: precompute per-thread slice bounds to avoid unused lambda captures under clang warnings-as-errors.
 - C++11/14 compatibility fixes: JSON now uses `mental1104::string_view` and a variant wrapper (std::variant in C++17+, boost::variant2 fallback). Avoided C++17-only constructs in headers.
 - Redis++ ABI alignment: `M1104_REDISPP_CXX_STANDARD` is injected from CMake (`cpp/cmake/deps.cmake`) and used in `redis_lock.h` to select the right redis++ namespace/ABI helpers.
 - C++11 fix in bloom filter: function templates use trailing return types instead of C++14 auto-deduction.

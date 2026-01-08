@@ -94,10 +94,11 @@ TEST(CoarseLockBloomFilterTest, ConcurrentInsert) {
   std::vector<std::thread> threads;
   threads.reserve(thread_count);
   for (std::size_t t = 0; t < thread_count; ++t) {
-    threads.emplace_back([&bf, &keys, t, per_thread]() {
-      const std::size_t base = t * per_thread;
-      for (std::size_t i = 0; i < per_thread; ++i) {
-        bf.insert(keys[base + i]);
+    const std::size_t base = t * per_thread;
+    const std::size_t end = base + per_thread;
+    threads.emplace_back([&bf, &keys, base, end]() {
+      for (std::size_t i = base; i < end; ++i) {
+        bf.insert(keys[i]);
       }
     });
   }
