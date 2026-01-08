@@ -6,6 +6,7 @@ asyncmy
 aiosqlite
 clickhouse-connect
 sqlalchemy 
+greenlet
 requests 
 redis>=5.0 
 pymongo

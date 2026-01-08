@@ -1,4 +1,5 @@
 import os
+import sys
 import uuid
 
 import pytest
@@ -13,6 +14,12 @@ from mental1104.db import (
     session_scope,
 )
 from mental1104.db import AutoSessionDAO
+
+if sys.version_info < (3, 9):
+    pytest.skip(
+        "clickhouse_connect requires Python >= 3.9",
+        allow_module_level=True,
+    )
 
 pytest.importorskip("clickhouse_connect")
 
