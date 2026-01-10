@@ -5,6 +5,46 @@ This file captures recent work plus portability guidance, grouped by language.
 ## General
 - 有关于仓库的公共规范在每次更新完代码后都往AGENTS.md里及时更新。
 
+### Performance: Non-IO Benchmark Protocol (must follow)
+
+#### Trigger
+- 任何涉及：performance/benchmark/latency/throughput/scheduler/GC/concurrency/lock/contention 的任务
+- 任何要求“用数据佐证结论”的题（尤其是调度/GC/并发）
+
+#### Mandatory workflow (do not skip)
+1) Define unit-of-work（一次迭代代表什么），并固定：输入数据、并发度/线程数、运行时长/迭代次数
+2) Same-binary A/B：同一程序内实现两版本（A 与 B），同一进程内顺序跑，避免环境漂移
+3) Warmup + Trials：预热后至少 5 次 trial；输出每次 trial 的摘要，并计算 CV%
+4) Collect evidence first：先产出数据/剖析文件，再写解释与结论（禁止“拍脑袋结论”）
+5) Explain bias：必须解释偏差来源（采样开销/调度抖动/GC 周期/锁竞争/缓存抖动）
+6) Repro commands：给出一条命令可在干净环境复现（含编译与运行参数）
+
+#### Mandatory outputs (artifacts)
+- C++：stdout 里必须包含
+  - latency: p50/p95/p99/max（单位明确）
+  - throughput: ops/s
+  - CPU: user/sys + cpu%
+  - memory: RSS（峰值或采样口径明确）
+  - ctx switch: voluntary/involuntary
+  - stability: mean/std/CV%（至少对 ops/s 与 p99）
+- Go（调度/GC/并发题必须额外给曲线/剖析）：
+  - metrics.csv（时间序列曲线：cpu%、goroutines、heap_inuse、gc_cycles、gc_pause、mutex_wait）
+  - trace.out（go tool trace）
+  - mutex.pprof、block.pprof（go tool pprof）
+  - summary.txt（每个 trial 的 wall、ops/s、cpu%、user/sys）
+
+#### Metric -> Claim contract (must be self-consistent)
+- cpu%≈100 且 sys≈0：compute-bound（纯计算/算法差异）证据：cpu% + user/sys
+- sys 占比上升：syscall/内核态开销上升 证据：sys(s) 或 profile/trace 里 syscall
+- p99/max 拉高且 ctx switch 上升：调度噪声/抢占/锁竞争放大尾延迟 证据：p99/max + ctxsw
+- Go：mutex_wait_total_s 或 count 上升：锁竞争恶化 证据：metrics.csv + mutex.pprof 栈
+- Go：gc_cycles/pauses 上升且 heap_inuse 更高：分配压力/GC 频率增加 证据：metrics.csv + trace.out GC 密度
+
+#### Acceptance (Definition of Done)
+- 能清楚说出“哪个指标证明哪件事”，并且与产物（stdout/csv/pprof/trace）一一对应、自洽
+- 多次 trial 结论一致（至少关键指标差异方向一致；并说明 CV% 与噪声来源）
+
+
 ## C++
 
 ### Recent Work (context)
