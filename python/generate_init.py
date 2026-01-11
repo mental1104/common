@@ -1,3 +1,4 @@
+# WALKTHROUGH: done 2026-01-11
 # 脚本概述：递归扫描 mental1104 包, 收集公开符号, 区分安全/风险模块, 生成带直接导入与惰性导出的 __init__.py;
 # 处理重名决策与 import * 的 __all__, 并生成惰性 __getattr__/__dir__ 实现
 import ast
