@@ -36,7 +36,7 @@ jobs:
             cxx_std: "20"
     env:
       CMAKE_BUILD_PARALLEL_LEVEL: 4
-      GCOV: gcov
+      GCOV: ${{ matrix.compiler == 'clang' && 'llvm-cov gcov' || 'gcov' }}
       CC: ${{ matrix.compiler == 'clang' && 'clang' || 'gcc' }}
       CXX: ${{ matrix.compiler == 'clang' && 'clang++' || 'g++' }}
       CXX_STD: ${{ matrix.cxx_std }}
@@ -79,6 +79,20 @@ jobs:
       - name: Coverage C++
         run: ./dev coverage-cpp
 
+      - name: Export cobertura xml (coverage.xml)
+        if: always()
+        run: |
+          rm -f coverage.xml
+          gcovr -r . cpp/build \
+            --object-directory cpp/build \
+            --gcov-executable "$GCOV" \
+            --xml-pretty -o coverage.xml \
+            --filter '^cpp/' \
+            --exclude '^cpp/build/' \
+            --exclude '^cpp/thirdparty/' \
+            --gcov-ignore-errors=no_working_dir_found \
+            --print-summary
+
       - name: Extract coverage summary
         if: always()
         run: |
@@ -93,7 +107,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: cpp-cov-linux-${{ matrix.compiler }}-cxx${{ matrix.cxx_std }}
-          path: cov.json
+          path: |
+            cov.json
+            coverage.xml
           retention-days: 7
 
       - name: Vet C++
@@ -202,6 +218,20 @@ jobs:
       - name: Coverage C++
         run: ./dev coverage-cpp
 
+      - name: Export cobertura xml (coverage.xml)
+        if: always()
+        run: |
+          rm -f coverage.xml
+          gcovr -r . cpp/build \
+            --object-directory cpp/build \
+            --gcov-executable "$GCOV" \
+            --xml-pretty -o coverage.xml \
+            --filter '^cpp/' \
+            --exclude '^cpp/build/' \
+            --exclude '^cpp/thirdparty/' \
+            --gcov-ignore-errors=no_working_dir_found \
+            --print-summary
+
       - name: Extract coverage summary
         if: always()
         run: |
@@ -216,7 +246,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: cpp-cov-linux-integration
-          path: cov.json
+          path: |
+            cov.json
+            coverage.xml
           retention-days: 7
 
   macos:
@@ -268,6 +300,20 @@ jobs:
       - name: Coverage C++
         run: ./dev coverage-cpp
 
+      - name: Export cobertura xml (coverage.xml)
+        if: always()
+        run: |
+          rm -f coverage.xml
+          gcovr -r . cpp/build \
+            --object-directory cpp/build \
+            --gcov-executable "$GCOV" \
+            --xml-pretty -o coverage.xml \
+            --filter '^cpp/' \
+            --exclude '^cpp/build/' \
+            --exclude '^cpp/thirdparty/' \
+            --gcov-ignore-errors=no_working_dir_found \
+            --print-summary
+
       - name: Extract coverage summary
         if: always()
         run: |
@@ -282,7 +328,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: cpp-cov-macos-${{ matrix.compiler }}-cxx${{ matrix.cxx_std }}
-          path: cov.json
+          path: |
+            cov.json
+            coverage.xml
           retention-days: 7
 
   windows:
@@ -345,9 +393,7 @@ jobs:
 
   pages:
     name: Pages / C++ coverage dashboard
-    # NOTE:
-    # - This job DEPLOYS GitHub Pages (overwrites the whole site).
-    # - While debugging, only deploy from develop. Change to main later.
+    # While debugging: deploy only from develop. Change to main later.
     if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/develop' }}
     needs: [linux, linux-integration, macos, windows]
     runs-on: ubuntu-latest
