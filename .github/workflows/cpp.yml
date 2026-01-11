@@ -50,6 +50,7 @@ jobs:
         with:
           submodules: false
           fetch-depth: 0
+
       - name: Init submodules (sparse Boost)
         run: |
           python3 - <<'PY'
@@ -58,23 +59,47 @@ jobs:
           from devtool.commands.ops import cpp as cpp_ops
           sys.exit(cpp_ops.git_submodules(base_env()) or 0)
           PY
+
       - name: Install toolchain
         run: |
           sudo apt-get update
           sudo apt-get install -y build-essential cmake ninja-build clang clang-format clang-tidy gcovr lcov \
             libmpfr-dev libgmp-dev
+
       - name: Setup C++
         run: ./dev setup-cpp --config Debug
+
       - name: Format C++
         if: ${{ matrix.compiler == 'gcc' && matrix.cxx_std == '23' }}
         run: ./dev fmt-cpp
+
       - name: Build C++
         run: ./dev build-cpp --config Debug
+
       - name: Coverage C++
         run: ./dev coverage-cpp
+
+      - name: Extract coverage summary
+        if: always()
+        run: |
+          python3 tools/ci/extract_coverage.py \
+            --os linux \
+            --compiler ${{ matrix.compiler == 'clang' && 'clang++' || 'g++' }} \
+            --cxx-std ${{ matrix.cxx_std }} \
+            --out cov.json
+
+      - name: Upload coverage summary
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cpp-cov-linux-${{ matrix.compiler }}-cxx${{ matrix.cxx_std }}
+          path: cov.json
+          retention-days: 7
+
       - name: Vet C++
         if: ${{ matrix.compiler == 'gcc' && matrix.cxx_std == '23' }}
         run: ./dev vet-cpp
+
       - name: Guard C++
         if: ${{ matrix.compiler == 'gcc' && matrix.cxx_std == '23' }}
         run: ./dev guard-cpp
@@ -132,6 +157,7 @@ jobs:
         with:
           submodules: false
           fetch-depth: 0
+
       - name: Init submodules (sparse Boost)
         run: |
           python3 - <<'PY'
@@ -140,6 +166,7 @@ jobs:
           from devtool.commands.ops import cpp as cpp_ops
           sys.exit(cpp_ops.git_submodules(base_env()) or 0)
           PY
+
       - name: Start Pulsar (standalone -nss)
         run: |
           docker rm -f pulsar || true
@@ -147,6 +174,7 @@ jobs:
             -p ${PULSAR_BROKER_PORT}:${PULSAR_BROKER_PORT} -p ${PULSAR_ADMIN_PORT}:${PULSAR_ADMIN_PORT} \
             apachepulsar/pulsar:3.2.0 \
             bin/pulsar standalone -nss
+
       - name: Wait for postgres/redis/pulsar
         run: |
           for i in {1..40}; do
@@ -155,19 +183,41 @@ jobs:
           done
           echo "services not ready" >&2
           exit 1
+
       - name: Install toolchain
         run: |
           sudo apt-get update
           sudo apt-get install -y build-essential cmake ninja-build clang clang-format clang-tidy gcovr lcov \
             libmpfr-dev libgmp-dev
+
       - name: Setup C++
         run: ./dev setup-cpp --config Debug
+
       - name: Build C++
         run: ./dev build-cpp --config Debug
+
       - name: Test redis-plus-plus
         run: ./dev test-redispp --config Debug
+
       - name: Coverage C++
         run: ./dev coverage-cpp
+
+      - name: Extract coverage summary
+        if: always()
+        run: |
+          python3 tools/ci/extract_coverage.py \
+            --os linux \
+            --compiler g++ \
+            --cxx-std 20 \
+            --out cov.json
+
+      - name: Upload coverage summary
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cpp-cov-linux-integration
+          path: cov.json
+          retention-days: 7
 
   macos:
     name: macOS / ${{ matrix.compiler == 'clang' && 'clang++' || 'g++' }} / C++${{ matrix.cxx_std }}
@@ -193,6 +243,7 @@ jobs:
         with:
           submodules: false
           fetch-depth: 0
+
       - name: Init submodules (sparse Boost)
         run: |
           python3 - <<'PY'
@@ -201,17 +252,38 @@ jobs:
           from devtool.commands.ops import cpp as cpp_ops
           sys.exit(cpp_ops.git_submodules(base_env()) or 0)
           PY
+
       - name: Install toolchain
         run: |
           brew update
           brew install cmake llvm ninja gcovr lcov mpfr gmp gcc
           echo "$(brew --prefix llvm)/bin" >> $GITHUB_PATH
+
       - name: Setup C++
         run: ./dev setup-cpp --config Debug
+
       - name: Build C++
         run: ./dev build-cpp --config Debug
+
       - name: Coverage C++
         run: ./dev coverage-cpp
+
+      - name: Extract coverage summary
+        if: always()
+        run: |
+          python3 tools/ci/extract_coverage.py \
+            --os macos \
+            --compiler ${{ matrix.compiler == 'clang' && 'clang++' || 'g++' }} \
+            --cxx-std ${{ matrix.cxx_std }} \
+            --out cov.json
+
+      - name: Upload coverage summary
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cpp-cov-macos-${{ matrix.compiler }}-cxx${{ matrix.cxx_std }}
+          path: cov.json
+          retention-days: 7
 
   windows:
     name: Windows / MSVC / C++${{ matrix.cxx_std }}
@@ -238,13 +310,85 @@ jobs:
         with:
           submodules: false
           fetch-depth: 0
+
       - name: Init submodules (sparse Boost)
         run: python -c "import sys;from devtool.commands.common import base_env;from devtool.commands.ops import cpp as cpp_ops;sys.exit(cpp_ops.git_submodules(base_env()) or 0)"
+
       - name: Setup C++
         run: python -m devtool.cli setup-cpp --config Debug
+
       - name: Build export C++ layer
         run: python -m devtool.cli build-export-cpp --config Debug
+
       - name: Build C++
         run: python -m devtool.cli build-cpp --config Debug
+
       - name: Coverage C++
         run: python -m devtool.cli coverage-cpp
+
+      - name: Extract coverage summary
+        if: always()
+        run: |
+          python tools/ci/extract_coverage.py `
+            --os windows `
+            --compiler msvc `
+            --cxx-std ${{ matrix.cxx_std }} `
+            --out cov.json
+
+      - name: Upload coverage summary
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cpp-cov-windows-msvc-cxx${{ matrix.cxx_std }}
+          path: cov.json
+          retention-days: 7
+
+  pages:
+    name: Pages / C++ coverage dashboard
+    # NOTE:
+    # - This job DEPLOYS GitHub Pages (overwrites the whole site).
+    # - While debugging, only deploy from develop. Change to main later.
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/develop' }}
+    needs: [linux, linux-integration, macos, windows]
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+
+    concurrency:
+      group: "pages"
+      cancel-in-progress: true
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Download coverage artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: _cov
+          pattern: cpp-cov-*
+          merge-multiple: true
+
+      - name: Build coverage site (dist/)
+        run: |
+          python tools/ci/build_cpp_coverage_site.py --cov-dir _cov --out-dir dist
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

@@ -21,9 +21,44 @@ LANG_DIRS = {
     "devops": ("devops", {".py"}),
 }
 
-# 走读完成标记（大小写不敏感）
+# 走读完成标记（大小写不敏感；允许后面跟日期/备注）
+# 例如：WALKTHROUGH: done 2026-01-11 (notes: xxx)
 MARKER = "walkthrough: done"
 HEAD_LINES = 30
+
+# 各语言打标指南（展示在 GitHub Pages 面板里）
+LANG_GUIDE = {
+    "python": {
+        "where": "文件头部（建议 shebang / encoding / 模块注释附近），前 30 行内",
+        "how": "加入一行注释，包含文本 WALKTHROUGH: done（大小写不敏感）",
+        "example": "# WALKTHROUGH: done 2026-01-11",
+        "note": "建议用注释行；不要放在字符串里以免误判为“完成但未真正标注”。",
+    },
+    "rust": {
+        "where": "文件头部前 30 行内",
+        "how": "加入一行行注释 // ...，包含 WALKTHROUGH: done",
+        "example": "// WALKTHROUGH: done 2026-01-11",
+        "note": "建议单独成行，避免混入代码尾注释导致可读性差。",
+    },
+    "cpp": {
+        "where": "文件头部前 30 行内（版权/说明注释块之后也可以）",
+        "how": "加入一行 // ... 或 /* ... */，包含 WALKTHROUGH: done（脚本按纯文本匹配）",
+        "example": "// WALKTHROUGH: done 2026-01-11",
+        "note": "推荐 // 单行，便于 diff 与 grep。",
+    },
+    "golang": {
+        "where": "package 声明之前或之后的文件头部前 30 行内",
+        "how": "加入一行 // ...，包含 WALKTHROUGH: done",
+        "example": "// WALKTHROUGH: done 2026-01-11",
+        "note": "Go 文件头通常很干净，建议放在 package 上方。",
+    },
+    "dotnet": {
+        "where": "文件头部前 30 行内",
+        "how": "加入一行 // ...，包含 WALKTHROUGH: done",
+        "example": "// WALKTHROUGH: done 2026-01-11",
+        "note": "适用于 .cs/.fs/.vb 等；脚本按文件扩展名筛选。",
+    },
+}
 
 @dataclass(frozen=True)
 class FileStat:
@@ -53,9 +88,45 @@ def pct(done: int, total: int) -> float:
 
 def bar(p: float, width: int = 24) -> str:
     # p: 0~100
-    done = int(round((p / 100.0) * width))
-    done = max(0, min(width, done))
-    return "█" * done + "░" * (width - done)
+    filled = int(round((p / 100.0) * width))
+    filled = max(0, min(width, filled))
+    return "█" * filled + "░" * (width - filled)
+
+def render_guidelines() -> str:
+    rows = []
+    for lang in ["python", "rust", "cpp", "golang", "dotnet"]:
+        g = LANG_GUIDE[lang]
+        rows.append(
+            "<tr>"
+            f"<td><strong>{html.escape(lang)}</strong></td>"
+            f"<td>{html.escape(g['where'])}</td>"
+            f"<td>{html.escape(g['how'])}</td>"
+            f"<td><code>{html.escape(g['example'])}</code></td>"
+            f"<td>{html.escape(g['note'])}</td>"
+            "</tr>"
+        )
+
+    return f"""
+  <h2>Marking Guide（打标指南）</h2>
+  <p>
+    <strong>Walkthrough 判定标准（脚本口径）：</strong>
+    只要该文件在<strong>前 {HEAD_LINES} 行</strong>内出现文本 <code>{html.escape(MARKER)}</code>（大小写不敏感，可追加日期/备注），就视为已 walkthrough。
+  </p>
+  <table>
+    <thead>
+      <tr>
+        <th>Lang</th>
+        <th>Where</th>
+        <th>How</th>
+        <th>Example</th>
+        <th>Note</th>
+      </tr>
+    </thead>
+    <tbody>
+      {''.join(rows)}
+    </tbody>
+  </table>
+"""
 
 def render_index(data: dict) -> str:
     updated_at = html.escape(data["updated_at"])
@@ -67,6 +138,7 @@ def render_index(data: dict) -> str:
             f"<td>{s['pct']}%</td>"
             f"<td><code>{html.escape(bar(s['pct']))}</code></td></tr>"
         )
+
     remain_sections = []
     for lang, s in data["by_lang"].items():
         remain = s["remaining"]
@@ -79,6 +151,7 @@ def render_index(data: dict) -> str:
         remain_sections.append(f"<h3>{html.escape(lang)} remaining</h3><ul>{items}</ul>{more}")
 
     remain_html = "\n".join(remain_sections) if remain_sections else "<p>All done.</p>"
+    guide_html = render_guidelines()
 
     return f"""<!doctype html>
 <html>
@@ -89,7 +162,7 @@ def render_index(data: dict) -> str:
   <style>
     body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; margin: 24px; }}
     table {{ border-collapse: collapse; width: 100%; }}
-    th, td {{ border: 1px solid #ddd; padding: 8px; }}
+    th, td {{ border: 1px solid #ddd; padding: 8px; vertical-align: top; }}
     th {{ background: #f6f8fa; text-align: left; }}
     code {{ background: #f6f8fa; padding: 2px 6px; border-radius: 4px; }}
   </style>
@@ -108,6 +181,8 @@ def render_index(data: dict) -> str:
       {"".join(rows)}
     </tbody>
   </table>
+
+  {guide_html}
 
   <h2>Remaining</h2>
   {remain_html}
@@ -162,10 +237,10 @@ def main() -> None:
         "by_lang": by_lang,
     }
 
-    # 写 JSON（给 badge 用）
+    # 写 JSON（给 badge/程序化读取用）
     (out_dir / "progress.json").write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
 
-    # 写 HTML 面板
+    # 写 HTML 面板（含打标指南）
     (out_dir / "index.html").write_text(render_index(data), encoding="utf-8")
 
     # 写 Actions Summary（Markdown）
@@ -181,3 +256,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+

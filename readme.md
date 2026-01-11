@@ -2,7 +2,9 @@
 
 ## Walkthrough
 
-[![walkthrough](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fmental1104.github.io%2Fcommon%2Fprogress.json&query=%24.pct&suffix=%25&label=walkthrough)](https://mental1104.github.io/common/)
+[![walkthrough](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fmental1104.github.io%2Fcommon%2Fprogress.json&query=%24.pct&suffix=%25&label=walkthrough)](https://mental1104.github.io/common/) 
+
+![C++ Coverage](https://mental1104.github.io/common/coverage/cpp.svg)
 
 Python + C++ 混合工程，使用统一的 `dev` 命令驱动（macOS/Linux：`./dev`，Windows：`dev`）。子命令按语言拆分，后续扩展只需新增文件。
 
