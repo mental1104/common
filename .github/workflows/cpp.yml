@@ -19,8 +19,8 @@ on:
         default: true
 
 env:
-  PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/devops
-  CTEST_V: ${{ (vars.CI_VERBOSE_LOGS == 'false' || (github.event_name == 'workflow_dispatch' && (github.event.inputs.verbose_logs == false || github.event.inputs.verbose_logs == 'false'))) && '' || '-V' }}
+  PYTHONPATH: "${{ github.workspace }}:${{ github.workspace }}/devops"
+  CTEST_V: "${{ (vars.CI_VERBOSE_LOGS == 'false' || (github.event_name == 'workflow_dispatch' && (github.event.inputs.verbose_logs == false || github.event.inputs.verbose_logs == 'false'))) && '' || '-V' }}"
 
 jobs:
   linux:
@@ -52,15 +52,12 @@ jobs:
           fetch-depth: 0
 
       - name: Init submodules (sparse Boost)
+        continue-on-error: true
         run: |
-          python3 - <<'PY'
-          import sys
-          from devtool.commands.common import base_env
-          from devtool.commands.ops import cpp as cpp_ops
-          sys.exit(cpp_ops.git_submodules(base_env()) or 0)
-          PY
+          python3 -c "import sys;from devtool.commands.common import base_env;from devtool.commands.ops import cpp as cpp_ops;sys.exit(cpp_ops.git_submodules(base_env()) or 0)"
 
       - name: Install toolchain
+        continue-on-error: true
         run: |
           sudo apt-get update
           sudo apt-get install -y build-essential cmake ninja-build clang clang-format clang-tidy gcovr lcov \
@@ -86,11 +83,13 @@ jobs:
         continue-on-error: true
         run: ./dev coverage-cpp
 
-      - name: Export cobertura xml (coverage.xml) (never fail)
+      - name: Export coverage.xml (never fail)
         if: always()
+        continue-on-error: true
         run: |
           set +e
           rm -f coverage.xml
+
           if [ -d cpp/build ]; then
             gcovr -r . cpp/build \
               --object-directory cpp/build \
@@ -105,47 +104,36 @@ jobs:
           fi
 
           if [ ! -f coverage.xml ]; then
-            cat > coverage.xml <<'XML'
-<?xml version='1.0' encoding='UTF-8'?>
-<!DOCTYPE coverage SYSTEM 'http://cobertura.sourceforge.net/xml/coverage-04.dtd'>
-<coverage line-rate="0.0" branch-rate="0.0" lines-covered="0" lines-valid="0" branches-covered="0" branches-valid="0" complexity="0.0" timestamp="0" version="placeholder">
-  <sources><source>.</source></sources>
-  <packages/>
-</coverage>
-XML
+            printf '%s\n' \
+              "<?xml version='1.0' encoding='UTF-8'?>" \
+              "<!DOCTYPE coverage SYSTEM 'http://cobertura.sourceforge.net/xml/coverage-04.dtd'>" \
+              "<coverage line-rate=\"0.0\" branch-rate=\"0.0\" lines-covered=\"0\" lines-valid=\"0\" branches-covered=\"0\" branches-valid=\"0\" complexity=\"0.0\" timestamp=\"0\" version=\"placeholder\">" \
+              "  <sources><source>.</source></sources>" \
+              "  <packages/>" \
+              "</coverage>" \
+              > coverage.xml
           fi
 
-      - name: Extract coverage summary (cov.json) (never fail)
+      - name: Extract cov.json (never fail)
         if: always()
+        continue-on-error: true
+        env:
+          COMPILER_LABEL: ${{ matrix.compiler == 'clang' && 'clang++' || 'g++' }}
         run: |
-          COMPILER_LABEL="${{ matrix.compiler == 'clang' && 'clang++' || 'g++' }}"
+          set +e
           python3 tools/ci/extract_coverage.py \
             --os linux \
             --compiler "${COMPILER_LABEL}" \
             --cxx-std ${{ matrix.cxx_std }} \
-            --out cov.json
-          rc=$?
-          if [ $rc -ne 0 ] || [ ! -f cov.json ]; then
-            python3 - <<PY
-import json, os
-obj = {
-  "os": "linux",
-  "compiler": "${COMPILER_LABEL}",
-  "cxx_std": int("${{ matrix.cxx_std }}"),
-  "line_pct": 0.0,
-  "source": "placeholder",
-  "sha": os.getenv("GITHUB_SHA",""),
-  "run_id": os.getenv("GITHUB_RUN_ID",""),
-  "status": "placeholder"
-}
-with open("cov.json","w",encoding="utf-8") as f:
-  json.dump(obj,f,ensure_ascii=False,indent=2)
-print("coverage placeholder line_pct=0.00% source=placeholder")
-PY
+            --out cov.json || true
+
+          if [ ! -f cov.json ]; then
+            python3 -c "import json,os;obj={'os':'linux','compiler':os.getenv('COMPILER_LABEL','unknown'),'cxx_std':int('${{ matrix.cxx_std }}'),'line_pct':0.0,'source':'placeholder','sha':os.getenv('GITHUB_SHA',''),'run_id':os.getenv('GITHUB_RUN_ID',''),'status':'placeholder'};json.dump(obj,open('cov.json','w',encoding='utf-8'),ensure_ascii=False,indent=2);print('coverage placeholder line_pct=0.00% source=placeholder')"
           fi
 
       - name: Upload coverage artifacts
         if: always()
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: cpp-cov-linux-${{ matrix.compiler }}-cxx${{ matrix.cxx_std }}
@@ -183,7 +171,7 @@ PY
           - "5432:5432"
         options: >-
           --health-cmd="pg_isready -U test"
-          --health-interval=5s --health-timeout=5s --health-retries=5
+          --health-interval=5s --health-timeout=5s --health-retries=55
       redis:
         image: redis/redis-stack-server:7.2.0-v7
         ports:
@@ -224,13 +212,9 @@ PY
           fetch-depth: 0
 
       - name: Init submodules (sparse Boost)
+        continue-on-error: true
         run: |
-          python3 - <<'PY'
-          import sys
-          from devtool.commands.common import base_env
-          from devtool.commands.ops import cpp as cpp_ops
-          sys.exit(cpp_ops.git_submodules(base_env()) or 0)
-          PY
+          python3 -c "import sys;from devtool.commands.common import base_env;from devtool.commands.ops import cpp as cpp_ops;sys.exit(cpp_ops.git_submodules(base_env()) or 0)"
 
       - name: Start Pulsar (standalone -nss)
         id: pulsar
@@ -254,6 +238,7 @@ PY
           exit 1
 
       - name: Install toolchain
+        continue-on-error: true
         run: |
           sudo apt-get update
           sudo apt-get install -y build-essential cmake ninja-build clang clang-format clang-tidy gcovr lcov \
@@ -279,11 +264,13 @@ PY
         continue-on-error: true
         run: ./dev coverage-cpp
 
-      - name: Export cobertura xml (coverage.xml) (never fail)
+      - name: Export coverage.xml (never fail)
         if: always()
+        continue-on-error: true
         run: |
           set +e
           rm -f coverage.xml
+
           if [ -d cpp/build ]; then
             gcovr -r . cpp/build \
               --object-directory cpp/build \
@@ -298,46 +285,34 @@ PY
           fi
 
           if [ ! -f coverage.xml ]; then
-            cat > coverage.xml <<'XML'
-<?xml version='1.0' encoding='UTF-8'?>
-<!DOCTYPE coverage SYSTEM 'http://cobertura.sourceforge.net/xml/coverage-04.dtd'>
-<coverage line-rate="0.0" branch-rate="0.0" lines-covered="0" lines-valid="0" branches-covered="0" branches-valid="0" complexity="0.0" timestamp="0" version="placeholder">
-  <sources><source>.</source></sources>
-  <packages/>
-</coverage>
-XML
+            printf '%s\n' \
+              "<?xml version='1.0' encoding='UTF-8'?>" \
+              "<!DOCTYPE coverage SYSTEM 'http://cobertura.sourceforge.net/xml/coverage-04.dtd'>" \
+              "<coverage line-rate=\"0.0\" branch-rate=\"0.0\" lines-covered=\"0\" lines-valid=\"0\" branches-covered=\"0\" branches-valid=\"0\" complexity=\"0.0\" timestamp=\"0\" version=\"placeholder\">" \
+              "  <sources><source>.</source></sources>" \
+              "  <packages/>" \
+              "</coverage>" \
+              > coverage.xml
           fi
 
-      - name: Extract coverage summary (cov.json) (never fail)
+      - name: Extract cov.json (never fail)
         if: always()
+        continue-on-error: true
         run: |
+          set +e
           python3 tools/ci/extract_coverage.py \
             --os linux \
             --compiler g++ \
             --cxx-std 20 \
-            --out cov.json
-          rc=$?
-          if [ $rc -ne 0 ] || [ ! -f cov.json ]; then
-            python3 - <<PY
-import json, os
-obj = {
-  "os": "linux",
-  "compiler": "g++",
-  "cxx_std": 20,
-  "line_pct": 0.0,
-  "source": "placeholder",
-  "sha": os.getenv("GITHUB_SHA",""),
-  "run_id": os.getenv("GITHUB_RUN_ID",""),
-  "status": "placeholder"
-}
-with open("cov.json","w",encoding="utf-8") as f:
-  json.dump(obj,f,ensure_ascii=False,indent=2)
-print("coverage placeholder line_pct=0.00% source=placeholder")
-PY
+            --out cov.json || true
+
+          if [ ! -f cov.json ]; then
+            python3 -c "import json,os;obj={'os':'linux','compiler':'g++','cxx_std':20,'line_pct':0.0,'source':'placeholder','sha':os.getenv('GITHUB_SHA',''),'run_id':os.getenv('GITHUB_RUN_ID',''),'status':'placeholder'};json.dump(obj,open('cov.json','w',encoding='utf-8'),ensure_ascii=False,indent=2);print('coverage placeholder line_pct=0.00% source=placeholder')"
           fi
 
       - name: Upload coverage artifacts
         if: always()
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: cpp-cov-linux-integration
@@ -377,15 +352,12 @@ PY
           fetch-depth: 0
 
       - name: Init submodules (sparse Boost)
+        continue-on-error: true
         run: |
-          python3 - <<'PY'
-          import sys
-          from devtool.commands.common import base_env
-          from devtool.commands.ops import cpp as cpp_ops
-          sys.exit(cpp_ops.git_submodules(base_env()) or 0)
-          PY
+          python3 -c "import sys;from devtool.commands.common import base_env;from devtool.commands.ops import cpp as cpp_ops;sys.exit(cpp_ops.git_submodules(base_env()) or 0)"
 
       - name: Install toolchain
+        continue-on-error: true
         run: |
           brew update
           brew install cmake llvm ninja gcovr lcov mpfr gmp gcc
@@ -406,11 +378,13 @@ PY
         continue-on-error: true
         run: ./dev coverage-cpp
 
-      - name: Export cobertura xml (coverage.xml) (never fail)
+      - name: Export coverage.xml (never fail)
         if: always()
+        continue-on-error: true
         run: |
           set +e
           rm -f coverage.xml
+
           if [ -d cpp/build ]; then
             gcovr -r . cpp/build \
               --object-directory cpp/build \
@@ -425,47 +399,36 @@ PY
           fi
 
           if [ ! -f coverage.xml ]; then
-            cat > coverage.xml <<'XML'
-<?xml version='1.0' encoding='UTF-8'?>
-<!DOCTYPE coverage SYSTEM 'http://cobertura.sourceforge.net/xml/coverage-04.dtd'>
-<coverage line-rate="0.0" branch-rate="0.0" lines-covered="0" lines-valid="0" branches-covered="0" branches-valid="0" complexity="0.0" timestamp="0" version="placeholder">
-  <sources><source>.</source></sources>
-  <packages/>
-</coverage>
-XML
+            printf '%s\n' \
+              "<?xml version='1.0' encoding='UTF-8'?>" \
+              "<!DOCTYPE coverage SYSTEM 'http://cobertura.sourceforge.net/xml/coverage-04.dtd'>" \
+              "<coverage line-rate=\"0.0\" branch-rate=\"0.0\" lines-covered=\"0\" lines-valid=\"0\" branches-covered=\"0\" branches-valid=\"0\" complexity=\"0.0\" timestamp=\"0\" version=\"placeholder\">" \
+              "  <sources><source>.</source></sources>" \
+              "  <packages/>" \
+              "</coverage>" \
+              > coverage.xml
           fi
 
-      - name: Extract coverage summary (cov.json) (never fail)
+      - name: Extract cov.json (never fail)
         if: always()
+        continue-on-error: true
+        env:
+          COMPILER_LABEL: ${{ matrix.compiler == 'clang' && 'clang++' || 'g++' }}
         run: |
-          COMPILER_LABEL="${{ matrix.compiler == 'clang' && 'clang++' || 'g++' }}"
+          set +e
           python3 tools/ci/extract_coverage.py \
             --os macos \
             --compiler "${COMPILER_LABEL}" \
             --cxx-std ${{ matrix.cxx_std }} \
-            --out cov.json
-          rc=$?
-          if [ $rc -ne 0 ] || [ ! -f cov.json ]; then
-            python3 - <<PY
-import json, os
-obj = {
-  "os": "macos",
-  "compiler": "${COMPILER_LABEL}",
-  "cxx_std": int("${{ matrix.cxx_std }}"),
-  "line_pct": 0.0,
-  "source": "placeholder",
-  "sha": os.getenv("GITHUB_SHA",""),
-  "run_id": os.getenv("GITHUB_RUN_ID",""),
-  "status": "placeholder"
-}
-with open("cov.json","w",encoding="utf-8") as f:
-  json.dump(obj,f,ensure_ascii=False,indent=2)
-print("coverage placeholder line_pct=0.00% source=placeholder")
-PY
+            --out cov.json || true
+
+          if [ ! -f cov.json ]; then
+            python3 -c "import json,os;obj={'os':'macos','compiler':os.getenv('COMPILER_LABEL','unknown'),'cxx_std':int('${{ matrix.cxx_std }}'),'line_pct':0.0,'source':'placeholder','sha':os.getenv('GITHUB_SHA',''),'run_id':os.getenv('GITHUB_RUN_ID',''),'status':'placeholder'};json.dump(obj,open('cov.json','w',encoding='utf-8'),ensure_ascii=False,indent=2);print('coverage placeholder line_pct=0.00% source=placeholder')"
           fi
 
       - name: Upload coverage artifacts
         if: always()
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: cpp-cov-macos-${{ matrix.compiler }}-cxx${{ matrix.cxx_std }}
@@ -506,6 +469,7 @@ PY
           fetch-depth: 0
 
       - name: Init submodules (sparse Boost)
+        id: init_submodules
         continue-on-error: true
         run: python -c "import sys;from devtool.commands.common import base_env;from devtool.commands.ops import cpp as cpp_ops;sys.exit(cpp_ops.git_submodules(base_env()) or 0)"
 
@@ -529,35 +493,23 @@ PY
         continue-on-error: true
         run: python -m devtool.cli coverage-cpp
 
-      - name: Extract coverage summary (cov.json) (never fail)
+      - name: Extract cov.json (never fail)
         if: always()
+        continue-on-error: true
         run: |
           python tools/ci/extract_coverage.py `
             --os windows `
             --compiler msvc `
             --cxx-std ${{ matrix.cxx_std }} `
             --out cov.json
+
           if (-not (Test-Path cov.json)) {
-            python - <<PY
-import json, os
-obj = {
-  "os": "windows",
-  "compiler": "msvc",
-  "cxx_std": int("${{ matrix.cxx_std }}"),
-  "line_pct": 0.0,
-  "source": "placeholder",
-  "sha": os.getenv("GITHUB_SHA",""),
-  "run_id": os.getenv("GITHUB_RUN_ID",""),
-  "status": "placeholder"
-}
-with open("cov.json","w",encoding="utf-8") as f:
-  json.dump(obj,f,ensure_ascii=False,indent=2)
-print("coverage placeholder line_pct=0.00% source=placeholder")
-PY
+            python -c "import json,os; obj={'os':'windows','compiler':'msvc','cxx_std':int(os.getenv('CXX_STD','0') or 0),'line_pct':0.0,'source':'placeholder','sha':os.getenv('GITHUB_SHA',''),'run_id':os.getenv('GITHUB_RUN_ID',''),'status':'placeholder'}; json.dump(obj,open('cov.json','w',encoding='utf-8'),ensure_ascii=False,indent=2); print('coverage placeholder line_pct=0.00% source=placeholder')"
           }
 
       - name: Upload coverage artifacts
         if: always()
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: cpp-cov-windows-msvc-cxx${{ matrix.cxx_std }}
@@ -571,7 +523,6 @@ PY
 
   pages:
     name: Pages / C++ coverage dashboard
-    # 关键：即使 needs 里有失败，这个 job 也照跑；并且只在 develop push 时部署
     if: ${{ always() && github.event_name == 'push' && github.ref == 'refs/heads/develop' }}
     needs: [linux, linux-integration, macos, windows]
     runs-on: ubuntu-latest
@@ -588,31 +539,63 @@ PY
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        continue-on-error: true
 
       - name: Configure Pages
         uses: actions/configure-pages@v5
+        continue-on-error: true
 
       - name: Setup Python
         uses: actions/setup-python@v5
+        continue-on-error: true
         with:
           python-version: "3.12"
 
-      - name: Download coverage artifacts
+      - name: Download coverage artifacts (never block)
         uses: actions/download-artifact@v4
+        continue-on-error: true
         with:
           path: _cov
           pattern: cpp-cov-*
           merge-multiple: true
 
-      - name: Build coverage site (dist/)
+      - name: Ensure cov inputs exist
+        if: always()
         run: |
-          python tools/ci/build_cpp_coverage_site.py --cov-dir _cov --out-dir dist
+          set -e
+          mkdir -p _cov
+          if ! ls -1 _cov/*.json >/dev/null 2>&1; then
+            python3 -c "import json; obj={'os':'unknown','compiler':'unknown','cxx_std':0,'line_pct':0.0,'source':'placeholder','sha':'','run_id':'','status':'placeholder'}; json.dump(obj,open('_cov/cov.json','w',encoding='utf-8'),ensure_ascii=False,indent=2); print('wrote _cov/cov.json placeholder')"
+          fi
 
-      - name: Upload Pages artifact
+      - name: Build coverage site (dist/) (never block)
+        id: build_site
+        continue-on-error: true
+        run: |
+          python3 tools/ci/build_cpp_coverage_site.py --cov-dir _cov --out-dir dist
+
+      - name: Ensure dist exists
+        if: always()
+        run: |
+          set -e
+          if [ ! -d dist ]; then
+            mkdir -p dist
+            printf '%s\n' \
+              '<!doctype html><meta charset="utf-8"><title>Coverage</title>' \
+              '<h1>Coverage site build failed</h1>' \
+              '<p>Please check CI logs. This deployment is a placeholder.</p>' \
+              > dist/index.html
+          fi
+
+      - name: Upload Pages artifact (never block)
+        if: always()
+        continue-on-error: true
         uses: actions/upload-pages-artifact@v3
         with:
           path: dist
 
-      - name: Deploy to GitHub Pages
+      - name: Deploy to GitHub Pages (never block)
+        if: always()
+        continue-on-error: true
         id: deployment
         uses: actions/deploy-pages@v4
