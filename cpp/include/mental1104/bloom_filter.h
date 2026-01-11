@@ -1,6 +1,6 @@
 #ifndef __MENTAL1104_BLOOM_FILTER
 #define __MENTAL1104_BLOOM_FILTER
-
+// walkthrough: done
 #include <cmath>
 #include <cstddef>
 #include <functional>
