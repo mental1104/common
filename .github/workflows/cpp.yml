@@ -587,28 +587,25 @@ jobs:
         with:
           path: _cov
           pattern: cpp-cov-*
-          merge-multiple: true
+          merge-multiple: false
 
-      - name: Build coverage site (dist/)
-        id: build_site
+      - name: Build coverage site + badges (dist/)
         run: |
           set -euo pipefail
           python3 - <<'PY'
           import json, glob, os, statistics, html
+          from pathlib import Path
 
           def compiler_slug(c: str) -> str:
             s = (c or "unknown").lower()
-            if "clang" in s:
-              return "clangpp"
-            if "g++" in s or s == "gpp" or "gcc" in s:
-              return "gpp"
-            if "msvc" in s:
-              return "msvc"
+            if "clang" in s: return "clangpp"
+            if "g++" in s or "gcc" in s: return "gpp"
+            if "msvc" in s: return "msvc"
             return "".join(ch for ch in s.replace("+", "p").replace(" ", "") if ch.isalnum() or ch in "-_")
 
           def badge_color(pct: float, status: str) -> str:
             st = (status or "").lower()
-            if st in ("placeholder", "unknown", "fail", "failure", "error"):
+            if st in ("placeholder", "unknown", "fail", "failure", "error", "na", "n/a"):
               return "#9f9f9f"
             if pct >= 95: return "#4c1"
             if pct >= 85: return "#97CA00"
@@ -646,15 +643,27 @@ jobs:
             ]
             return "\n".join(lines)
 
-          # Collect cov.json recursively (your artifacts store them under _cov/<key>/cov.json)
-          paths = glob.glob("_cov/**/cov.json", recursive=True)
+          def write_svg(path: Path, label: str, msg: str, status: str):
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(svg_badge(label, msg, badge_color(0.0 if msg == "N/A" else float(msg.rstrip("%") or 0.0), status)), encoding="utf-8")
 
-          entries = []
-          for p in paths:
+          out_badges = Path("dist/badges")
+          out_data = Path("dist/data")
+          out_badges.mkdir(parents=True, exist_ok=True)
+          out_data.mkdir(parents=True, exist_ok=True)
+
+          # cov.json files live under: _cov/<artifact_name>/cov.json (merge-multiple=false)
+          cov_files = [Path(p) for p in glob.glob("_cov/**/cov.json", recursive=True)]
+
+          # Parse all entries, keep artifact key (for alias badges like linux-gpp-cxx20-integration.svg)
+          raw = []
+          for p in cov_files:
+            artifact_dir = p.parent.name
+            key = artifact_dir[len("cpp-cov-"):] if artifact_dir.startswith("cpp-cov-") else artifact_dir
             try:
-              d = json.load(open(p, "r", encoding="utf-8"))
+              d = json.loads(p.read_text(encoding="utf-8"))
             except Exception:
-              continue
+              d = {}
             os_name = str(d.get("os", "unknown"))
             comp = str(d.get("compiler", "unknown"))
             try:
@@ -666,20 +675,39 @@ jobs:
             except Exception:
               pct = 0.0
             status = str(d.get("status", "ok"))
-            entries.append({
+            raw.append({
+              "key": key,                 # e.g. linux-gpp-cxx20-integration
               "os": os_name,
               "compiler": comp,
               "compiler_slug": compiler_slug(comp),
               "cxx_std": cxx,
               "line_pct": pct,
               "status": status,
-              "src": p,
+              "src": str(p),
             })
 
-          os.makedirs("dist/badges", exist_ok=True)
-          os.makedirs("dist/data", exist_ok=True)
+          # 1) 先生成“按 artifact key”别名 badge（用于 integration / 自定义名称）
+          #    即 dist/badges/<key>.svg
+          seen_keys = set()
+          for e in raw:
+            seen_keys.add(e["key"])
+            msg = f'{e["line_pct"]:.1f}%'
+            (out_badges / f'{e["key"]}.svg').write_text(
+              svg_badge("cov", msg, badge_color(e["line_pct"], e["status"])),
+              encoding="utf-8",
+            )
 
-          # Keep best entry per (os, compiler_slug, cxx_std)
+          # 确保 integration badge 永远存在（即便 job 失败/缺失也不裂）
+          if "linux-gpp-cxx20-integration" not in seen_keys:
+            (out_badges / "linux-gpp-cxx20-integration.svg").write_text(
+              svg_badge("cov", "N/A", badge_color(0.0, "na")),
+              encoding="utf-8",
+            )
+
+          # 2) 再生成“规范矩阵”badge：dist/badges/{os}-{compiler_slug}-cxx{std}.svg
+          #    注意：排除 integration 产物，避免污染矩阵（linux g++ cxx20 被 exclude 的话应显示 N/A）
+          matrix_entries = [e for e in raw if "integration" not in e["key"]]
+
           def score(e):
             st = (e["status"] or "").lower()
             s = 0
@@ -689,43 +717,75 @@ jobs:
             return s
 
           best = {}
-          for e in entries:
+          for e in matrix_entries:
             k = (e["os"], e["compiler_slug"], e["cxx_std"])
             if k not in best or score(e) > score(best[k]):
               best[k] = e
 
-          selected = list(best.values())
+          # 期望的全量组合（缺失则写 N/A，避免 README/表格裂图）
+          expected = []
+          for std in (11, 14, 17, 20, 23):
+            expected.append(("linux", "clangpp", std))
+            expected.append(("linux", "gpp", std))
+            expected.append(("macos", "clangpp", std))
+            expected.append(("macos", "gpp", std))
+            expected.append(("windows", "msvc", std))
 
-          # Write per-combo badges
-          for e in selected:
-            out = f'dist/badges/{e["os"]}-{e["compiler_slug"]}-cxx{e["cxx_std"]}.svg'
-            msg = f'{e["line_pct"]:.1f}%'
-            color = badge_color(e["line_pct"], e["status"])
-            open(out, "w", encoding="utf-8").write(svg_badge("cov", msg, color))
+          selected = []
+          for (osn, cs, std) in expected:
+            k = (osn, cs, std)
+            if k in best:
+              e = best[k]
+              msg = f'{e["line_pct"]:.1f}%'
+              (out_badges / f"{osn}-{cs}-cxx{std}.svg").write_text(
+                svg_badge("cov", msg, badge_color(e["line_pct"], e["status"])),
+                encoding="utf-8",
+              )
+              selected.append(e)
+            else:
+              (out_badges / f"{osn}-{cs}-cxx{std}.svg").write_text(
+                svg_badge("cov", "N/A", badge_color(0.0, "na")),
+                encoding="utf-8",
+              )
 
-          # Overall badge (simple mean of non-placeholder entries)
+          # 3) overall：只基于矩阵 best（非 placeholder）
           real = [e["line_pct"] for e in selected if (e["status"] or "").lower() not in ("placeholder","unknown","fail","failure","error")]
           overall = statistics.mean(real) if real else 0.0
-          open("dist/badges/overall.svg", "w", encoding="utf-8").write(
-            svg_badge("cov", f"{overall:.1f}%", badge_color(overall, "ok" if real else "placeholder"))
+          (out_badges / "overall.svg").write_text(
+            svg_badge("cov", f"{overall:.1f}%", badge_color(overall, "ok" if real else "placeholder")),
+            encoding="utf-8",
           )
 
-          # Data json
-          json.dump(
-            {"overall": overall, "entries": sorted(selected, key=lambda x: (x["os"], x["compiler_slug"], x["cxx_std"]))},
-            open("dist/data/coverage.json", "w", encoding="utf-8"),
-            ensure_ascii=False,
-            indent=2,
+          # 4) data + index.html（相对路径，适配 /common/ 子路径）
+          data_entries = []
+          for (osn, cs, std) in expected:
+            e = best.get((osn, cs, std))
+            if e:
+              data_entries.append(e)
+            else:
+              data_entries.append({
+                "key": f"{osn}-{cs}-cxx{std}",
+                "os": osn,
+                "compiler": cs,
+                "compiler_slug": cs,
+                "cxx_std": std,
+                "line_pct": 0.0,
+                "status": "na",
+                "src": "",
+              })
+
+          (out_data / "coverage.json").write_text(
+            json.dumps({"overall": overall, "entries": data_entries}, ensure_ascii=False, indent=2),
+            encoding="utf-8",
           )
 
-          # Index page (fixed matrix)
           os_list = ["linux", "macos", "windows"]
           stds = [11, 14, 17, 20, 23]
           comp_by_os = {"linux": ["clangpp", "gpp"], "macos": ["clangpp", "gpp"], "windows": ["msvc"]}
 
           def cell(osn, cs, st):
             fn = f"badges/{osn}-{cs}-cxx{st}.svg"
-            return f'<a href="./"><img alt="{osn}-{cs}-cxx{st}" src="{fn}"></a>'
+            return f'<img alt="{osn}-{cs}-cxx{st}" src="{fn}">'
 
           rows = []
           for osn in os_list:
@@ -738,7 +798,9 @@ jobs:
           <meta name="viewport" content="width=device-width,initial-scale=1">
           <title>C++ Coverage</title>
           <h1>C++ Coverage</h1>
-          <p><a href="./"><img alt="overall" src="badges/overall.svg"></a></p>
+          <p><img alt="overall" src="badges/overall.svg"></p>
+
+          <h2>Matrix</h2>
           <table border="1" cellpadding="6" cellspacing="0">
             <thead>
               <tr><th>platform / compiler</th><th>C++11</th><th>C++14</th><th>C++17</th><th>C++20</th><th>C++23</th></tr>
@@ -747,12 +809,22 @@ jobs:
               {''.join(rows)}
             </tbody>
           </table>
+
+          <h2>Integration</h2>
+          <p><img alt="linux-gpp-cxx20-integration" src="badges/linux-gpp-cxx20-integration.svg"></p>
+
           <p>Data: <a href="data/coverage.json">coverage.json</a></p>
           """
-          open("dist/index.html", "w", encoding="utf-8").write(index)
-          open("dist/.nojekyll", "w", encoding="utf-8").write("")
+          Path("dist").mkdir(parents=True, exist_ok=True)
+          Path("dist/index.html").write_text(index, encoding="utf-8")
+          Path("dist/.nojekyll").write_text("", encoding="utf-8")
 
-          print(f"cov.json found={len(paths)} selected={len(selected)} overall={overall:.2f}%")
+          # 可选：给 walkthrough endpoint 兜底，避免 shields 显示 resource not found（两种常见路径都写）
+          walkthrough = {"schemaVersion": 1, "label": "walkthrough", "message": "N/A", "color": "9f9f9f"}
+          Path("dist/walkthrough.json").write_text(json.dumps(walkthrough, ensure_ascii=False), encoding="utf-8")
+          Path("dist/data/walkthrough.json").write_text(json.dumps(walkthrough, ensure_ascii=False), encoding="utf-8")
+
+          print(f"cov.json found={len(cov_files)} overall={overall:.2f}% badges_dir={out_badges}")
           PY
 
       - name: Upload Pages artifact
