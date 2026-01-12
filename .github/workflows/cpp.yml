@@ -40,9 +40,9 @@ jobs:
       CC: ${{ matrix.compiler == 'clang' && 'clang' || 'gcc' }}
       CXX: ${{ matrix.compiler == 'clang' && 'clang++' || 'g++' }}
       CXX_STD: ${{ matrix.cxx_std }}
-      # 用于文件名/URL，避免 "++" 这种不安全字符
+      # 用于文件名/URL，避免 "++"
       COMPILER_KEY: ${{ matrix.compiler == 'clang' && 'clangpp' || 'gpp' }}
-      # 用于 cov.json 字段展示
+      # 用于 cov.json 里展示
       COMPILER_LABEL: ${{ matrix.compiler == 'clang' && 'clang++' || 'g++' }}
     defaults:
       run:
@@ -130,7 +130,7 @@ jobs:
             --out cov.json || true
 
           if [ ! -f cov.json ]; then
-            python3 -c "import json,os;obj={'os':'linux','compiler':os.getenv('COMPILER_LABEL','unknown'),'cxx_std':int('${{ matrix.cxx_std }}'),'line_pct':0.0,'source':'placeholder','sha':os.getenv('GITHUB_SHA',''),'run_id':os.getenv('GITHUB_RUN_ID',''),'status':'placeholder'};json.dump(obj,open('cov.json','w',encoding='utf-8'),ensure_ascii=False,indent=2);print('coverage placeholder line_pct=0.00% source=placeholder')"
+            python3 -c "import json,os;obj={'os':'linux','compiler':os.getenv('COMPILER_LABEL','unknown'),'cxx_std':int('${{ matrix.cxx_std }}'),'line_pct':0.0,'source':'placeholder','sha':os.getenv('GITHUB_SHA',''),'run_id':os.getenv('GITHUB_RUN_ID',''),'status':'placeholder'};json.dump(obj,open('cov.json','w',encoding='utf-8'),ensure_ascii=False,indent=2)"
           fi
 
       - name: Stash coverage files (unique path)
@@ -195,8 +195,6 @@ jobs:
       CC: gcc
       CXX: g++
       CXX_STD: "20"
-      COMPILER_KEY: "gpp"
-      COMPILER_LABEL: "g++"
       DATABASE_URL: postgresql://test:test@localhost:5432/app
       REDIS_URL: redis://localhost:6379/0
       PGUSER: test
@@ -314,12 +312,12 @@ jobs:
           set +e
           python3 tools/ci/extract_coverage.py \
             --os linux \
-            --compiler "${COMPILER_LABEL}" \
+            --compiler g++ \
             --cxx-std 20 \
             --out cov.json || true
 
           if [ ! -f cov.json ]; then
-            python3 -c "import json,os;obj={'os':'linux','compiler':os.getenv('COMPILER_LABEL','g++'),'cxx_std':20,'line_pct':0.0,'source':'placeholder','sha':os.getenv('GITHUB_SHA',''),'run_id':os.getenv('GITHUB_RUN_ID',''),'status':'placeholder'};json.dump(obj,open('cov.json','w',encoding='utf-8'),ensure_ascii=False,indent=2);print('coverage placeholder line_pct=0.00% source=placeholder')"
+            python3 -c "import json,os;obj={'os':'linux','compiler':'g++','cxx_std':20,'line_pct':0.0,'source':'placeholder','sha':os.getenv('GITHUB_SHA',''),'run_id':os.getenv('GITHUB_RUN_ID',''),'status':'placeholder'};json.dump(obj,open('cov.json','w',encoding='utf-8'),ensure_ascii=False,indent=2)"
           fi
 
       - name: Stash coverage files (unique path)
@@ -327,7 +325,7 @@ jobs:
         continue-on-error: true
         run: |
           set +e
-          key="linux-${COMPILER_KEY}-cxx20-integration"
+          key="linux-gpp-cxx20-integration"
           mkdir -p "_cov/${key}"
           cp -f cov.json "_cov/${key}/cov.json" 2>/dev/null || true
           cp -f coverage.xml "_cov/${key}/coverage.xml" 2>/dev/null || true
@@ -443,7 +441,7 @@ jobs:
             --out cov.json || true
 
           if [ ! -f cov.json ]; then
-            python3 -c "import json,os;obj={'os':'macos','compiler':os.getenv('COMPILER_LABEL','unknown'),'cxx_std':int('${{ matrix.cxx_std }}'),'line_pct':0.0,'source':'placeholder','sha':os.getenv('GITHUB_SHA',''),'run_id':os.getenv('GITHUB_RUN_ID',''),'status':'placeholder'};json.dump(obj,open('cov.json','w',encoding='utf-8'),ensure_ascii=False,indent=2);print('coverage placeholder line_pct=0.00% source=placeholder')"
+            python3 -c "import json,os;obj={'os':'macos','compiler':os.getenv('COMPILER_LABEL','unknown'),'cxx_std':int('${{ matrix.cxx_std }}'),'line_pct':0.0,'source':'placeholder','sha':os.getenv('GITHUB_SHA',''),'run_id':os.getenv('GITHUB_RUN_ID',''),'status':'placeholder'};json.dump(obj,open('cov.json','w',encoding='utf-8'),ensure_ascii=False,indent=2)"
           fi
 
       - name: Stash coverage files (unique path)
@@ -485,8 +483,6 @@ jobs:
       CMAKE_GENERATOR: "Visual Studio 17 2022"
       CMAKE_BUILD_PARALLEL_LEVEL: 4
       CXX_STD: ${{ matrix.cxx_std }}
-      COMPILER_KEY: "msvc"
-      COMPILER_LABEL: "msvc"
     defaults:
       run:
         shell: pwsh
@@ -534,7 +530,7 @@ jobs:
             --out cov.json
 
           if (-not (Test-Path cov.json)) {
-            python -c "import json,os; obj={'os':'windows','compiler':'msvc','cxx_std':int(os.getenv('CXX_STD','0') or 0),'line_pct':0.0,'source':'placeholder','sha':os.getenv('GITHUB_SHA',''),'run_id':os.getenv('GITHUB_RUN_ID',''),'status':'placeholder'}; json.dump(obj,open('cov.json','w',encoding='utf-8'),ensure_ascii=False,indent=2); print('coverage placeholder line_pct=0.00% source=placeholder')"
+            python -c "import json,os; obj={'os':'windows','compiler':'msvc','cxx_std':int(os.getenv('CXX_STD','0') or 0),'line_pct':0.0,'source':'placeholder','sha':os.getenv('GITHUB_SHA',''),'run_id':os.getenv('GITHUB_RUN_ID',''),'status':'placeholder'}; json.dump(obj,open('cov.json','w',encoding='utf-8'),ensure_ascii=False,indent=2)"
           }
 
       - name: Stash coverage files (unique path)
@@ -543,7 +539,7 @@ jobs:
         run: |
           $key = "windows-msvc-cxx${{ matrix.cxx_std }}"
           New-Item -ItemType Directory -Force -Path "_cov/$key" | Out-Null
-          if (Test-Path "cov.json") { Copy-Item -Force "cov.json" "_cov/$key/cov.json" }
+          Copy-Item -Force cov.json "_cov/$key/cov.json" -ErrorAction SilentlyContinue
 
       - name: Upload coverage artifacts (unique)
         if: always()
@@ -577,127 +573,35 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        continue-on-error: true
 
       - name: Configure Pages
         uses: actions/configure-pages@v5
-        continue-on-error: true
 
       - name: Setup Python
         uses: actions/setup-python@v5
-        continue-on-error: true
         with:
           python-version: "3.12"
 
-      - name: Download coverage artifacts (never block)
+      - name: Download coverage artifacts
         uses: actions/download-artifact@v4
-        continue-on-error: true
         with:
-          path: _cov_raw
+          path: _cov
           pattern: cpp-cov-*
           merge-multiple: true
 
-      - name: Flatten cov.json inputs
+      - name: Ensure cov inputs exist (recursive)
         if: always()
-        continue-on-error: true
         run: |
           set -e
-          mkdir -p _cov_flat
-          python3 - <<'PY'
-          import pathlib, shutil
-          src = pathlib.Path("_cov_raw")
-          dst = pathlib.Path("_cov_flat")
-          dst.mkdir(parents=True, exist_ok=True)
+          mkdir -p _cov
+          if ! find _cov -name "cov.json" -print -quit | grep -q .; then
+            python3 -c "import json; obj={'os':'unknown','compiler':'unknown','cxx_std':0,'line_pct':0.0,'source':'placeholder','sha':'','run_id':'','status':'placeholder'}; json.dump(obj,open('_cov/cov.json','w',encoding='utf-8'),ensure_ascii=False,indent=2)"
+          fi
 
-          found = 0
-          for p in src.rglob("cov.json"):
-            key = p.parent.name
-            shutil.copy2(p, dst / f"{key}.json")
-            found += 1
-
-          if found == 0:
-            # placeholder：保证后续脚本不崩
-            (dst / "placeholder.json").write_text(
-              '{"os":"unknown","compiler":"unknown","cxx_std":0,"line_pct":0.0,"source":"placeholder","sha":"","run_id":"","status":"placeholder"}',
-              encoding="utf-8"
-            )
-          print(f"flattened cov.json files: {found}")
-          PY
-
-      - name: Build coverage site (dist/) (never block)
+      - name: Build coverage site (dist/)
         id: build_site
-        continue-on-error: true
         run: |
-          python3 tools/ci/build_cpp_coverage_site.py --cov-dir _cov_flat --out-dir dist
-
-      - name: Generate per-job badges (dist/badges/*.svg)
-        if: always()
-        continue-on-error: true
-        run: |
-          set -e
-          mkdir -p dist/badges
-          python3 - <<'PY'
-          import json, math, pathlib
-
-          cov_dir = pathlib.Path("_cov_flat")
-          out_dir = pathlib.Path("dist/badges")
-          out_dir.mkdir(parents=True, exist_ok=True)
-
-          def pick_color(pct: float) -> str:
-            if pct >= 90: return "#2da44e"
-            if pct >= 80: return "#6fdd8b"
-            if pct >= 70: return "#d4a72c"
-            if pct >= 60: return "#db6d28"
-            return "#d1242f"
-
-          def svg_badge(label: str, value: str, color: str) -> str:
-            # 简单静态 badge（固定宽度，足够稳定）
-            # label/value 过长会溢出：这里用固定宽度 + 省略号防炸
-            def clip(s, n=28):
-              return s if len(s) <= n else (s[:n-1] + "…")
-            label = clip(label, 28)
-            value = clip(value, 16)
-
-            return f'''<svg xmlns="http://www.w3.org/2000/svg" width="320" height="20" role="img" aria-label="{label}: {value}">
-              <linearGradient id="s" x2="0" y2="100%">
-                <stop offset="0" stop-color="#fff" stop-opacity=".7"/>
-                <stop offset=".1" stop-color="#aaa" stop-opacity=".1"/>
-                <stop offset=".9" stop-color="#000" stop-opacity=".3"/>
-                <stop offset="1" stop-color="#000" stop-opacity=".5"/>
-              </linearGradient>
-              <mask id="m">
-                <rect width="320" height="20" rx="3" fill="#fff"/>
-              </mask>
-              <g mask="url(#m)">
-                <rect width="220" height="20" fill="#24292f"/>
-                <rect x="220" width="100" height="20" fill="{color}"/>
-                <rect width="320" height="20" fill="url(#s)"/>
-              </g>
-              <g fill="#fff" text-anchor="middle" font-family="Verdana,DejaVu Sans,sans-serif" font-size="11">
-                <text x="110" y="14">{label}</text>
-                <text x="270" y="14">{value}</text>
-              </g>
-            </svg>'''
-
-          # 逐 job badge：文件名就是 key（linux-clangpp-cxx14 等）
-          total = []
-          for p in sorted(cov_dir.glob("*.json")):
-            key = p.stem
-            try:
-              obj = json.loads(p.read_text(encoding="utf-8"))
-              pct = float(obj.get("line_pct", 0.0) or 0.0)
-            except Exception:
-              pct = 0.0
-            total.append(pct)
-
-            label = key
-            value = f"{pct:.2f}%"
-            (out_dir / f"{key}.svg").write_text(svg_badge(label, value, pick_color(pct)), encoding="utf-8")
-
-          # overall（简单平均；如果你想按 LOC 加权，需要你在 cov.json 里提供 lines-valid/covered）
-          avg = sum(total) / len(total) if total else 0.0
-          (out_dir / "overall.svg").write_text(svg_badge("cpp coverage overall", f"{avg:.2f}%", pick_color(avg)), encoding="utf-8")
-          PY
+          python3 tools/ci/build_cpp_coverage_site.py --cov-dir _cov --out-dir dist
 
       - name: Ensure dist exists
         if: always()
@@ -708,19 +612,21 @@ jobs:
             printf '%s\n' \
               '<!doctype html><meta charset="utf-8"><title>Coverage</title>' \
               '<h1>Coverage site build failed</h1>' \
-              '<p>Please check CI logs. This deployment is a placeholder.</p>' \
+              '<p>Please check CI logs.</p>' \
               > dist/index.html
           fi
 
-      - name: Upload Pages artifact (never block)
+      - name: Upload Pages artifact
         if: always()
-        continue-on-error: true
         uses: actions/upload-pages-artifact@v3
         with:
           path: dist
 
-      - name: Deploy to GitHub Pages (never block)
-        if: always()
-        continue-on-error: true
+      - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
+
+      - name: Write page url to summary
+        if: always()
+        run: |
+          echo "Deployed: ${{ steps.deployment.outputs.page_url }}" >> $GITHUB_STEP_SUMMARY

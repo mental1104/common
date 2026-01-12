@@ -9,25 +9,36 @@
 **Overall:**
 ![overall](https://<OWNER>.github.io/<REPO>/badges/overall.svg)
 
+## C++ Coverage (by OS / compiler / C++ standard)
+
+**Overall:**  
+![overall](https://mental1104.github.io/common/badges/overall.svg)
+
 ### Linux
 
 | Compiler \ Std | C++11 | C++14 | C++17 | C++20 | C++23 |
 |---|---:|---:|---:|---:|---:|
-| clang++ | ![linux-clangpp-cxx11](https://<OWNER>.github.io/<REPO>/badges/linux-clangpp-cxx11.svg) | ![linux-clangpp-cxx14](https://<OWNER>.github.io/<REPO>/badges/linux-clangpp-cxx14.svg) | ![linux-clangpp-cxx17](https://<OWNER>.github.io/<REPO>/badges/linux-clangpp-cxx17.svg) | ![linux-clangpp-cxx20](https://<OWNER>.github.io/<REPO>/badges/linux-clangpp-cxx20.svg) | ![linux-clangpp-cxx23](https://<OWNER>.github.io/<REPO>/badges/linux-clangpp-cxx23.svg) |
-| g++ | ![linux-gpp-cxx11](https://<OWNER>.github.io/<REPO>/badges/linux-gpp-cxx11.svg) | ![linux-gpp-cxx14](https://<OWNER>.github.io/<REPO>/badges/linux-gpp-cxx14.svg) | ![linux-gpp-cxx17](https://<OWNER>.github.io/<REPO>/badges/linux-gpp-cxx17.svg) | N/A (excluded in CI) | ![linux-gpp-cxx23](https://<OWNER>.github.io/<REPO>/badges/linux-gpp-cxx23.svg) |
+| clang++ | ![linux-clangpp-cxx11](https://mental1104.github.io/common/badges/linux-clangpp-cxx11.svg) | ![linux-clangpp-cxx14](https://mental1104.github.io/common/badges/linux-clangpp-cxx14.svg) | ![linux-clangpp-cxx17](https://mental1104.github.io/common/badges/linux-clangpp-cxx17.svg) | ![linux-clangpp-cxx20](https://mental1104.github.io/common/badges/linux-clangpp-cxx20.svg) | ![linux-clangpp-cxx23](https://mental1104.github.io/common/badges/linux-clangpp-cxx23.svg) |
+| g++ | ![linux-gpp-cxx11](https://mental1104.github.io/common/badges/linux-gpp-cxx11.svg) | ![linux-gpp-cxx14](https://mental1104.github.io/common/badges/linux-gpp-cxx14.svg) | ![linux-gpp-cxx17](https://mental1104.github.io/common/badges/linux-gpp-cxx17.svg) | N/A (excluded in CI) | ![linux-gpp-cxx23](https://mental1104.github.io/common/badges/linux-gpp-cxx23.svg) |
 
 ### macOS
 
 | Compiler \ Std | C++11 | C++14 | C++17 | C++20 | C++23 |
 |---|---:|---:|---:|---:|---:|
-| clang++ | ![macos-clangpp-cxx11](https://<OWNER>.github.io/<REPO>/badges/macos-clangpp-cxx11.svg) | ![macos-clangpp-cxx14](https://<OWNER>.github.io/<REPO>/badges/macos-clangpp-cxx14.svg) | ![macos-clangpp-cxx17](https://<OWNER>.github.io/<REPO>/badges/macos-clangpp-cxx17.svg) | ![macos-clangpp-cxx20](https://<OWNER>.github.io/<REPO>/badges/macos-clangpp-cxx20.svg) | ![macos-clangpp-cxx23](https://<OWNER>.github.io/<REPO>/badges/macos-clangpp-cxx23.svg) |
-| g++ | ![macos-gpp-cxx11](https://<OWNER>.github.io/<REPO>/badges/macos-gpp-cxx11.svg) | ![macos-gpp-cxx14](https://<OWNER>.github.io/<REPO>/badges/macos-gpp-cxx14.svg) | ![macos-gpp-cxx17](https://<OWNER>.github.io/<REPO>/badges/macos-gpp-cxx17.svg) | ![macos-gpp-cxx20](https://<OWNER>.github.io/<REPO>/badges/macos-gpp-cxx20.svg) | ![macos-gpp-cxx23](https://<OWNER>.github.io/<REPO>/badges/macos-gpp-cxx23.svg) |
+| clang++ | ![macos-clangpp-cxx11](https://mental1104.github.io/common/badges/macos-clangpp-cxx11.svg) | ![macos-clangpp-cxx14](https://mental1104.github.io/common/badges/macos-clangpp-cxx14.svg) | ![macos-clangpp-cxx17](https://mental1104.github.io/common/badges/macos-clangpp-cxx17.svg) | ![macos-clangpp-cxx20](https://mental1104.github.io/common/badges/macos-clangpp-cxx20.svg) | ![macos-clangpp-cxx23](https://mental1104.github.io/common/badges/macos-clangpp-cxx23.svg) |
+| g++ | ![macos-gpp-cxx11](https://mental1104.github.io/common/badges/macos-gpp-cxx11.svg) | ![macos-gpp-cxx14](https://mental1104.github.io/common/badges/macos-gpp-cxx14.svg) | ![macos-gpp-cxx17](https://mental1104.github.io/common/badges/macos-gpp-cxx17.svg) | ![macos-gpp-cxx20](https://mental1104.github.io/common/badges/macos-gpp-cxx20.svg) | ![macos-gpp-cxx23](https://mental1104.github.io/common/badges/macos-gpp-cxx23.svg) |
 
 ### Windows (MSVC)
 
 | Std | C++11 | C++14 | C++17 | C++20 | C++23 |
 |---|---:|---:|---:|---:|---:|
-| msvc | ![windows-msvc-cxx11](https://<OWNER>.github.io/<REPO>/badges/windows-msvc-cxx11.svg) | ![windows-msvc-cxx14](https://<OWNER>.github.io/<REPO>/badges/windows-msvc-cxx14.svg) | ![windows-msvc-cxx17](https://<OWNER>.github.io/<REPO>/badges/windows-msvc-cxx17.svg) | ![windows-msvc-cxx20](https://<OWNER>.github.io/<REPO>/badges/windows-msvc-cxx20.svg) | ![windows-msvc-cxx23](https://<OWNER>.github.io/<REPO>/badges/windows-msvc-cxx23.svg) |
+| msvc | ![windows-msvc-cxx11](https://mental1104.github.io/common/badges/windows-msvc-cxx11.svg) | ![windows-msvc-cxx14](https://mental1104.github.io/common/badges/windows-msvc-cxx14.svg) | ![windows-msvc-cxx17](https://mental1104.github.io/common/badges/windows-msvc-cxx17.svg) | ![windows-msvc-cxx20](https://mental1104.github.io/common/badges/windows-msvc-cxx20.svg) | ![windows-msvc-cxx23](https://mental1104.github.io/common/badges/windows-msvc-cxx23.svg) |
+
+### Integration
+
+| Job | Coverage |
+|---|---:|
+| Linux g++ C++20 integration | ![linux-gpp-cxx20-integration](https://mental1104.github.io/common/badges/linux-gpp-cxx20-integration.svg) |
 
 ### Integration (optional)
 
