@@ -2,9 +2,38 @@
 
 ## Walkthrough
 
-[![walkthrough](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fmental1104.github.io%2Fcommon%2Fprogress.json&query=%24.pct&suffix=%25&label=walkthrough)](https://mental1104.github.io/common/) 
+[![walkthrough](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fmental1104.github.io%2Fcommon%2Fprogress.json&query=%24.pct&suffix=%25&label=walkthrough)](https://mental1104.github.io/common/)
 
-![C++ Coverage](https://mental1104.github.io/common/coverage/cpp.svg)
+## C++ Coverage (by OS / compiler / C++ standard)
+
+**Overall:**
+![overall](https://<OWNER>.github.io/<REPO>/badges/overall.svg)
+
+### Linux
+
+| Compiler \ Std | C++11 | C++14 | C++17 | C++20 | C++23 |
+|---|---:|---:|---:|---:|---:|
+| clang++ | ![linux-clangpp-cxx11](https://<OWNER>.github.io/<REPO>/badges/linux-clangpp-cxx11.svg) | ![linux-clangpp-cxx14](https://<OWNER>.github.io/<REPO>/badges/linux-clangpp-cxx14.svg) | ![linux-clangpp-cxx17](https://<OWNER>.github.io/<REPO>/badges/linux-clangpp-cxx17.svg) | ![linux-clangpp-cxx20](https://<OWNER>.github.io/<REPO>/badges/linux-clangpp-cxx20.svg) | ![linux-clangpp-cxx23](https://<OWNER>.github.io/<REPO>/badges/linux-clangpp-cxx23.svg) |
+| g++ | ![linux-gpp-cxx11](https://<OWNER>.github.io/<REPO>/badges/linux-gpp-cxx11.svg) | ![linux-gpp-cxx14](https://<OWNER>.github.io/<REPO>/badges/linux-gpp-cxx14.svg) | ![linux-gpp-cxx17](https://<OWNER>.github.io/<REPO>/badges/linux-gpp-cxx17.svg) | N/A (excluded in CI) | ![linux-gpp-cxx23](https://<OWNER>.github.io/<REPO>/badges/linux-gpp-cxx23.svg) |
+
+### macOS
+
+| Compiler \ Std | C++11 | C++14 | C++17 | C++20 | C++23 |
+|---|---:|---:|---:|---:|---:|
+| clang++ | ![macos-clangpp-cxx11](https://<OWNER>.github.io/<REPO>/badges/macos-clangpp-cxx11.svg) | ![macos-clangpp-cxx14](https://<OWNER>.github.io/<REPO>/badges/macos-clangpp-cxx14.svg) | ![macos-clangpp-cxx17](https://<OWNER>.github.io/<REPO>/badges/macos-clangpp-cxx17.svg) | ![macos-clangpp-cxx20](https://<OWNER>.github.io/<REPO>/badges/macos-clangpp-cxx20.svg) | ![macos-clangpp-cxx23](https://<OWNER>.github.io/<REPO>/badges/macos-clangpp-cxx23.svg) |
+| g++ | ![macos-gpp-cxx11](https://<OWNER>.github.io/<REPO>/badges/macos-gpp-cxx11.svg) | ![macos-gpp-cxx14](https://<OWNER>.github.io/<REPO>/badges/macos-gpp-cxx14.svg) | ![macos-gpp-cxx17](https://<OWNER>.github.io/<REPO>/badges/macos-gpp-cxx17.svg) | ![macos-gpp-cxx20](https://<OWNER>.github.io/<REPO>/badges/macos-gpp-cxx20.svg) | ![macos-gpp-cxx23](https://<OWNER>.github.io/<REPO>/badges/macos-gpp-cxx23.svg) |
+
+### Windows (MSVC)
+
+| Std | C++11 | C++14 | C++17 | C++20 | C++23 |
+|---|---:|---:|---:|---:|---:|
+| msvc | ![windows-msvc-cxx11](https://<OWNER>.github.io/<REPO>/badges/windows-msvc-cxx11.svg) | ![windows-msvc-cxx14](https://<OWNER>.github.io/<REPO>/badges/windows-msvc-cxx14.svg) | ![windows-msvc-cxx17](https://<OWNER>.github.io/<REPO>/badges/windows-msvc-cxx17.svg) | ![windows-msvc-cxx20](https://<OWNER>.github.io/<REPO>/badges/windows-msvc-cxx20.svg) | ![windows-msvc-cxx23](https://<OWNER>.github.io/<REPO>/badges/windows-msvc-cxx23.svg) |
+
+### Integration (optional)
+
+| Job | Coverage |
+|---|---:|
+| Linux g++ C++20 integration | ![linux-gpp-cxx20-integration](https://<OWNER>.github.io/<REPO>/badges/linux-gpp-cxx20-integration.svg) |
 
 Python + C++ 混合工程，使用统一的 `dev` 命令驱动（macOS/Linux：`./dev`，Windows：`dev`）。子命令按语言拆分，后续扩展只需新增文件。
 
@@ -150,23 +179,23 @@ docker build -t mental1104:dev .
 
 ## FAQ
 
-1) `./dev clean` 报 Permission denied  
+1) `./dev clean` 报 Permission denied
    若历史上使用过 `sudo` 安装，仓库内可能残留 root 拥有的文件。一次性回收后再清理：
    ```bash
    sudo chown -R "$USER":"$USER" .
    ./dev clean all
    ```
 
-2) Ubuntu pip 提示 “externally managed environment”  
+2) Ubuntu pip 提示 “externally managed environment”
    已自动添加 `--break-system-packages`。若不希望写入系统 Python，请使用虚拟环境或 `PIP3=... --user`。
 
-3) `pytest` 不存在  
+3) `pytest` 不存在
    运行 `./dev setup-python`，会创建 `python/.venv` 并安装依赖。
 
-4) 子模块拉取失败或元数据损坏  
+4) 子模块拉取失败或元数据损坏
    运行 `./dev git-submodules`，内置自动修复（deinit + 清理 + 重拉）。
 
-5) 覆盖率报错 “function … on multiple lines” 或找不到 notes  
+5) 覆盖率报错 “function … on multiple lines” 或找不到 notes
    已在 `coverage-cpp` 中默认使用 `--merge-mode-functions=separate`；若 gcovr 缺失则回退 gcov，必要时先 `./dev build cpp --config Debug` 再跑覆盖率。
 
 ## 工作原理（简述）
