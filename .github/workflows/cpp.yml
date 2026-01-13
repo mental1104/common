@@ -557,7 +557,7 @@ jobs:
 
   pages:
     name: Pages / C++ coverage dashboard
-    if: ${{ always() && github.event_name == 'push' && github.ref == 'refs/heads/develop' }}
+    if: ${{ false && github.event_name == 'push' && github.ref == 'refs/heads/develop' }}
     needs: [linux, linux-integration, macos, windows]
     runs-on: ubuntu-latest
 
