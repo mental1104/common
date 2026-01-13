@@ -237,8 +237,11 @@ jobs:
             encoding="utf-8",
           )
 
+          # ---- FIX: JSON 不允许 tuple 作为 key，best 的 key=(os,cs,cxx) 需要转成字符串 ----
+          entries = {f"{osn}/{cs}/cxx{std}": e for (osn, cs, std), e in best.items()}
+
           (data/"coverage.json").write_text(
-            json.dumps({"overall": overall, "entries": best}, ensure_ascii=False, indent=2),
+            json.dumps({"overall": overall, "entries": entries}, ensure_ascii=False, indent=2),
             encoding="utf-8",
           )
 
