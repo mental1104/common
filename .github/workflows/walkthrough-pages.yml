@@ -1,9 +1,9 @@
 name: Walkthrough Pages (develop)
 
 on:
-  push:
-    branches:
-      - develop
+  workflow_run:
+    workflows: ["C++"]
+    types: [completed]
 
 permissions:
   contents: read
@@ -17,10 +17,15 @@ concurrency:
 
 jobs:
   build:
+    # 只接管 develop；不要求上游成功（失败也照样更新 walkthrough，coverage 可能缺失 -> N/A）
+    if: ${{ github.event.workflow_run.head_branch == 'develop' || github.event.workflow_run.head_branch == 'master' || github.event.workflow_run.head_branch == 'main' }}
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
+      - name: Checkout (same commit as upstream run)
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 0
 
       - name: Configure Pages
         uses: actions/configure-pages@v5
@@ -35,58 +40,42 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y jq
 
-      # 1) 原 walkthrough：生成 dist/（保持原用途：语言标记统计）
+      # 1) Walkthrough：无条件生成 dist/（保留原用途：语言标记统计）
       - name: Generate dist/ (walkthrough)
         run: python tools/walkthrough/scan.py --out dist
 
       - name: Job Summary (walkthrough)
+        if: always()
         run: |
           if [ -f dist/summary.md ]; then
             cat dist/summary.md >> "$GITHUB_STEP_SUMMARY"
           fi
 
-      # 2) 找到同一 commit 的 C++ workflow run_id（用于下载 coverage artifacts）
-      - name: Find C++ workflow run for this commit
-        id: find_cpp_run
-        env:
-          GH_TOKEN: ${{ github.token }}
-          REPO: ${{ github.repository }}
-          SHA: ${{ github.sha }}
-        run: |
-          set -euo pipefail
-          json="$(gh api -H "Accept: application/vnd.github+json" \
-            "/repos/${REPO}/actions/runs?event=push&status=completed&per_page=50")"
-
-          run_id="$(echo "$json" | jq -r --arg sha "$SHA" '
-            .workflow_runs
-            | map(select(.head_sha == $sha))
-            | map(select(.name == "C++"))
-            | (.[0].id // empty)
-          ')"
-
-          echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
-          if [ -n "$run_id" ]; then
-            echo "Found C++ run_id=$run_id for sha=$SHA"
-          else
-            echo "No C++ run found for sha=$SHA (yet). Coverage module will be N/A."
-          fi
-
-      # 3) 下载 cpp.yml 上传的 coverage artifacts 到 _cov/（不会影响 dist）
-      - name: Download C++ coverage artifacts
-        if: ${{ steps.find_cpp_run.outputs.run_id != '' }}
+      # 2) 下载 C++ workflow 上传的 coverage artifacts 到 _cov/
+      - name: Download C++ coverage artifacts (from triggering run)
+        if: always()
+        continue-on-error: true
         uses: actions/download-artifact@v4
         with:
           path: _cov
           pattern: cpp-cov-*
-          merge-multiple: false
-          run-id: ${{ steps.find_cpp_run.outputs.run_id }}
+          merge-multiple: true
+          run-id: ${{ github.event.workflow_run.id }}
           github-token: ${{ github.token }}
 
       - name: Ensure _cov exists
         if: always()
         run: mkdir -p _cov
 
-      # 4) 构建 coverage 模块到 dist/modules/cpp-coverage/（不覆盖 walkthrough 根页面）
+      - name: Debug list cov inputs
+        if: always()
+        run: |
+          echo "=== _cov tree ==="
+          ls -R _cov || true
+          echo "=== cov.json files ==="
+          find _cov -name cov.json -print || true
+
+      # 3) 构建 coverage 模块到 dist/modules/cpp-coverage/（不覆盖 walkthrough 根页面）
       - name: Build C++ coverage module (dist/modules/cpp-coverage)
         if: always()
         run: |
@@ -138,38 +127,60 @@ jobs:
               '</svg>',
             ])
 
-          # cov.json: _cov/**/cov.json
+          # 关键修复：artifact 根目录应取 _cov/<artifact_root>/...，不能用 p.parent.name
           cov_files = [Path(p) for p in glob.glob("_cov/**/cov.json", recursive=True)]
 
           raw = []
           for p in cov_files:
-            artifact_dir = p.parent.name
-            key = artifact_dir[len("cpp-cov-"):] if artifact_dir.startswith("cpp-cov-") else artifact_dir
+            try:
+              rel = p.relative_to("_cov")
+            except Exception:
+              continue
+            if not rel.parts:
+              continue
+            artifact_root = rel.parts[0]  # cpp-cov-xxx
+            key = artifact_root[len("cpp-cov-"):] if artifact_root.startswith("cpp-cov-") else artifact_root
+
             try:
               d = json.loads(p.read_text(encoding="utf-8"))
             except Exception:
               d = {}
+
             os_name = str(d.get("os", "unknown"))
             comp = str(d.get("compiler", "unknown")).lower()
-            cxx = int(d.get("cxx_std", 0) or 0)
-            pct = float(d.get("line_pct", 0.0) or 0.0)
+            try:
+              cxx = int(d.get("cxx_std", 0) or 0)
+            except Exception:
+              cxx = 0
+            try:
+              pct = float(d.get("line_pct", 0.0) or 0.0)
+            except Exception:
+              pct = 0.0
             status = str(d.get("status", "ok"))
-            if "clang" in comp: cs = "clangpp"
-            elif "g++" in comp or "gcc" in comp: cs = "gpp"
-            elif "msvc" in comp: cs = "msvc"
-            else: cs = "unknown"
-            raw.append({"key": key, "os": os_name, "cs": cs, "cxx": cxx, "pct": pct, "status": status, "src": str(p)})
+
+            if "clang" in comp:
+              cs = "clangpp"
+            elif "g++" in comp or "gcc" in comp:
+              cs = "gpp"
+            elif "msvc" in comp:
+              cs = "msvc"
+            else:
+              cs = "unknown"
+
+            raw.append({
+              "key": key, "os": os_name, "cs": cs, "cxx": cxx,
+              "pct": pct, "status": status, "src": str(p),
+            })
 
           # 全量矩阵（缺的也生成 N/A）
           expected = []
-          for std in (11,14,17,20,23):
+          for std in (11, 14, 17, 20, 23):
             expected += [
               ("linux","clangpp",std), ("linux","gpp",std),
               ("macos","clangpp",std), ("macos","gpp",std),
               ("windows","msvc",std),
             ]
 
-          # 选最佳（排除 integration，避免污染矩阵）
           def score(e):
             st = (e["status"] or "").lower()
             s = 0
@@ -190,10 +201,16 @@ jobs:
             e = best.get((osn, cs, std))
             if e:
               msg = f'{e["pct"]:.1f}%'
-              (badges / f"{osn}-{cs}-cxx{std}.svg").write_text(svg_badge("cov", msg, badge_color(e["pct"], e["status"])), encoding="utf-8")
+              (badges / f"{osn}-{cs}-cxx{std}.svg").write_text(
+                svg_badge("cov", msg, badge_color(e["pct"], e["status"])),
+                encoding="utf-8"
+              )
               selected.append(e)
             else:
-              (badges / f"{osn}-{cs}-cxx{std}.svg").write_text(svg_badge("cov", "N/A", badge_color(0.0, "na")), encoding="utf-8")
+              (badges / f"{osn}-{cs}-cxx{std}.svg").write_text(
+                svg_badge("cov", "N/A", badge_color(0.0, "na")),
+                encoding="utf-8"
+              )
 
           # integration 单独一张（按你现有 key）
           integ = next((e for e in raw if e["key"] == "linux-gpp-cxx20-integration"), None)
@@ -208,15 +225,14 @@ jobs:
               encoding="utf-8",
             )
 
-          # overall
-          real = [e["pct"] for e in selected if (e["status"] or "").lower() not in ("placeholder","unknown","fail","failure","error")]
+          real = [e["pct"] for e in selected
+                  if (e["status"] or "").lower() not in ("placeholder","unknown","fail","failure","error")]
           overall = statistics.mean(real) if real else 0.0
           (badges / "overall.svg").write_text(
             svg_badge("cov", f"{overall:.1f}%", badge_color(overall, "ok" if real else "placeholder")),
             encoding="utf-8",
           )
 
-          # data
           out_entries = []
           for (osn, cs, std) in expected:
             e = best.get((osn, cs, std))
@@ -226,12 +242,12 @@ jobs:
               "status": (e["status"] if e else "na"),
               "src": (e["src"] if e else ""),
             })
+
           (data / "coverage.json").write_text(
             json.dumps({"overall": overall, "entries": out_entries}, ensure_ascii=False, indent=2),
             encoding="utf-8",
           )
 
-          # 模块首页（不占用 dist/index.html）
           os_list = ["linux","macos","windows"]
           stds = [11,14,17,20,23]
           comp_by_os = {"linux":["clangpp","gpp"], "macos":["clangpp","gpp"], "windows":["msvc"]}
@@ -262,31 +278,36 @@ jobs:
           """
           (module_root / "index.html").write_text(index, encoding="utf-8")
 
-          print(f"[coverage-module] cov.json found={len(cov_files)} overall={overall:.2f}%")
+          print(f"[coverage-module] cov.json found={len(cov_files)} raw={len(raw)} best={len(best)} overall={overall:.2f}%")
           PY
 
-      # 5) “嵌入”到 walkthrough 首页：只追加一段区块，不破坏原页面
-      - name: Inject C++ coverage section into walkthrough home
+      # 4) README 兼容：把模块 badges/data 镜像到根目录（避免 README 链接裂）
+      - name: Publish coverage compatibility paths (dist/badges, dist/data)
+        if: always()
+        run: |
+          set -euo pipefail
+          mkdir -p dist/badges dist/data
+          cp -f dist/modules/cpp-coverage/badges/*.svg dist/badges/ 2>/dev/null || true
+          cp -f dist/modules/cpp-coverage/data/*.json dist/data/ 2>/dev/null || true
+
+      # 5) “嵌入”到 walkthrough 首页：支持重复运行（已存在则替换整段）
+      - name: Inject/Update C++ coverage section into walkthrough home
         if: always()
         run: |
           set -euo pipefail
           python3 - <<'PY'
+          import re
           from pathlib import Path
 
           home = Path("dist/index.html")
           if not home.exists():
-            print("[inject] dist/index.html not found; skip")
             raise SystemExit(0)
 
           html = home.read_text(encoding="utf-8", errors="ignore")
-          marker = "<!-- MODULE:CPP_COVERAGE -->"
-          if marker in html:
-            print("[inject] already injected; skip")
-            raise SystemExit(0)
 
-          snippet = """
+          block = """
           <hr>
-          <!-- MODULE:CPP_COVERAGE -->
+          <!-- MODULE:CPP_COVERAGE_BEGIN -->
           <h2>C++ Coverage</h2>
           <p>
             <a href="modules/cpp-coverage/">
@@ -294,16 +315,19 @@ jobs:
             </a>
           </p>
           <p><a href="modules/cpp-coverage/">Open C++ Coverage Dashboard</a></p>
+          <!-- MODULE:CPP_COVERAGE_END -->
           """
 
-          # 尽量“插到结尾前”，否则直接追加
-          if "</body>" in html:
-            html = html.replace("</body>", snippet + "\n</body>", 1)
+          pattern = re.compile(r"<!-- MODULE:CPP_COVERAGE_BEGIN -->(.|\n)*?<!-- MODULE:CPP_COVERAGE_END -->", re.M)
+          if pattern.search(html):
+            html = pattern.sub(block.strip(), html, count=1)
           else:
-            html = html + "\n" + snippet + "\n"
+            if "</body>" in html:
+              html = html.replace("</body>", block + "\n</body>", 1)
+            else:
+              html = html + "\n" + block + "\n"
 
           home.write_text(html, encoding="utf-8")
-          print("[inject] injected coverage section into dist/index.html")
           PY
 
       - name: Upload Pages artifact
