@@ -1,3 +1,10 @@
+/*
+ * @Date: 2025-12-07 19:45:11
+ * @Author: mental1104 mental1104@gmail.com
+ * @LastEditors: mental1104 mental1104@gmail.com
+ * @LastEditTime: 2026-01-13 11:24:25
+ */
+// WALKTHROUGH: done
 #ifndef MENTAL1104_META_COMPILER_SUPPORT_H
 #define MENTAL1104_META_COMPILER_SUPPORT_H
 
