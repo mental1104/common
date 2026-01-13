@@ -354,6 +354,7 @@ def build_submodules(
         ],
         "cpp/lib/redis-plus-plus": ["-DREDIS_PLUS_PLUS_BUILD_TEST=ON"],
     }
+    build_env = cmake_build_env(env)
     is_windows = platform.system().lower() == "windows"
     for rel in paths:
         if only is None:
@@ -412,7 +413,7 @@ def build_submodules(
                 if redispp_std:
                     cmake_args.append(f"-DREDIS_PLUS_PLUS_CXX_STANDARD={redispp_std}")
             run(cmake_args, env=env)
-            run([env["CMAKE"], "--build", str(build_dir), "--parallel", env["JOBS"]], env=env)
+            run([env["CMAKE"], "--build", str(build_dir), "--parallel", env["JOBS"]], env=build_env)
             if rel == "cpp/lib/hiredis":
                 run([env["CMAKE"], "--install", str(build_dir), "--prefix", str(hiredis_install)], env=env)
         except Exception:
@@ -449,6 +450,13 @@ def _prepend_library_path(env: dict[str, str], paths: list[Path]) -> None:
         return
     merged = additions + ([existing] if existing else [])
     env[key] = ":".join(merged)
+
+
+def cmake_build_env(env: Mapping[str, str]) -> dict[str, str]:
+    build_env = dict(env)
+    verbose = str(env.get("BUILD_VERBOSE", "0")).strip().lower() in ("1", "true", "yes", "on")
+    build_env["VERBOSE"] = "1" if verbose else "0"
+    return build_env
 
 
 def build_redispp(env: Mapping[str, str]) -> Path:
@@ -515,7 +523,8 @@ def configure(env: Mapping[str, str]) -> None:
 
 
 def build(env: Mapping[str, str]) -> None:
-    run([env["CMAKE"], "--build", str(CPP_BUILD_DIR), "--parallel", env["JOBS"]], env=env)
+    build_env = cmake_build_env(env)
+    run([env["CMAKE"], "--build", str(CPP_BUILD_DIR), "--parallel", env["JOBS"]], env=build_env)
 
 
 def test(env: Mapping[str, str], *, file_pattern: str | None, filter_expr: str | None) -> None:

@@ -1,3 +1,4 @@
+// WALKTHROUGH: done
 #ifndef MENTAL1104_LOG_H
 #define MENTAL1104_LOG_H
 
