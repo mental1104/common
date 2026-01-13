@@ -104,14 +104,17 @@ jobs:
             pip-${{ runner.os }}-
 
       - name: Setup Python
+        id: setup_env
         continue-on-error: true
         run: ./dev setup-python
 
       - name: Build Python
+        id: build_env
         continue-on-error: true
         run: ./dev build-python
 
       - name: Coverage Python
+        id: cov_env
         continue-on-error: true
         run: ./dev coverage-python
 
@@ -136,18 +139,25 @@ jobs:
           cp -f cov.json "_cov/${key}/cov.json" 2>/dev/null || true
           cp -f python/coverage.xml "_cov/${key}/coverage.xml" 2>/dev/null || true
 
+      - name: Compute pykey
+        if: always()
+        id: pykey
+        run: |
+          pykey="$(echo "${{ matrix.python }}" | tr -d '.')"
+          echo "pykey=$pykey" >> "$GITHUB_OUTPUT"
+
       - name: Upload coverage artifacts (unique)
         if: always()
         continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
-          name: py-cov-linux-py${{ join(fromJson(format('["{0}"]', matrix.python)), '') }}
-          path: _cov/linux-py${{ join(fromJson(format('["{0}"]', matrix.python)), '') }}
+          name: py-cov-linux-py${{ steps.pykey.outputs.pykey }}
+          path: _cov/linux-py${{ steps.pykey.outputs.pykey }}
           retention-days: 7
           if-no-files-found: warn
 
       - name: Mark job failed if core steps failed
-        if: ${{ steps.gate.outputs.enable == 'true' && (steps.Setup_Python.outcome == 'failure') }}
+        if: ${{ steps.gate.outputs.enable == 'true' && (steps.setup_env.outcome == 'failure' || steps.build_env.outcome == 'failure' || steps.cov_env.outcome == 'failure') }}
         run: exit 1
 
   linux-integration:
@@ -368,14 +378,17 @@ jobs:
             pip-${{ runner.os }}-
 
       - name: Setup Python
+        id: setup_env
         continue-on-error: true
         run: ./dev setup-python
 
       - name: Build Python
+        id: build_env
         continue-on-error: true
         run: ./dev build-python
 
       - name: Coverage Python
+        id: cov_env
         continue-on-error: true
         run: ./dev coverage-python
 
@@ -400,15 +413,26 @@ jobs:
           cp -f cov.json "_cov/${key}/cov.json" 2>/dev/null || true
           cp -f python/coverage.xml "_cov/${key}/coverage.xml" 2>/dev/null || true
 
+      - name: Compute pykey
+        if: always()
+        id: pykey
+        run: |
+          pykey="$(echo "${{ matrix.python }}" | tr -d '.')"
+          echo "pykey=$pykey" >> "$GITHUB_OUTPUT"
+
       - name: Upload coverage artifacts (unique)
         if: always()
         continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
-          name: py-cov-macos-py${{ join(fromJson(format('["{0}"]', matrix.python)), '') }}
-          path: _cov/macos-py${{ join(fromJson(format('["{0}"]', matrix.python)), '') }}
+          name: py-cov-macos-py${{ steps.pykey.outputs.pykey }}
+          path: _cov/macos-py${{ steps.pykey.outputs.pykey }}
           retention-days: 7
           if-no-files-found: warn
+
+      - name: Mark job failed if core steps failed
+        if: ${{ steps.gate.outputs.enable == 'true' && (steps.setup_env.outcome == 'failure' || steps.build_env.outcome == 'failure' || steps.cov_env.outcome == 'failure') }}
+        run: exit 1
 
   windows:
     name: Windows / Python ${{ matrix.python }}
@@ -481,14 +505,17 @@ jobs:
             pip-${{ runner.os }}-
 
       - name: Setup Python
+        id: setup_env
         continue-on-error: true
         run: python -m devtool.cli setup-python
 
       - name: Build Python
+        id: build_env
         continue-on-error: true
         run: python -m devtool.cli build-python
 
       - name: Coverage Python
+        id: cov_env
         continue-on-error: true
         run: python -m devtool.cli coverage-python
 
@@ -521,12 +548,23 @@ jobs:
           Copy-Item -Force cov.json "_cov/$key/cov.json" -ErrorAction SilentlyContinue
           Copy-Item -Force python/coverage.xml "_cov/$key/coverage.xml" -ErrorAction SilentlyContinue
 
+      - name: Compute pykey
+        if: always()
+        id: pykey
+        run: |
+          $pykey = "${{ matrix.python }}".Replace(".","")
+          "pykey=$pykey" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+
       - name: Upload coverage artifacts (unique)
         if: always()
         continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
-          name: py-cov-windows-py${{ join(fromJson(format('["{0}"]', matrix.python)), '') }}
-          path: _cov/windows-py${{ join(fromJson(format('["{0}"]', matrix.python)), '') }}
+          name: py-cov-windows-py${{ steps.pykey.outputs.pykey }}
+          path: _cov/windows-py${{ steps.pykey.outputs.pykey }}
           retention-days: 7
           if-no-files-found: warn
+
+      - name: Mark job failed if core steps failed
+        if: ${{ steps.gate.outputs.enable == 'true' && (steps.setup_env.outcome == 'failure' || steps.build_env.outcome == 'failure' || steps.cov_env.outcome == 'failure') }}
+        run: exit 1

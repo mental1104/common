@@ -49,7 +49,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y jq
 
-      # ===== 1) Walkthrough：无条件生成 dist/ =====
+      # ===== 0) 生成 dist/（walkthrough 基础页）=====
       - name: Generate dist/ (walkthrough)
         run: python tools/walkthrough/scan.py --out dist
 
@@ -60,18 +60,21 @@ jobs:
             cat dist/summary.md >> "$GITHUB_STEP_SUMMARY"
           fi
 
-      - name: Preserve existing coverage modules/badges/data from gh-pages
+      # ===== 1) 真实拉取 gh-pages 旧内容（best-effort），用于“保留旧模块”=====
+      - name: Checkout gh-pages into _prev_pages (best-effort)
+        continue-on-error: true
+        uses: actions/checkout@v4
+        with:
+          ref: gh-pages
+          path: _prev_pages
+          fetch-depth: 1
+
+      - name: Preserve existing modules from gh-pages
         run: |
           set -euo pipefail
-          mkdir -p dist/modules dist/badges dist/data
+          mkdir -p dist/modules
           if [ -d _prev_pages/modules ]; then
             cp -R _prev_pages/modules/* dist/modules/ 2>/dev/null || true
-          fi
-          if [ -d _prev_pages/badges ]; then
-            cp -R _prev_pages/badges/* dist/badges/ 2>/dev/null || true
-          fi
-          if [ -d _prev_pages/data ]; then
-            cp -R _prev_pages/data/* dist/data/ 2>/dev/null || true
           fi
 
       # ===== 2) 下载触发方 coverage artifacts（按触发 workflow 分流）=====
@@ -216,27 +219,41 @@ jobs:
           for (osn,cs,std) in expected:
             e = best.get((osn,cs,std))
             if e:
-              (badges/f"{osn}-{cs}-cxx{std}.svg").write_text(svg_badge("cov", f'{e["pct"]:.1f}%', badge_color(e["pct"], e["status"])), encoding="utf-8")
+              (badges/f"{osn}-{cs}-cxx{std}.svg").write_text(
+                svg_badge("cov", f'{e["pct"]:.1f}%', badge_color(e["pct"], e["status"])),
+                encoding="utf-8",
+              )
               selected.append(e)
             else:
-              (badges/f"{osn}-{cs}-cxx{std}.svg").write_text(svg_badge("cov","N/A", badge_color(0.0,"na")), encoding="utf-8")
+              (badges/f"{osn}-{cs}-cxx{std}.svg").write_text(
+                svg_badge("cov","N/A", badge_color(0.0,"na")),
+                encoding="utf-8",
+              )
 
           real = [e["pct"] for e in selected if (e["status"] or "").lower() not in ("placeholder","unknown","fail","failure","error")]
           overall = statistics.mean(real) if real else 0.0
-          (badges/"overall.svg").write_text(svg_badge("cov", f"{overall:.1f}%", badge_color(overall, "ok" if real else "placeholder")), encoding="utf-8")
+          (badges/"overall.svg").write_text(
+            svg_badge("cov", f"{overall:.1f}%", badge_color(overall, "ok" if real else "placeholder")),
+            encoding="utf-8",
+          )
 
-          (data/"coverage.json").write_text(json.dumps({"overall": overall, "entries": best}, ensure_ascii=False, indent=2), encoding="utf-8")
+          (data/"coverage.json").write_text(
+            json.dumps({"overall": overall, "entries": best}, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+          )
+
+          # index（最小：只给 overall + data 链接；badge 网格主要由 README 承担）
+          (module_root/"index.html").write_text(f"""<!doctype html>
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width,initial-scale=1">
+          <title>C++ Coverage</title>
+          <h1>C++ Coverage</h1>
+          <p><img alt="overall" src="badges/overall.svg"></p>
+          <p>Data: <a href="data/coverage.json">coverage.json</a></p>
+          """, encoding="utf-8")
 
           print(f"[cpp] cov.json={len(cov_files)} raw={len(raw)} best={len(best)} overall={overall:.2f}%")
           PY
-
-      - name: Publish C++ compatibility paths (dist/badges, dist/data)
-        if: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.name == 'cpp' }}
-        run: |
-          set -euo pipefail
-          mkdir -p dist/badges dist/data
-          cp -f dist/modules/cpp-coverage/badges/*.svg dist/badges/ 2>/dev/null || true
-          cp -f dist/modules/cpp-coverage/data/*.json dist/data/ 2>/dev/null || true
 
       # ===== 4) Python module（仅 Python workflow_run 时更新）=====
       - name: Build Python coverage module (dist/modules/python-coverage)
@@ -332,21 +349,30 @@ jobs:
               e = best.get((osn, pyk))
               fn = f"python-{osn}-py{pyk}.svg"
               if e:
-                (badges/fn).write_text(svg_badge("cov", f'{e["pct"]:.1f}%', badge_color(e["pct"], e["status"])), encoding="utf-8")
+                (badges/fn).write_text(
+                  svg_badge("cov", f'{e["pct"]:.1f}%', badge_color(e["pct"], e["status"])),
+                  encoding="utf-8",
+                )
                 selected.append(e)
               else:
-                (badges/fn).write_text(svg_badge("cov","N/A", badge_color(0.0,"na")), encoding="utf-8")
+                (badges/fn).write_text(
+                  svg_badge("cov","N/A", badge_color(0.0,"na")),
+                  encoding="utf-8",
+                )
 
           real = [e["pct"] for e in selected if (e["status"] or "").lower() not in ("placeholder","unknown","fail","failure","error")]
           overall = statistics.mean(real) if real else 0.0
-          (badges/"python-overall.svg").write_text(svg_badge("cov", f"{overall:.1f}%", badge_color(overall, "ok" if real else "placeholder")), encoding="utf-8")
+          (badges/"python-overall.svg").write_text(
+            svg_badge("cov", f"{overall:.1f}%", badge_color(overall, "ok" if real else "placeholder")),
+            encoding="utf-8",
+          )
 
           (data/"python-coverage.json").write_text(
             json.dumps({"overall": overall, "entries": raw}, ensure_ascii=False, indent=2),
             encoding="utf-8",
           )
 
-          # index
+          # index：网格页
           cols = expected_py
           def cell(osn, pyk):
             return f'<img alt="{osn}-py{pyk}" src="badges/python-{osn}-py{pyk}.svg">'
@@ -372,15 +398,7 @@ jobs:
           print(f"[python] raw={len(raw)} best={len(best)} overall={overall:.2f}%")
           PY
 
-      - name: Publish Python compatibility paths (dist/badges, dist/data)
-        if: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.name == 'Python' }}
-        run: |
-          set -euo pipefail
-          mkdir -p dist/badges dist/data
-          cp -f dist/modules/python-coverage/badges/*.svg dist/badges/ 2>/dev/null || true
-          cp -f dist/modules/python-coverage/data/*.json dist/data/ 2>/dev/null || true
-
-      # ===== 5) 注入到 walkthrough 首页（始终执行：确保手动触发也保留模块入口）=====
+      # ===== 5) 注入到 walkthrough 首页（始终执行：保持模块入口稳定）=====
       - name: Inject/Update coverage sections into walkthrough home
         if: always()
         run: |
