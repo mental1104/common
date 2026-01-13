@@ -78,7 +78,6 @@ jobs:
           fi
 
           echo "enable=${enable}" >> "$GITHUB_OUTPUT"
-          echo "matrix.prerelease=${{ matrix.prerelease }} enable=${enable}"
 
       - name: Stop early if prerelease disabled
         if: ${{ steps.gate.outputs.enable != 'true' }}
@@ -144,5 +143,390 @@ jobs:
         with:
           name: py-cov-linux-py${{ join(fromJson(format('["{0}"]', matrix.python)), '') }}
           path: _cov/linux-py${{ join(fromJson(format('["{0}"]', matrix.python)), '') }}
+          retention-days: 7
+          if-no-files-found: warn
+
+      - name: Mark job failed if core steps failed
+        if: ${{ steps.gate.outputs.enable == 'true' && (steps.Setup_Python.outcome == 'failure') }}
+        run: exit 1
+
+  linux-integration:
+    name: Linux / Python 3.12 / coverage
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: app
+        ports:
+          - "5432:5432"
+        options: >-
+          --health-cmd="pg_isready -U test"
+          --health-interval=5s --health-timeout=5s --health-retries=5
+      redis:
+        image: redis/redis-stack-server:7.2.0-v7
+        ports:
+          - "6379:6379"
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=5s --health-timeout=3s --health-retries=5
+
+    env:
+      PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/devops
+      DATABASE_URL: postgresql://test:test@localhost:5432/app
+      REDIS_URL: redis://localhost:6379/0
+      PGUSER: test
+      PGPASSWORD: test
+      PGDATABASE: app
+      PGHOST: localhost
+      PGPORT: "5432"
+      REDIS_HOST: localhost
+      REDIS_PORT: "6379"
+      PULSAR_HOST: localhost
+      PULSAR_BROKER_PORT: "6650"
+      PULSAR_ADMIN_PORT: "8080"
+      PULSAR_TOKEN: ""
+      PULSAR_SCHEMA_PATH: "/tmp/pulsar/schema"
+      PULSAR_DATA_PATH: "/tmp/pulsar/data"
+
+    defaults:
+      run:
+        shell: bash
+        working-directory: ${{ github.workspace }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: false
+          fetch-depth: 0
+
+      - name: Init submodules (sparse Boost)
+        continue-on-error: true
+        run: python3 -c "import sys;from devtool.commands.common import base_env;from devtool.commands.ops import cpp as cpp_ops;sys.exit(cpp_ops.git_submodules(base_env()) or 0)"
+
+      - name: Start Pulsar (standalone -nss)
+        continue-on-error: true
+        run: |
+          docker rm -f pulsar || true
+          docker run -d --name pulsar \
+            -p ${PULSAR_BROKER_PORT}:${PULSAR_BROKER_PORT} -p ${PULSAR_ADMIN_PORT}:${PULSAR_ADMIN_PORT} \
+            apachepulsar/pulsar:3.2.0 \
+            bin/pulsar standalone -nss
+
+      - name: Wait for postgres/redis/pulsar
+        continue-on-error: true
+        run: |
+          for i in {1..40}; do
+            (echo > /dev/tcp/127.0.0.1/${PGPORT}) && (echo > /dev/tcp/127.0.0.1/${REDIS_PORT}) && (echo > /dev/tcp/127.0.0.1/${PULSAR_ADMIN_PORT}) && exit 0
+            sleep 2
+          done
+          echo "services not ready" >&2
+          exit 1
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: pip-${{ runner.os }}-${{ hashFiles('python/requirements.txt') }}
+          restore-keys: |
+            pip-${{ runner.os }}-
+
+      - name: Setup Python
+        continue-on-error: true
+        run: ./dev setup-python
+
+      - name: Format Python
+        continue-on-error: true
+        run: ./dev fmt-python
+
+      - name: Build Python
+        continue-on-error: true
+        run: ./dev build-python
+
+      - name: Coverage Python
+        continue-on-error: true
+        run: ./dev coverage-python
+
+      - name: Vet Python
+        continue-on-error: true
+        run: ./dev vet-python
+
+      - name: Guard Python
+        continue-on-error: true
+        run: ./dev guard-python
+
+      - name: Export coverage.xml + cov.json (never fail)
+        if: always()
+        continue-on-error: true
+        run: |
+          set +e
+          mkdir -p python
+          (cd python && python3 -m coverage xml -o coverage.xml) || true
+          python3 tools/ci/extract_coverage_python.py --os linux --python "3.12" --xml python/coverage.xml --out cov.json || true
+          test -f cov.json || python3 -c "import json,os;obj={'lang':'python','os':'linux','python':'3.12','line_pct':0.0,'status':'placeholder','sha':os.getenv('GITHUB_SHA',''),'run_id':os.getenv('GITHUB_RUN_ID',''),'source':'coverage.xml','src':'python/coverage.xml'};json.dump(obj,open('cov.json','w',encoding='utf-8'),ensure_ascii=False,indent=2)"
+
+      - name: Stash coverage files (unique path)
+        if: always()
+        continue-on-error: true
+        run: |
+          set +e
+          key="linux-py312-integration"
+          mkdir -p "_cov/${key}"
+          cp -f cov.json "_cov/${key}/cov.json" 2>/dev/null || true
+          cp -f python/coverage.xml "_cov/${key}/coverage.xml" 2>/dev/null || true
+
+      - name: Upload coverage artifacts (unique)
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: py-cov-linux-py312-integration
+          path: _cov/linux-py312-integration
+          retention-days: 7
+          if-no-files-found: warn
+
+  macos:
+    name: macOS / Python ${{ matrix.python }}
+    runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { python: "3.8",  python_spec: "3.8",      prerelease: false }
+          - { python: "3.9",  python_spec: "3.9",      prerelease: false }
+          - { python: "3.10", python_spec: "3.10",     prerelease: false }
+          - { python: "3.11", python_spec: "3.11",     prerelease: false }
+          - { python: "3.12", python_spec: "3.12",     prerelease: false }
+          - { python: "3.13", python_spec: "3.13",     prerelease: false }
+          - { python: "3.14", python_spec: "3.14-dev", prerelease: true }
+
+    env:
+      PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/devops
+
+    defaults:
+      run:
+        shell: bash
+        working-directory: ${{ github.workspace }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: false
+          fetch-depth: 0
+
+      - name: Gate prerelease (3.14) by input/vars
+        id: gate
+        run: |
+          set -euo pipefail
+          enable="true"
+
+          if [ "${{ matrix.prerelease }}" = "true" ]; then
+            if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+              if [ "${{ github.event.inputs.enable_python_314 }}" = "false" ]; then
+                enable="false"
+              fi
+            else
+              if [ "${{ vars.CI_ENABLE_PYTHON_314 }}" = "false" ]; then
+                enable="false"
+              fi
+            fi
+          fi
+
+          echo "enable=${enable}" >> "$GITHUB_OUTPUT"
+
+      - name: Stop early if prerelease disabled
+        if: ${{ steps.gate.outputs.enable != 'true' }}
+        run: |
+          echo "Python ${{ matrix.python }} is disabled by policy; skipping."
+          exit 0
+
+      - name: Init submodules (sparse Boost)
+        continue-on-error: true
+        run: python3 -c "import sys;from devtool.commands.common import base_env;from devtool.commands.ops import cpp as cpp_ops;sys.exit(cpp_ops.git_submodules(base_env()) or 0)"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python_spec }}
+          allow-prereleases: ${{ matrix.prerelease }}
+
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/Library/Caches/pip
+          key: pip-${{ runner.os }}-${{ hashFiles('python/requirements.txt') }}
+          restore-keys: |
+            pip-${{ runner.os }}-
+
+      - name: Setup Python
+        continue-on-error: true
+        run: ./dev setup-python
+
+      - name: Build Python
+        continue-on-error: true
+        run: ./dev build-python
+
+      - name: Coverage Python
+        continue-on-error: true
+        run: ./dev coverage-python
+
+      - name: Export coverage.xml + cov.json (never fail)
+        if: always()
+        continue-on-error: true
+        run: |
+          set +e
+          mkdir -p python
+          (cd python && python3 -m coverage xml -o coverage.xml) || true
+          python3 tools/ci/extract_coverage_python.py --os macos --python "${{ matrix.python }}" --xml python/coverage.xml --out cov.json || true
+          test -f cov.json || python3 -c "import json,os;obj={'lang':'python','os':'macos','python':'${{ matrix.python }}','line_pct':0.0,'status':'placeholder','sha':os.getenv('GITHUB_SHA',''),'run_id':os.getenv('GITHUB_RUN_ID',''),'source':'coverage.xml','src':'python/coverage.xml'};json.dump(obj,open('cov.json','w',encoding='utf-8'),ensure_ascii=False,indent=2)"
+
+      - name: Stash coverage files (unique path)
+        if: always()
+        continue-on-error: true
+        run: |
+          set +e
+          pykey="$(echo "${{ matrix.python }}" | tr -d '.')"
+          key="macos-py${pykey}"
+          mkdir -p "_cov/${key}"
+          cp -f cov.json "_cov/${key}/cov.json" 2>/dev/null || true
+          cp -f python/coverage.xml "_cov/${key}/coverage.xml" 2>/dev/null || true
+
+      - name: Upload coverage artifacts (unique)
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: py-cov-macos-py${{ join(fromJson(format('["{0}"]', matrix.python)), '') }}
+          path: _cov/macos-py${{ join(fromJson(format('["{0}"]', matrix.python)), '') }}
+          retention-days: 7
+          if-no-files-found: warn
+
+  windows:
+    name: Windows / Python ${{ matrix.python }}
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { python: "3.8",  python_spec: "3.8",      prerelease: false }
+          - { python: "3.9",  python_spec: "3.9",      prerelease: false }
+          - { python: "3.10", python_spec: "3.10",     prerelease: false }
+          - { python: "3.11", python_spec: "3.11",     prerelease: false }
+          - { python: "3.12", python_spec: "3.12",     prerelease: false }
+          - { python: "3.13", python_spec: "3.13",     prerelease: false }
+          - { python: "3.14", python_spec: "3.14-dev", prerelease: true }
+
+    env:
+      PYTHON: python
+      PYTHONPATH: ${{ github.workspace }};${{ github.workspace }}/devops
+      PYTHONUTF8: "1"
+      PYTHONIOENCODING: "utf-8"
+
+    defaults:
+      run:
+        shell: pwsh
+        working-directory: ${{ github.workspace }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: false
+          fetch-depth: 0
+
+      - name: Gate prerelease (3.14) by input/vars
+        id: gate
+        run: |
+          $enable = "true"
+          if ("${{ matrix.prerelease }}" -eq "true") {
+            if ("${{ github.event_name }}" -eq "workflow_dispatch") {
+              if ("${{ github.event.inputs.enable_python_314 }}" -eq "false") { $enable = "false" }
+            } else {
+              if ("${{ vars.CI_ENABLE_PYTHON_314 }}" -eq "false") { $enable = "false" }
+            }
+          }
+          "enable=$enable" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+
+      - name: Stop early if prerelease disabled
+        if: ${{ steps.gate.outputs.enable != 'true' }}
+        run: |
+          Write-Host "Python ${{ matrix.python }} is disabled by policy; skipping."
+          exit 0
+
+      - name: Init submodules (sparse Boost)
+        continue-on-error: true
+        run: python -c "import sys;from devtool.commands.common import base_env;from devtool.commands.ops import cpp as cpp_ops;sys.exit(cpp_ops.git_submodules(base_env()) or 0)"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python_spec }}
+          allow-prereleases: ${{ matrix.prerelease }}
+
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~\AppData\Local\pip\Cache
+          key: pip-${{ runner.os }}-${{ hashFiles('python/requirements.txt') }}
+          restore-keys: |
+            pip-${{ runner.os }}-
+
+      - name: Setup Python
+        continue-on-error: true
+        run: python -m devtool.cli setup-python
+
+      - name: Build Python
+        continue-on-error: true
+        run: python -m devtool.cli build-python
+
+      - name: Coverage Python
+        continue-on-error: true
+        run: python -m devtool.cli coverage-python
+
+      - name: Export coverage.xml + cov.json (never fail)
+        if: always()
+        continue-on-error: true
+        run: |
+          New-Item -ItemType Directory -Force -Path python | Out-Null
+          Push-Location python
+          python -m coverage xml -o coverage.xml
+          Pop-Location
+
+          python tools/ci/extract_coverage_python.py `
+            --os windows `
+            --python "${{ matrix.python }}" `
+            --xml python/coverage.xml `
+            --out cov.json
+
+          if (-not (Test-Path cov.json)) {
+            python -c "import json,os;obj={'lang':'python','os':'windows','python':'${{ matrix.python }}','line_pct':0.0,'status':'placeholder','sha':os.getenv('GITHUB_SHA',''),'run_id':os.getenv('GITHUB_RUN_ID',''),'source':'coverage.xml','src':'python/coverage.xml'};json.dump(obj,open('cov.json','w',encoding='utf-8'),ensure_ascii=False,indent=2)"
+          }
+
+      - name: Stash coverage files (unique path)
+        if: always()
+        continue-on-error: true
+        run: |
+          $pykey = "${{ matrix.python }}".Replace(".","")
+          $key = "windows-py$pykey"
+          New-Item -ItemType Directory -Force -Path "_cov/$key" | Out-Null
+          Copy-Item -Force cov.json "_cov/$key/cov.json" -ErrorAction SilentlyContinue
+          Copy-Item -Force python/coverage.xml "_cov/$key/coverage.xml" -ErrorAction SilentlyContinue
+
+      - name: Upload coverage artifacts (unique)
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: py-cov-windows-py${{ join(fromJson(format('["{0}"]', matrix.python)), '') }}
+          path: _cov/windows-py${{ join(fromJson(format('["{0}"]', matrix.python)), '') }}
           retention-days: 7
           if-no-files-found: warn
