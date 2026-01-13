@@ -60,14 +60,6 @@ jobs:
             cat dist/summary.md >> "$GITHUB_STEP_SUMMARY"
           fi
 
-      # ===== 1.5) 载入 gh-pages 里“上一版站点”，用于保留其它语言 coverage（关键）=====
-      - name: Checkout gh-pages (previous site)
-        uses: actions/checkout@v4
-        with:
-          ref: gh-pages
-          path: _prev_pages
-          fetch-depth: 1
-
       - name: Preserve existing coverage modules/badges/data from gh-pages
         run: |
           set -euo pipefail
