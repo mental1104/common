@@ -4,7 +4,6 @@ on:
   workflow_run:
     workflows: ["cpp"]
     types: [completed]
-    branches: [develop, master, main]
   workflow_dispatch: {}
 
 permissions:
@@ -19,13 +18,30 @@ concurrency:
 
 jobs:
   build:
+    # 只对 develop/master/main 的 cpp workflow_run 生效；手动触发不受限
+    if: >-
+      ${{
+        github.event_name == 'workflow_dispatch' ||
+        github.event.workflow_run.head_branch == 'develop' ||
+        github.event.workflow_run.head_branch == 'master' ||
+        github.event.workflow_run.head_branch == 'main'
+      }}
     runs-on: ubuntu-latest
+
     steps:
-      - name: Checkout (target commit)
+      # ===== checkout：严格区分两种触发，避免 ref 表达式坑 =====
+      - name: Checkout (workflow_run)
+        if: ${{ github.event_name == 'workflow_run' }}
         uses: actions/checkout@v4
         with:
-          # workflow_dispatch 时没有 workflow_run 事件，这里兼容两种触发
-          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 0
+
+      - name: Checkout (workflow_dispatch)
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
           fetch-depth: 0
 
       - name: Configure Pages
@@ -41,7 +57,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y jq
 
-      # 1) 原 walkthrough：生成 dist/（保持原用途：语言标记统计）
+      # ===== 1) Walkthrough：保持原用途（语言标记统计），无条件生成 dist/ =====
       - name: Generate dist/ (walkthrough)
         run: python tools/walkthrough/scan.py --out dist
 
@@ -52,8 +68,7 @@ jobs:
             cat dist/summary.md >> "$GITHUB_STEP_SUMMARY"
           fi
 
-      # 2) 下载 C++ workflow 上传的 coverage artifacts 到 _cov/
-      #    workflow_dispatch 时拿不到 run-id，所以只在 workflow_run 场景下载
+      # ===== 2) 下载 C++ workflow 的 coverage artifacts（只在 workflow_run 场景）=====
       - name: Download C++ coverage artifacts (from triggering run)
         if: ${{ github.event_name == 'workflow_run' }}
         continue-on-error: true
@@ -61,7 +76,8 @@ jobs:
         with:
           path: _cov
           pattern: cpp-cov-*
-          merge-multiple: true
+          # 关键：必须为 false，否则会覆盖/合并导致只剩一个 cov.json
+          merge-multiple: false
           run-id: ${{ github.event.workflow_run.id }}
           github-token: ${{ github.token }}
 
@@ -72,12 +88,17 @@ jobs:
       - name: Debug list cov inputs
         if: always()
         run: |
+          echo "=== event ==="
+          echo "event_name=${{ github.event_name }}"
+          echo "head_branch=${{ github.event.workflow_run.head_branch }}"
+          echo "head_sha=${{ github.event.workflow_run.head_sha }}"
+          echo "run_id=${{ github.event.workflow_run.id }}"
           echo "=== _cov tree ==="
           ls -R _cov || true
           echo "=== cov.json files ==="
           find _cov -name cov.json -print || true
 
-      # 3) 构建 coverage 模块到 dist/modules/cpp-coverage/
+      # ===== 3) 构建 C++ coverage 模块到 dist/modules/cpp-coverage/（可插拔模块化）=====
       - name: Build C++ coverage module (dist/modules/cpp-coverage)
         if: always()
         run: |
@@ -139,7 +160,7 @@ jobs:
               continue
             if not rel.parts:
               continue
-            artifact_root = rel.parts[0]  # cpp-cov-xxx
+            artifact_root = rel.parts[0]  # e.g. cpp-cov-linux-gpp-cxx11
             key = artifact_root[len("cpp-cov-"):] if artifact_root.startswith("cpp-cov-") else artifact_root
 
             try:
@@ -168,7 +189,10 @@ jobs:
             else:
               cs = "unknown"
 
-            raw.append({"key": key, "os": os_name, "cs": cs, "cxx": cxx, "pct": pct, "status": status, "src": str(p)})
+            raw.append({
+              "key": key, "os": os_name, "cs": cs, "cxx": cxx,
+              "pct": pct, "status": status, "src": str(p),
+            })
 
           expected = []
           for std in (11, 14, 17, 20, 23):
@@ -187,6 +211,7 @@ jobs:
 
           best = {}
           for e in raw:
+            # integration 不进矩阵 best，避免污染 linux/gpp/cxx20
             if "integration" in e["key"]:
               continue
             k = (e["os"], e["cs"], e["cxx"])
@@ -210,13 +235,16 @@ jobs:
 
           integ = next((e for e in raw if e["key"] == "linux-gpp-cxx20-integration"), None)
           (badges / "linux-gpp-cxx20-integration.svg").write_text(
-            svg_badge("cov",
-                      f'{integ["pct"]:.1f}%' if integ else "N/A",
-                      badge_color(integ["pct"], integ["status"]) if integ else badge_color(0.0, "na")),
+            svg_badge(
+              "cov",
+              f'{integ["pct"]:.1f}%' if integ else "N/A",
+              badge_color(integ["pct"], integ["status"]) if integ else badge_color(0.0, "na"),
+            ),
             encoding="utf-8",
           )
 
-          real = [e["pct"] for e in selected if (e["status"] or "").lower() not in ("placeholder","unknown","fail","failure","error")]
+          real = [e["pct"] for e in selected
+                  if (e["status"] or "").lower() not in ("placeholder","unknown","fail","failure","error")]
           overall = statistics.mean(real) if real else 0.0
           (badges / "overall.svg").write_text(
             svg_badge("cov", f"{overall:.1f}%", badge_color(overall, "ok" if real else "placeholder")),
@@ -256,6 +284,7 @@ jobs:
           <title>C++ Coverage</title>
           <h1>C++ Coverage</h1>
           <p><img alt="overall" src="badges/overall.svg"></p>
+          <h2>Matrix</h2>
           <table border="1" cellpadding="6" cellspacing="0">
             <thead><tr><th>platform / compiler</th><th>C++11</th><th>C++14</th><th>C++17</th><th>C++20</th><th>C++23</th></tr></thead>
             <tbody>{''.join(rows)}</tbody>
@@ -268,7 +297,7 @@ jobs:
           print(f"[coverage-module] cov.json found={len(cov_files)} raw={len(raw)} best={len(best)} overall={overall:.2f}%")
           PY
 
-      # 4) README 兼容：把模块 badges/data 镜像到根目录（避免 README 链接裂）
+      # ===== 4) README 兼容：镜像到根目录（避免 README 链接裂）=====
       - name: Publish coverage compatibility paths (dist/badges, dist/data)
         if: always()
         run: |
@@ -277,7 +306,7 @@ jobs:
           cp -f dist/modules/cpp-coverage/badges/*.svg dist/badges/ 2>/dev/null || true
           cp -f dist/modules/cpp-coverage/data/*.json dist/data/ 2>/dev/null || true
 
-      # 5) 注入到 walkthrough 首页（可重复运行）
+      # ===== 5) 注入到 walkthrough 首页（可重复运行，幂等替换整段）=====
       - name: Inject/Update C++ coverage section into walkthrough home
         if: always()
         run: |
@@ -316,6 +345,7 @@ jobs:
           home.write_text(html, encoding="utf-8")
           PY
 
+      # ===== 6) Pages artifact =====
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
