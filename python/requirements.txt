@@ -1,8 +1,16 @@
 matplotlib
 psycopg2-binary>=2.9 ; sys_platform != "win32" and (python_version >= "3.9" or sys_platform != "darwin")
+psycopg
+pymysql
+asyncmy
+aiosqlite
+clickhouse-connect
 sqlalchemy 
+greenlet
 requests 
 redis>=5.0 
+pymongo
+motor
 pulsar-client>=2.10 ; sys_platform != "win32"
 pulsar-client[avro] ; sys_platform != "win32"
 pycryptodome 
@@ -30,3 +38,4 @@ semgrep ; sys_platform != "win32"
 pybind11
 pypdf
 mental1104_export_layer @ file://../export/python
+clickhouse_sqlalchemy

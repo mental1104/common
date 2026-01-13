@@ -29,12 +29,14 @@ def _alias_build(name: str, target: str, *, default_config: str | None = None):
         parser = subparsers.add_parser(name, help=f"{name} (alias for build {target})")
         if target == "cpp":
             parser.add_argument("--config", default=default_config or "Debug", help="CMake build type")
+            parser.add_argument("--build-verbose", action="store_true", default=None, help="Print full CMake build commands")
         _add_common(parser)
         parser.set_defaults(_runner=lambda args: build.run(SimpleNamespace(
             target=target,
             config=getattr(args, "config", default_config or "Debug"),
             jobs=getattr(args, "jobs", None),
             verbose=getattr(args, "verbose", False),
+            build_verbose=getattr(args, "build_verbose", None),
         )))
         return parser.set_defaults
 

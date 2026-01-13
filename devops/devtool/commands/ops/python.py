@@ -56,6 +56,8 @@ def _upgrade_build_tools(env: Mapping[str, str]) -> None:
             "pip",
             "setuptools",
             "wheel",
+            "poetry-core",
+            "Cython",
         ],
         env=env,
     )

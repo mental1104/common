@@ -1,0 +1,346 @@
+name: Walkthrough Pages
+
+on:
+  workflow_run:
+    workflows: ["C++"]
+    types: [completed]
+    branches: [develop, master, main]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+  actions: read
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (same commit as upstream run)
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 0
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install jq
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y jq
+
+      # 1) Walkthrough：无条件生成 dist/（保留原用途：语言标记统计）
+      - name: Generate dist/ (walkthrough)
+        run: python tools/walkthrough/scan.py --out dist
+
+      - name: Job Summary (walkthrough)
+        if: always()
+        run: |
+          if [ -f dist/summary.md ]; then
+            cat dist/summary.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      # 2) 下载 C++ workflow 上传的 coverage artifacts 到 _cov/
+      - name: Download C++ coverage artifacts (from triggering run)
+        if: always()
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          path: _cov
+          pattern: cpp-cov-*
+          merge-multiple: true
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+
+      - name: Ensure _cov exists
+        if: always()
+        run: mkdir -p _cov
+
+      - name: Debug list cov inputs
+        if: always()
+        run: |
+          echo "=== _cov tree ==="
+          ls -R _cov || true
+          echo "=== cov.json files ==="
+          find _cov -name cov.json -print || true
+
+      # 3) 构建 coverage 模块到 dist/modules/cpp-coverage/（不覆盖 walkthrough 根页面）
+      - name: Build C++ coverage module (dist/modules/cpp-coverage)
+        if: always()
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, glob, statistics, html
+          from pathlib import Path
+
+          module_root = Path("dist/modules/cpp-coverage")
+          badges = module_root / "badges"
+          data = module_root / "data"
+          module_root.mkdir(parents=True, exist_ok=True)
+          badges.mkdir(parents=True, exist_ok=True)
+          data.mkdir(parents=True, exist_ok=True)
+
+          def badge_color(pct: float, status: str) -> str:
+            st = (status or "").lower()
+            if st in ("placeholder","unknown","fail","failure","error","na","n/a"):
+              return "#9f9f9f"
+            if pct >= 95: return "#4c1"
+            if pct >= 85: return "#97CA00"
+            if pct >= 70: return "#dfb317"
+            if pct >= 50: return "#fe7d37"
+            return "#e05d44"
+
+          def est_w(text: str) -> int:
+            return max(40, int(len(text) * 7 + 18))
+
+          def svg_badge(label: str, msg: str, color: str) -> str:
+            lw = est_w(label); mw = est_w(msg); w = lw + mw
+            label_e = html.escape(label); msg_e = html.escape(msg)
+            aria = html.escape(f"{label}: {msg}")
+            return "\n".join([
+              f'<svg xmlns="http://www.w3.org/2000/svg" width="{w}" height="20" role="img" aria-label="{aria}">',
+              '  <linearGradient id="s" x2="0" y2="100%">',
+              '    <stop offset="0" stop-color="#bbb" stop-opacity=".1"/>',
+              '    <stop offset="1" stop-opacity=".1"/>',
+              '  </linearGradient>',
+              f'  <clipPath id="r"><rect width="{w}" height="20" rx="3" fill="#fff"/></clipPath>',
+              '  <g clip-path="url(#r)">',
+              f'    <rect width="{lw}" height="20" fill="#555"/>',
+              f'    <rect x="{lw}" width="{mw}" height="20" fill="{color}"/>',
+              f'    <rect width="{w}" height="20" fill="url(#s)"/>',
+              '  </g>',
+              '  <g fill="#fff" text-anchor="middle" font-family="Verdana,Geneva,DejaVu Sans,sans-serif" font-size="11">',
+              f'    <text x="{lw/2}" y="14">{label_e}</text>',
+              f'    <text x="{lw + mw/2}" y="14">{msg_e}</text>',
+              '  </g>',
+              '</svg>',
+            ])
+
+          # 关键修复：artifact 根目录应取 _cov/<artifact_root>/...，不能用 p.parent.name
+          cov_files = [Path(p) for p in glob.glob("_cov/**/cov.json", recursive=True)]
+
+          raw = []
+          for p in cov_files:
+            try:
+              rel = p.relative_to("_cov")
+            except Exception:
+              continue
+            if not rel.parts:
+              continue
+            artifact_root = rel.parts[0]  # cpp-cov-xxx
+            key = artifact_root[len("cpp-cov-"):] if artifact_root.startswith("cpp-cov-") else artifact_root
+
+            try:
+              d = json.loads(p.read_text(encoding="utf-8"))
+            except Exception:
+              d = {}
+
+            os_name = str(d.get("os", "unknown"))
+            comp = str(d.get("compiler", "unknown")).lower()
+            try:
+              cxx = int(d.get("cxx_std", 0) or 0)
+            except Exception:
+              cxx = 0
+            try:
+              pct = float(d.get("line_pct", 0.0) or 0.0)
+            except Exception:
+              pct = 0.0
+            status = str(d.get("status", "ok"))
+
+            if "clang" in comp:
+              cs = "clangpp"
+            elif "g++" in comp or "gcc" in comp:
+              cs = "gpp"
+            elif "msvc" in comp:
+              cs = "msvc"
+            else:
+              cs = "unknown"
+
+            raw.append({
+              "key": key, "os": os_name, "cs": cs, "cxx": cxx,
+              "pct": pct, "status": status, "src": str(p),
+            })
+
+          # 全量矩阵（缺的也生成 N/A）
+          expected = []
+          for std in (11, 14, 17, 20, 23):
+            expected += [
+              ("linux","clangpp",std), ("linux","gpp",std),
+              ("macos","clangpp",std), ("macos","gpp",std),
+              ("windows","msvc",std),
+            ]
+
+          def score(e):
+            st = (e["status"] or "").lower()
+            s = 0
+            if st not in ("placeholder","unknown","fail","failure","error"):
+              s += 1000
+            return s + e["pct"]
+
+          best = {}
+          for e in raw:
+            if "integration" in e["key"]:
+              continue
+            k = (e["os"], e["cs"], e["cxx"])
+            if k not in best or score(e) > score(best[k]):
+              best[k] = e
+
+          selected = []
+          for (osn, cs, std) in expected:
+            e = best.get((osn, cs, std))
+            if e:
+              msg = f'{e["pct"]:.1f}%'
+              (badges / f"{osn}-{cs}-cxx{std}.svg").write_text(
+                svg_badge("cov", msg, badge_color(e["pct"], e["status"])),
+                encoding="utf-8"
+              )
+              selected.append(e)
+            else:
+              (badges / f"{osn}-{cs}-cxx{std}.svg").write_text(
+                svg_badge("cov", "N/A", badge_color(0.0, "na")),
+                encoding="utf-8"
+              )
+
+          # integration 单独一张（按你现有 key）
+          integ = next((e for e in raw if e["key"] == "linux-gpp-cxx20-integration"), None)
+          if integ:
+            (badges / "linux-gpp-cxx20-integration.svg").write_text(
+              svg_badge("cov", f'{integ["pct"]:.1f}%', badge_color(integ["pct"], integ["status"])),
+              encoding="utf-8",
+            )
+          else:
+            (badges / "linux-gpp-cxx20-integration.svg").write_text(
+              svg_badge("cov", "N/A", badge_color(0.0, "na")),
+              encoding="utf-8",
+            )
+
+          real = [e["pct"] for e in selected
+                  if (e["status"] or "").lower() not in ("placeholder","unknown","fail","failure","error")]
+          overall = statistics.mean(real) if real else 0.0
+          (badges / "overall.svg").write_text(
+            svg_badge("cov", f"{overall:.1f}%", badge_color(overall, "ok" if real else "placeholder")),
+            encoding="utf-8",
+          )
+
+          out_entries = []
+          for (osn, cs, std) in expected:
+            e = best.get((osn, cs, std))
+            out_entries.append({
+              "os": osn, "compiler": cs, "cxx_std": std,
+              "line_pct": (e["pct"] if e else 0.0),
+              "status": (e["status"] if e else "na"),
+              "src": (e["src"] if e else ""),
+            })
+
+          (data / "coverage.json").write_text(
+            json.dumps({"overall": overall, "entries": out_entries}, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+          )
+
+          os_list = ["linux","macos","windows"]
+          stds = [11,14,17,20,23]
+          comp_by_os = {"linux":["clangpp","gpp"], "macos":["clangpp","gpp"], "windows":["msvc"]}
+
+          def cell(osn, cs, st):
+            fn = f"badges/{osn}-{cs}-cxx{st}.svg"
+            return f'<img alt="{osn}-{cs}-cxx{st}" src="{fn}">'
+
+          rows = []
+          for osn in os_list:
+            for cs in comp_by_os[osn]:
+              tds = "".join(f"<td>{cell(osn,cs,st)}</td>" for st in stds)
+              rows.append(f"<tr><th>{osn} / {cs}</th>{tds}</tr>")
+
+          index = f"""<!doctype html>
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width,initial-scale=1">
+          <title>C++ Coverage</title>
+          <h1>C++ Coverage</h1>
+          <p><img alt="overall" src="badges/overall.svg"></p>
+          <table border="1" cellpadding="6" cellspacing="0">
+            <thead><tr><th>platform / compiler</th><th>C++11</th><th>C++14</th><th>C++17</th><th>C++20</th><th>C++23</th></tr></thead>
+            <tbody>{''.join(rows)}</tbody>
+          </table>
+          <h2>Integration</h2>
+          <p><img alt="linux-gpp-cxx20-integration" src="badges/linux-gpp-cxx20-integration.svg"></p>
+          <p>Data: <a href="data/coverage.json">coverage.json</a></p>
+          """
+          (module_root / "index.html").write_text(index, encoding="utf-8")
+
+          print(f"[coverage-module] cov.json found={len(cov_files)} raw={len(raw)} best={len(best)} overall={overall:.2f}%")
+          PY
+
+      # 4) README 兼容：把模块 badges/data 镜像到根目录（避免 README 链接裂）
+      - name: Publish coverage compatibility paths (dist/badges, dist/data)
+        if: always()
+        run: |
+          set -euo pipefail
+          mkdir -p dist/badges dist/data
+          cp -f dist/modules/cpp-coverage/badges/*.svg dist/badges/ 2>/dev/null || true
+          cp -f dist/modules/cpp-coverage/data/*.json dist/data/ 2>/dev/null || true
+
+      # 5) “嵌入”到 walkthrough 首页：支持重复运行（已存在则替换整段）
+      - name: Inject/Update C++ coverage section into walkthrough home
+        if: always()
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import re
+          from pathlib import Path
+
+          home = Path("dist/index.html")
+          if not home.exists():
+            raise SystemExit(0)
+
+          html = home.read_text(encoding="utf-8", errors="ignore")
+
+          block = """
+          <hr>
+          <!-- MODULE:CPP_COVERAGE_BEGIN -->
+          <h2>C++ Coverage</h2>
+          <p>
+            <a href="modules/cpp-coverage/">
+              <img alt="overall" src="modules/cpp-coverage/badges/overall.svg">
+            </a>
+          </p>
+          <p><a href="modules/cpp-coverage/">Open C++ Coverage Dashboard</a></p>
+          <!-- MODULE:CPP_COVERAGE_END -->
+          """
+
+          pattern = re.compile(r"<!-- MODULE:CPP_COVERAGE_BEGIN -->(.|\n)*?<!-- MODULE:CPP_COVERAGE_END -->", re.M)
+          if pattern.search(html):
+            html = pattern.sub(block.strip(), html, count=1)
+          else:
+            if "</body>" in html:
+              html = html.replace("</body>", block + "\n</body>", 1)
+            else:
+              html = html + "\n" + block + "\n"
+
+          home.write_text(html, encoding="utf-8")
+          PY
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

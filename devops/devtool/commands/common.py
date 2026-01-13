@@ -57,6 +57,7 @@ def base_env(
     test_verbose: bool | None = None,
     jobs: int | None = None,
     cpp_build_type: str | None = None,
+    build_verbose: bool | None = None,
     prefix: str | None = None,
 ) -> Dict[str, str]:
     env: Dict[str, str] = os.environ.copy()
@@ -90,6 +91,14 @@ def base_env(
     env["CPP_BUILD_TYPE"] = cpp_build_type or env.get("CPP_BUILD_TYPE") or "Debug"
     env["PREFIX"] = prefix or env.get("PREFIX") or (str(Path.home() / ".local") if is_windows() else "/usr/local")
     env.setdefault("VERBOSE", "1" if verbose else "0")
+    build_verbose_val = build_verbose
+    if build_verbose_val is None:
+        raw_build_verbose = env.get("BUILD_VERBOSE")
+        if raw_build_verbose is not None:
+            build_verbose_val = str(raw_build_verbose).strip().lower() in ("1", "true", "yes", "on")
+        else:
+            build_verbose_val = verbose
+    env["BUILD_VERBOSE"] = "1" if build_verbose_val else "0"
     env.setdefault("TEST_VERBOSE", "1" if test_v else "0")
     env.setdefault("CTEST_V", "-V" if env["TEST_VERBOSE"] == "1" else "")
     env.setdefault("PYTEST_V", "-vv" if env["TEST_VERBOSE"] == "1" else "-q")

@@ -2,6 +2,7 @@
 # Do not edit manually.
 # NOTE: Duplicate names detected; chosen provider by (shallower module path -> lexicographic):
 #   async_timed: mental1104.timed  (others: mental1104.utils.timed)
+#   build_url: mental1104.db.drivers.clickhouse  (others: mental1104.db.drivers.mysql, mental1104.db.drivers.postgres, mental1104.db.drivers.sqlite)
 #   get_current_time: mental1104.timed  (others: mental1104.utils.timed)
 #   parse_time: mental1104.timed  (others: mental1104.utils.timed)
 #   timed: mental1104.timed  (others: mental1104.utils.timed)
@@ -9,77 +10,56 @@
 # ---- Direct imports (safe modules; no mental1104 top-level imports) ----
 from mental1104.app.anki import AnkiApkgGenerator
 from mental1104.app.pdf import extract_page_range
-from mental1104.common.i18n.context import (
-    DEFAULT_LOCALE,
-    activate,
-    get_locale,
-    locale_context,
-    reset_locale,
-)
+from mental1104.common.i18n.context import DEFAULT_LOCALE, activate, get_locale, locale_context, reset_locale
 from mental1104.common.i18n.fastapi import I18nMiddleware
 from mental1104.common.i18n.json_localize import localize_json
-from mental1104.common.i18n.placeholder import (
-    PLACEHOLDER_PATTERN,
-    compare_placeholders,
-    extract_placeholders,
-)
+from mental1104.common.i18n.placeholder import PLACEHOLDER_PATTERN, compare_placeholders, extract_placeholders
 from mental1104.common.i18n.provider import FileMoProvider, I18nResourceProvider
-from mental1104.common.i18n.resolver import (
-    ChainResolver,
-    CookieResolver,
-    HeaderResolver,
-    LocaleResolver,
-    QueryResolver,
-)
+from mental1104.common.i18n.resolver import ChainResolver, CookieResolver, HeaderResolver, LocaleResolver, QueryResolver
 from mental1104.common.i18n.runtime import I18n, normalize_locale
 from mental1104.common.i18n.tools.check import check_po_tree
 from mental1104.common.i18n.tools.cli import main
 from mental1104.common.i18n.tools.compile import compile_po_tree, po_text_to_mo_bytes
 from mental1104.common.i18n.tools.mo_writer import write_mo
 from mental1104.common.i18n.tools.po_parser import PoEntry, parse_po
+from mental1104.compat import Self, TypeGuard, TypeIs, ZoneInfo
 from mental1104.concurrency.types import MPStartMethod
-from mental1104.connector.postgres import (
-    Base,
-    SessionAwareMixin,
-    close_session,
-    db_connection,
-    ensure_database_exists,
-    ensure_tables_exist,
-    get_db_config,
-    get_db_url,
-    get_session,
-    init_database,
-    logger,
-    open_session,
-    setup,
-    startup,
-    with_session,
-)
-from mental1104.connector.redis_client.redis_bloom_kv import RedisBloom
-from mental1104.debug.deciprobe import (
-    ELLIPSIS_CHAR,
-    FUNC_FIELD_WIDTH,
-    HEAD_PREFIX,
-    ID_FIELD_WIDTH,
-    SITE_FIELD_WIDTH,
-    TRACE_IF_ENABLED,
-    TYPE_FIELD_WIDTH,
-    deciprobe,
-    trace_if,
-)
+from mental1104.db.clickhouse_adapter import ClickHouseExecutor, ClickHouseSessionAware, clickhouse_session_scope, clickhouse_tx_scope, make_clickhouse_executor
+from mental1104.db.clickhouse_profiles import apply_clickhouse_profile, resolve_clickhouse_profile
+from mental1104.db.client_async import AsyncSQLAlchemyClient, make_async_sqlalchemy_client
+from mental1104.db.client_sync import SQLAlchemyClient, make_sqlalchemy_client
+from mental1104.db.config import ClickHouseProfile, ConnParams, DBKind, SASettings, conn_params_from_env
+from mental1104.db.dao import AutoSessionDAO, SessionAwareDAO, TSessionDAO, make_async_dao, singleton_dao
+from mental1104.db.drivers.clickhouse import build_url
+from mental1104.db.examples import AsyncUserDAO, User, UserDAO, bootstrap, example_async_read, example_async_write, example_chunk_read, example_read, example_read_then_write, example_threads, example_write
+from mental1104.db.factory import create_async_sqlalchemy_client, create_async_sqlalchemy_client_from_dsn, create_sqlalchemy_client, create_sqlalchemy_client_from_dsn
+from mental1104.db.mixins import SoftDeleteMixin, TimestampMixin
+from mental1104.db.nosql.config import MongoConnParams, mongo_params_from_env
+from mental1104.db.nosql.connection import AsyncMongoConnection, MongoConnection
+from mental1104.db.nosql.context import AsyncMongoSession, AsyncMongoSessionAware, AutoMongoSessionDAO, MongoSession, MongoSessionAware, ctx_async_mongo_session, ctx_mongo_session, get_current_async_mongo_session, get_current_mongo_session, require_ctx_async_mongo_session, require_ctx_mongo_session, reset_current_async_mongo_session, reset_current_mongo_session, set_current_async_mongo_session, set_current_mongo_session
+from mental1104.db.nosql.factory import create_async_mongo_client, create_mongo_client
+from mental1104.db.nosql.registry import DEFAULT_MONGO_REGISTRY, MongoConfig, MongoRegistry, get_async_mongo_client, get_mongo_client, register_mongo
+from mental1104.db.nosql.scopes import async_mongo_session_scope, async_mongo_tx_scope, mongo_session_scope, mongo_tx_scope
+from mental1104.db.orm_base import Base, NAMING_CONVENTION
+from mental1104.db.redis.config import RedisConnParams, RedisMode, redis_params_from_env
+from mental1104.db.redis.connection import RedisConnection, RedisLock
+from mental1104.db.redis.context import RedisSessionAware, ctx_redis_client, get_current_redis_client, require_ctx_redis_client, reset_current_redis_client, set_current_redis_client
+from mental1104.db.redis.factory import create_redis_client
+from mental1104.db.redis.redis_bloom_kv import RedisBloom
+from mental1104.db.redis.registry import DEFAULT_REDIS_REGISTRY, RedisConfig, RedisRegistry, get_redis_client, register_redis
+from mental1104.db.redis.scopes import redis_session_scope, redis_tx_scope
+from mental1104.db.registry import DBConfig, DBRegistry, DEFAULT_REGISTRY, get_async_engine, get_async_session_factory, get_clickhouse_executor, get_engine, get_session_factory, register_db
+from mental1104.db.schema import MigrationHandler, create_all, create_all_async, drop_all, drop_all_async, register_db_and_create, register_db_and_create_async, run_migrations, set_migration_handler
+from mental1104.db.scopes import SessionLike, async_session_scope, async_tx_scope, ck_session_scope, ck_tx_scope, mysql_session_scope, mysql_tx_scope, pg_session_scope, pg_tx_scope, session_scope, sqlite_session_scope, sqlite_tx_scope, tx_scope
+from mental1104.db.session_context import ctx_async_session, ctx_clickhouse_session, ctx_session, get_current_async_session, get_current_clickhouse_session, get_current_session, require_ctx_async_session, require_ctx_session, reset_current_async_session, reset_current_clickhouse_session, reset_current_session, set_current_async_session, set_current_clickhouse_session, set_current_session
+from mental1104.db.uow import AsyncUnitOfWork, UnitOfWork
+from mental1104.debug.deciprobe import ELLIPSIS_CHAR, FUNC_FIELD_WIDTH, HEAD_PREFIX, ID_FIELD_WIDTH, SITE_FIELD_WIDTH, TRACE_IF_ENABLED, TYPE_FIELD_WIDTH, deciprobe, trace_if
 from mental1104.env.environment import MissingEnvVarError, check_required_env_vars
 from mental1104.file.csv_processor import csv_writer, export_csv_from_database
 from mental1104.file.file_processor import file_iterator
 from mental1104.iterator.iterator_csv import iterator_csv
-from mental1104.plot.bench import (
-    BenchmarkPlotter,
-    BenchmarkRecord,
-    BenchmarkSuite,
-    BenchTestType,
-    GoogleBenchmarkSuite,
-    PytestBenchmarkSuite,
-    load_benchmark_suite,
-)
+from mental1104.iterator.iterator_json import iterator_json
+from mental1104.plot.bench import BenchTestType, BenchmarkPlotter, BenchmarkRecord, BenchmarkSuite, GoogleBenchmarkSuite, PytestBenchmarkSuite, load_benchmark_suite
 from mental1104.schema.common_schema import JsonSerializable
 from mental1104.string.string_util import insert_newlines, replace_space_with
 from mental1104.timed import async_timed, get_current_time, parse_time, timed
@@ -94,192 +74,311 @@ from mental1104.utils.util import async_delay, delay
 
 # ---- Lazy exports (risky modules; may import mental1104 at top-level) ----
 _EXPORT_MAP = {
-    "AsCompletedStrategy": "mental1104.concurrency.coroutine",
-    "AsyncPulsarAdminHelper": "mental1104.connector.pulsar",
-    "Consumer": "mental1104.connector.pulsar",
-    "CoroutinePool": "mental1104.concurrency.coroutine",
-    "FirstSuccessfulStrategy": "mental1104.concurrency.coroutine",
-    "GatherStrategy": "mental1104.concurrency.coroutine",
-    "MiddlewareCallable": "mental1104.asgi.fastapi.middleware",
-    "ProcessExecutorCoroutinePool": "mental1104.concurrency.coroutine",
-    "ProcessWorkerPool": "mental1104.concurrency.sync_worker",
-    "Producer": "mental1104.connector.pulsar",
-    "PulsarAdminHelper": "mental1104.connector.pulsar",
-    "PulsarConnector": "mental1104.connector.pulsar",
-    "PulsarEnvironment": "mental1104.connector.pulsar",
-    "RequestCtxContextVarMiddlewareFactory": "mental1104.asgi.fastapi.middleware",
-    "RequestCtxMiddlewareFactory": "mental1104.asgi.fastapi.middleware",
-    "TaskExecutionStrategy": "mental1104.concurrency.coroutine",
-    "ThreadExecutorCoroutinePool": "mental1104.concurrency.coroutine",
-    "ThreadWorkerPool": "mental1104.concurrency.sync_worker",
-    "TimeBasedTrendPlot": "mental1104.plot.trend",
-    "TrendPlotBase": "mental1104.plot.trend",
-    "fetch_status": "mental1104.network.http_package",
-    "iterator_json": "mental1104.iterator.iterator_json",
-    "json_to_yaml": "mental1104.app.convert",
-    "register_all_request_ctx_middlewares": "mental1104.asgi.fastapi.middleware",
-    "register_request_ctx_middleware": "mental1104.asgi.fastapi.middleware",
-    "request_ctx_from_headers": "mental1104.asgi.fastapi.request",
-    "yaml_to_json": "mental1104.app.convert",
+    'AsCompletedStrategy': 'mental1104.concurrency.coroutine',
+    'AsyncPulsarAdminHelper': 'mental1104.connector.pulsar',
+    'Consumer': 'mental1104.connector.pulsar',
+    'CoroutinePool': 'mental1104.concurrency.coroutine',
+    'FirstSuccessfulStrategy': 'mental1104.concurrency.coroutine',
+    'GatherStrategy': 'mental1104.concurrency.coroutine',
+    'MiddlewareCallable': 'mental1104.asgi.fastapi.middleware',
+    'ProcessExecutorCoroutinePool': 'mental1104.concurrency.coroutine',
+    'ProcessWorkerPool': 'mental1104.concurrency.sync_worker',
+    'Producer': 'mental1104.connector.pulsar',
+    'PulsarAdminHelper': 'mental1104.connector.pulsar',
+    'PulsarConnector': 'mental1104.connector.pulsar',
+    'PulsarEnvironment': 'mental1104.connector.pulsar',
+    'RequestCtxContextVarMiddlewareFactory': 'mental1104.asgi.fastapi.middleware',
+    'RequestCtxMiddlewareFactory': 'mental1104.asgi.fastapi.middleware',
+    'TaskExecutionStrategy': 'mental1104.concurrency.coroutine',
+    'ThreadExecutorCoroutinePool': 'mental1104.concurrency.coroutine',
+    'ThreadWorkerPool': 'mental1104.concurrency.sync_worker',
+    'TimeBasedTrendPlot': 'mental1104.plot.trend',
+    'TrendPlotBase': 'mental1104.plot.trend',
+    'fetch_status': 'mental1104.network.http_package',
+    'json_to_yaml': 'mental1104.app.convert',
+    'register_all_request_ctx_middlewares': 'mental1104.asgi.fastapi.middleware',
+    'register_request_ctx_middleware': 'mental1104.asgi.fastapi.middleware',
+    'request_ctx_from_headers': 'mental1104.asgi.fastapi.request',
+    'yaml_to_json': 'mental1104.app.convert',
 }
 
 __all__ = [
-    "DEFAULT_LOCALE",
-    "ELLIPSIS_CHAR",
-    "FUNC_FIELD_WIDTH",
-    "HEAD_PREFIX",
-    "ID_FIELD_WIDTH",
-    "PLACEHOLDER_PATTERN",
-    "SITE_FIELD_WIDTH",
-    "TRACE_IF_ENABLED",
-    "TYPE_FIELD_WIDTH",
-    "AnkiApkgGenerator",
-    "AsCompletedStrategy",
-    "AsyncPulsarAdminHelper",
-    "Base",
-    "BenchTestType",
-    "BenchmarkPlotter",
-    "BenchmarkRecord",
-    "BenchmarkSuite",
-    "ChainResolver",
-    "Consumer",
-    "CookieResolver",
-    "CoroutinePool",
-    "CpuBoundTask",
-    "DatasetFactory",
-    "FileMoProvider",
-    "FirstSuccessfulStrategy",
-    "GatherStrategy",
-    "GoogleBenchmarkSuite",
-    "HeaderResolver",
-    "I18n",
-    "I18nMiddleware",
-    "I18nResourceProvider",
-    "IoBoundTask",
-    "JsonParserType",
-    "JsonSerializable",
-    "JsonUtil",
-    "LocaleResolver",
-    "MPStartMethod",
-    "MiddlewareCallable",
-    "MissingEnvVarError",
-    "PoEntry",
-    "ProcessExecutorCoroutinePool",
-    "ProcessWorkerPool",
-    "Producer",
-    "PulsarAdminHelper",
-    "PulsarConnector",
-    "PulsarEnvironment",
-    "PytestBenchmarkSuite",
-    "QueryResolver",
-    "RedisBloom",
-    "RequestCtx",
-    "RequestCtxContextVarMiddlewareFactory",
-    "RequestCtxMiddlewareFactory",
-    "SessionAwareMixin",
-    "TaskExecutionStrategy",
-    "ThreadExecutorCoroutinePool",
-    "ThreadWorkerPool",
-    "TimeBasedTrendPlot",
-    "TrendPlotBase",
-    "YamlUtil",
-    "activate",
-    "async_delay",
-    "async_timed",
-    "check_po_tree",
-    "check_required_env_vars",
-    "close_session",
-    "compare_placeholders",
-    "compile_po_tree",
-    "csv_writer",
-    "ctx",
-    "ctx_diag",
-    "db_connection",
-    "deciprobe",
-    "decrypt",
-    "delay",
-    "dispatch_for",
-    "dump_json",
-    "dump_yaml",
-    "encrypt",
-    "ensure_database_exists",
-    "ensure_tables_exist",
-    "export_csv_from_database",
-    "extract_page_range",
-    "extract_placeholders",
-    "fetch_status",
-    "file_iterator",
-    "generate_salt",
-    "get_current_time",
-    "get_db_config",
-    "get_db_url",
-    "get_locale",
-    "get_session",
-    "init_database",
-    "insert_newlines",
-    "iterator_csv",
-    "iterator_json",
-    "json_to_yaml",
-    "load_benchmark_suite",
-    "load_json",
-    "locale_context",
-    "localize_json",
-    "logger",
-    "main",
-    "normalize_locale",
-    "open_session",
-    "parse_po",
-    "parse_time",
-    "parse_yaml",
-    "po_text_to_mo_bytes",
-    "random_pick",
-    "register_all_request_ctx_middlewares",
-    "register_request_ctx_middleware",
-    "replace_space_with",
-    "request_ctx_from_headers",
-    "reset_ctx",
-    "reset_locale",
-    "set_ctx",
-    "setup",
-    "startup",
-    "timed",
-    "trace_if",
-    "with_session",
-    "write_mo",
-    "yaml_to_json",
+    'AnkiApkgGenerator',
+    'AsCompletedStrategy',
+    'AsyncMongoConnection',
+    'AsyncMongoSession',
+    'AsyncMongoSessionAware',
+    'AsyncPulsarAdminHelper',
+    'AsyncSQLAlchemyClient',
+    'AsyncUnitOfWork',
+    'AsyncUserDAO',
+    'AutoMongoSessionDAO',
+    'AutoSessionDAO',
+    'Base',
+    'BenchTestType',
+    'BenchmarkPlotter',
+    'BenchmarkRecord',
+    'BenchmarkSuite',
+    'ChainResolver',
+    'ClickHouseExecutor',
+    'ClickHouseProfile',
+    'ClickHouseSessionAware',
+    'ConnParams',
+    'Consumer',
+    'CookieResolver',
+    'CoroutinePool',
+    'CpuBoundTask',
+    'DBConfig',
+    'DBKind',
+    'DBRegistry',
+    'DEFAULT_LOCALE',
+    'DEFAULT_MONGO_REGISTRY',
+    'DEFAULT_REDIS_REGISTRY',
+    'DEFAULT_REGISTRY',
+    'DatasetFactory',
+    'ELLIPSIS_CHAR',
+    'FUNC_FIELD_WIDTH',
+    'FileMoProvider',
+    'FirstSuccessfulStrategy',
+    'GatherStrategy',
+    'GoogleBenchmarkSuite',
+    'HEAD_PREFIX',
+    'HeaderResolver',
+    'I18n',
+    'I18nMiddleware',
+    'I18nResourceProvider',
+    'ID_FIELD_WIDTH',
+    'IoBoundTask',
+    'JsonParserType',
+    'JsonSerializable',
+    'JsonUtil',
+    'LocaleResolver',
+    'MPStartMethod',
+    'MiddlewareCallable',
+    'MigrationHandler',
+    'MissingEnvVarError',
+    'MongoConfig',
+    'MongoConnParams',
+    'MongoConnection',
+    'MongoRegistry',
+    'MongoSession',
+    'MongoSessionAware',
+    'NAMING_CONVENTION',
+    'PLACEHOLDER_PATTERN',
+    'PoEntry',
+    'ProcessExecutorCoroutinePool',
+    'ProcessWorkerPool',
+    'Producer',
+    'PulsarAdminHelper',
+    'PulsarConnector',
+    'PulsarEnvironment',
+    'PytestBenchmarkSuite',
+    'QueryResolver',
+    'RedisBloom',
+    'RedisConfig',
+    'RedisConnParams',
+    'RedisConnection',
+    'RedisLock',
+    'RedisMode',
+    'RedisRegistry',
+    'RedisSessionAware',
+    'RequestCtx',
+    'RequestCtxContextVarMiddlewareFactory',
+    'RequestCtxMiddlewareFactory',
+    'SASettings',
+    'SITE_FIELD_WIDTH',
+    'SQLAlchemyClient',
+    'Self',
+    'SessionAwareDAO',
+    'SessionLike',
+    'SoftDeleteMixin',
+    'TRACE_IF_ENABLED',
+    'TSessionDAO',
+    'TYPE_FIELD_WIDTH',
+    'TaskExecutionStrategy',
+    'ThreadExecutorCoroutinePool',
+    'ThreadWorkerPool',
+    'TimeBasedTrendPlot',
+    'TimestampMixin',
+    'TrendPlotBase',
+    'TypeGuard',
+    'TypeIs',
+    'UnitOfWork',
+    'User',
+    'UserDAO',
+    'YamlUtil',
+    'ZoneInfo',
+    'activate',
+    'apply_clickhouse_profile',
+    'async_delay',
+    'async_mongo_session_scope',
+    'async_mongo_tx_scope',
+    'async_session_scope',
+    'async_timed',
+    'async_tx_scope',
+    'bootstrap',
+    'build_url',
+    'check_po_tree',
+    'check_required_env_vars',
+    'ck_session_scope',
+    'ck_tx_scope',
+    'clickhouse_session_scope',
+    'clickhouse_tx_scope',
+    'compare_placeholders',
+    'compile_po_tree',
+    'conn_params_from_env',
+    'create_all',
+    'create_all_async',
+    'create_async_mongo_client',
+    'create_async_sqlalchemy_client',
+    'create_async_sqlalchemy_client_from_dsn',
+    'create_mongo_client',
+    'create_redis_client',
+    'create_sqlalchemy_client',
+    'create_sqlalchemy_client_from_dsn',
+    'csv_writer',
+    'ctx',
+    'ctx_async_mongo_session',
+    'ctx_async_session',
+    'ctx_clickhouse_session',
+    'ctx_diag',
+    'ctx_mongo_session',
+    'ctx_redis_client',
+    'ctx_session',
+    'deciprobe',
+    'decrypt',
+    'delay',
+    'dispatch_for',
+    'drop_all',
+    'drop_all_async',
+    'dump_json',
+    'dump_yaml',
+    'encrypt',
+    'example_async_read',
+    'example_async_write',
+    'example_chunk_read',
+    'example_read',
+    'example_read_then_write',
+    'example_threads',
+    'example_write',
+    'export_csv_from_database',
+    'extract_page_range',
+    'extract_placeholders',
+    'fetch_status',
+    'file_iterator',
+    'generate_salt',
+    'get_async_engine',
+    'get_async_mongo_client',
+    'get_async_session_factory',
+    'get_clickhouse_executor',
+    'get_current_async_mongo_session',
+    'get_current_async_session',
+    'get_current_clickhouse_session',
+    'get_current_mongo_session',
+    'get_current_redis_client',
+    'get_current_session',
+    'get_current_time',
+    'get_engine',
+    'get_locale',
+    'get_mongo_client',
+    'get_redis_client',
+    'get_session_factory',
+    'insert_newlines',
+    'iterator_csv',
+    'iterator_json',
+    'json_to_yaml',
+    'load_benchmark_suite',
+    'load_json',
+    'locale_context',
+    'localize_json',
+    'main',
+    'make_async_dao',
+    'make_async_sqlalchemy_client',
+    'make_clickhouse_executor',
+    'make_sqlalchemy_client',
+    'mongo_params_from_env',
+    'mongo_session_scope',
+    'mongo_tx_scope',
+    'mysql_session_scope',
+    'mysql_tx_scope',
+    'normalize_locale',
+    'parse_po',
+    'parse_time',
+    'parse_yaml',
+    'pg_session_scope',
+    'pg_tx_scope',
+    'po_text_to_mo_bytes',
+    'random_pick',
+    'redis_params_from_env',
+    'redis_session_scope',
+    'redis_tx_scope',
+    'register_all_request_ctx_middlewares',
+    'register_db',
+    'register_db_and_create',
+    'register_db_and_create_async',
+    'register_mongo',
+    'register_redis',
+    'register_request_ctx_middleware',
+    'replace_space_with',
+    'request_ctx_from_headers',
+    'require_ctx_async_mongo_session',
+    'require_ctx_async_session',
+    'require_ctx_mongo_session',
+    'require_ctx_redis_client',
+    'require_ctx_session',
+    'reset_ctx',
+    'reset_current_async_mongo_session',
+    'reset_current_async_session',
+    'reset_current_clickhouse_session',
+    'reset_current_mongo_session',
+    'reset_current_redis_client',
+    'reset_current_session',
+    'reset_locale',
+    'resolve_clickhouse_profile',
+    'run_migrations',
+    'session_scope',
+    'set_ctx',
+    'set_current_async_mongo_session',
+    'set_current_async_session',
+    'set_current_clickhouse_session',
+    'set_current_mongo_session',
+    'set_current_redis_client',
+    'set_current_session',
+    'set_migration_handler',
+    'singleton_dao',
+    'sqlite_session_scope',
+    'sqlite_tx_scope',
+    'timed',
+    'trace_if',
+    'tx_scope',
+    'write_mo',
+    'yaml_to_json',
 ]
 
 # 惰性导入降低循环引用概率, 但模块内部仍可能互相 import 导致循环
-
-
 def __getattr__(name):
     # PEP 562: lazy attribute access for risky modules & fallback
     try:
         modname = _EXPORT_MAP[name]
     except KeyError:
-        raise AttributeError(f"module {__name__} has no attribute {name!r}") from None
-    import importlib
-    import types
-
+        raise AttributeError(f'module {__name__} has no attribute {name!r}') from None
+    import importlib, types
     try:
         mod = importlib.import_module(modname)
     except ImportError as exc:
-        raise ImportError(
-            f"{modname} is not available; optional dependency may be missing or unsupported on this platform"
-        ) from exc
+        raise ImportError(f"{modname} is not available; optional dependency may be missing or unsupported on this platform") from exc
     obj = getattr(mod, name, None)
     if obj is None or isinstance(obj, types.ModuleType):
         # 兼容包结构：尝试从子模块 modname.name 再取一次
         try:
-            sub = importlib.import_module(f"{modname}.{name}")
-        except Exception as _e:
-            raise AttributeError(f"{modname} has no attribute {name!r}") from None
+            sub = importlib.import_module(f'{modname}.{name}')
+        except Exception as _e:  # noqa: F841
+            raise AttributeError(f'{modname} has no attribute {name!r}') from None
         obj = getattr(sub, name, None)
         if obj is None:
-            raise AttributeError(f"{modname}.{name} has no attribute {name!r}") from None
+            raise AttributeError(f'{modname}.{name} has no attribute {name!r}') from None
     globals()[name] = obj  # cache：写回模块全局（由 globals() 返回的字典）以便下次直接取
     return obj
-
 
 def __dir__():
     return sorted(list(globals().keys()) + list(__all__))
