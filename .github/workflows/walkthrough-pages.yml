@@ -39,7 +39,7 @@ jobs:
       - name: Configure Pages
         uses: actions/configure-pages@v5
 
-      - name: Setup Python
+      - name: Setup Python (builder)
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -60,65 +60,109 @@ jobs:
             cat dist/summary.md >> "$GITHUB_STEP_SUMMARY"
           fi
 
-      # ===== 1) 真实拉取 gh-pages 旧内容（best-effort），用于“保留旧模块”=====
-      - name: Checkout gh-pages into _prev_pages (best-effort)
-        continue-on-error: true
-        uses: actions/checkout@v4
-        with:
-          ref: gh-pages
-          path: _prev_pages
-          fetch-depth: 1
-
-      - name: Preserve existing modules from gh-pages
+      # ===== 1) 解析要下载的 run-id：当前触发 run + 另一个 workflow 最近成功 run =====
+      # - workflow_run：触发者用“本次 run”（即使失败也可能有 placeholder cov.json），另一方用“最近成功”
+      # - workflow_dispatch：两边都用“最近成功”（全量构建）
+      - name: Resolve coverage run ids
+        id: resolve
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          mkdir -p dist/modules
-          if [ -d _prev_pages/modules ]; then
-            cp -R _prev_pages/modules/* dist/modules/ 2>/dev/null || true
+
+          repo="${GITHUB_REPOSITORY}"
+
+          if [ "${{ github.event_name }}" = "workflow_run" ]; then
+            branch="${{ github.event.workflow_run.head_branch }}"
+            trigger_name="${{ github.event.workflow_run.name }}"
+            trigger_run_id="${{ github.event.workflow_run.id }}"
+          else
+            branch="${{ github.ref_name }}"
+            trigger_name=""
+            trigger_run_id=""
           fi
 
-      # ===== 2) 下载触发方 coverage artifacts（按触发 workflow 分流）=====
+          get_wf_id() {
+            local name="$1"
+            gh api "repos/${repo}/actions/workflows" \
+              | jq -r --arg n "$name" '.workflows[] | select(.name==$n) | .id' \
+              | head -n1
+          }
+
+          latest_success_run_id() {
+            local wf_id="$1"
+            local br="$2"
+            gh api "repos/${repo}/actions/workflows/${wf_id}/runs?branch=${br}&status=completed&per_page=30" \
+              | jq -r '.workflow_runs[] | select(.conclusion=="success") | .id' \
+              | head -n1
+          }
+
+          cpp_wf_id="$(get_wf_id "cpp" || true)"
+          py_wf_id="$(get_wf_id "Python" || true)"
+
+          cpp_run_id=""
+          py_run_id=""
+
+          if [ "${{ github.event_name }}" = "workflow_run" ]; then
+            if [ "$trigger_name" = "cpp" ]; then
+              cpp_run_id="$trigger_run_id"
+            elif [ "$trigger_name" = "Python" ]; then
+              py_run_id="$trigger_run_id"
+            fi
+          fi
+
+          # 补齐另一方（或 workflow_dispatch 下补齐两边）
+          if [ -z "$cpp_run_id" ] && [ -n "${cpp_wf_id:-}" ] && [ "${cpp_wf_id:-null}" != "null" ]; then
+            cpp_run_id="$(latest_success_run_id "$cpp_wf_id" "$branch" || true)"
+          fi
+          if [ -z "$py_run_id" ] && [ -n "${py_wf_id:-}" ] && [ "${py_wf_id:-null}" != "null" ]; then
+            py_run_id="$(latest_success_run_id "$py_wf_id" "$branch" || true)"
+          fi
+
+          echo "branch=$branch" >> "$GITHUB_OUTPUT"
+          echo "cpp_run_id=${cpp_run_id:-}" >> "$GITHUB_OUTPUT"
+          echo "py_run_id=${py_run_id:-}" >> "$GITHUB_OUTPUT"
+
+      # ===== 2) 下载 coverage artifacts（尝试把 C++ + Python 都下载到 _cov/）=====
       - name: Ensure _cov exists
         run: mkdir -p _cov
 
       - name: Download C++ coverage artifacts
-        if: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.name == 'cpp' }}
+        if: ${{ steps.resolve.outputs.cpp_run_id != '' }}
         continue-on-error: true
         uses: actions/download-artifact@v4
         with:
           path: _cov
           pattern: cpp-cov-*
           merge-multiple: false
-          run-id: ${{ github.event.workflow_run.id }}
+          run-id: ${{ steps.resolve.outputs.cpp_run_id }}
           github-token: ${{ github.token }}
 
       - name: Download Python coverage artifacts
-        if: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.name == 'Python' }}
+        if: ${{ steps.resolve.outputs.py_run_id != '' }}
         continue-on-error: true
         uses: actions/download-artifact@v4
         with:
           path: _cov
           pattern: py-cov-*
           merge-multiple: false
-          run-id: ${{ github.event.workflow_run.id }}
+          run-id: ${{ steps.resolve.outputs.py_run_id }}
           github-token: ${{ github.token }}
 
       - name: Debug inputs
         if: always()
         run: |
           echo "event_name=${{ github.event_name }}"
-          echo "workflow_run.name=${{ github.event.workflow_run.name }}"
-          echo "head_branch=${{ github.event.workflow_run.head_branch }}"
-          echo "head_sha=${{ github.event.workflow_run.head_sha }}"
-          echo "run_id=${{ github.event.workflow_run.id }}"
+          echo "branch=${{ steps.resolve.outputs.branch }}"
+          echo "cpp_run_id=${{ steps.resolve.outputs.cpp_run_id }}"
+          echo "py_run_id=${{ steps.resolve.outputs.py_run_id }}"
           echo "=== _cov tree ==="
           ls -R _cov || true
           echo "=== cov.json files ==="
           find _cov -name cov.json -print || true
 
-      # ===== 3) C++ module（仅 cpp workflow_run 时更新）=====
+      # ===== 3) C++ module（始终构建：没数据也生成 N/A，避免 404）=====
       - name: Build C++ coverage module (dist/modules/cpp-coverage)
-        if: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.name == 'cpp' }}
         run: |
           set -euo pipefail
           python3 - <<'PY'
@@ -193,7 +237,11 @@ jobs:
 
           expected = []
           for std in (11,14,17,20,23):
-            expected += [("linux","clangpp",std),("linux","gpp",std),("macos","clangpp",std),("macos","gpp",std),("windows","msvc",std)]
+            expected += [
+              ("linux","clangpp",std), ("linux","gpp",std),
+              ("macos","clangpp",std), ("macos","gpp",std),
+              ("windows","msvc",std),
+            ]
 
           def score(e):
             st = (e["status"] or "").lower()
@@ -218,49 +266,53 @@ jobs:
           selected = []
           for (osn,cs,std) in expected:
             e = best.get((osn,cs,std))
+            fn = f"{osn}-{cs}-cxx{std}.svg"
             if e:
-              (badges/f"{osn}-{cs}-cxx{std}.svg").write_text(
+              (badges/fn).write_text(
                 svg_badge("cov", f'{e["pct"]:.1f}%', badge_color(e["pct"], e["status"])),
                 encoding="utf-8",
               )
               selected.append(e)
             else:
-              (badges/f"{osn}-{cs}-cxx{std}.svg").write_text(
-                svg_badge("cov","N/A", badge_color(0.0,"na")),
+              (badges/fn).write_text(
+                svg_badge("cov", "N/A", badge_color(0.0, "na")),
                 encoding="utf-8",
               )
 
-          real = [e["pct"] for e in selected if (e["status"] or "").lower() not in ("placeholder","unknown","fail","failure","error")]
+          real = [
+            e["pct"] for e in selected
+            if (e["status"] or "").lower() not in ("placeholder","unknown","fail","failure","error")
+          ]
           overall = statistics.mean(real) if real else 0.0
           (badges/"overall.svg").write_text(
             svg_badge("cov", f"{overall:.1f}%", badge_color(overall, "ok" if real else "placeholder")),
             encoding="utf-8",
           )
 
-          # ---- FIX: JSON 不允许 tuple 作为 key，best 的 key=(os,cs,cxx) 需要转成字符串 ----
+          # JSON 不允许 tuple 作为 key：改成字符串 key
           entries = {f"{osn}/{cs}/cxx{std}": e for (osn, cs, std), e in best.items()}
-
           (data/"coverage.json").write_text(
             json.dumps({"overall": overall, "entries": entries}, ensure_ascii=False, indent=2),
             encoding="utf-8",
           )
 
-          # index（最小：只给 overall + data 链接；badge 网格主要由 README 承担）
-          (module_root/"index.html").write_text(f"""<!doctype html>
+          (module_root/"index.html").write_text(
+            """<!doctype html>
           <meta charset="utf-8">
           <meta name="viewport" content="width=device-width,initial-scale=1">
           <title>C++ Coverage</title>
           <h1>C++ Coverage</h1>
           <p><img alt="overall" src="badges/overall.svg"></p>
           <p>Data: <a href="data/coverage.json">coverage.json</a></p>
-          """, encoding="utf-8")
+          """,
+            encoding="utf-8",
+          )
 
-          print(f"[cpp] cov.json={len(cov_files)} raw={len(raw)} best={len(best)} overall={overall:.2f}%")
+          print(f"[cpp] raw={len(raw)} best={len(best)} overall={overall:.2f}%")
           PY
 
-      # ===== 4) Python module（仅 Python workflow_run 时更新）=====
+      # ===== 4) Python module（始终构建：没数据也生成 N/A，避免 404）=====
       - name: Build Python coverage module (dist/modules/python-coverage)
-        if: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.name == 'Python' }}
         run: |
           set -euo pipefail
           python3 - <<'PY'
@@ -359,11 +411,14 @@ jobs:
                 selected.append(e)
               else:
                 (badges/fn).write_text(
-                  svg_badge("cov","N/A", badge_color(0.0,"na")),
+                  svg_badge("cov", "N/A", badge_color(0.0,"na")),
                   encoding="utf-8",
                 )
 
-          real = [e["pct"] for e in selected if (e["status"] or "").lower() not in ("placeholder","unknown","fail","failure","error")]
+          real = [
+            e["pct"] for e in selected
+            if (e["status"] or "").lower() not in ("placeholder","unknown","fail","failure","error")
+          ]
           overall = statistics.mean(real) if real else 0.0
           (badges/"python-overall.svg").write_text(
             svg_badge("cov", f"{overall:.1f}%", badge_color(overall, "ok" if real else "placeholder")),
@@ -375,7 +430,6 @@ jobs:
             encoding="utf-8",
           )
 
-          # index：网格页
           cols = expected_py
           def cell(osn, pyk):
             return f'<img alt="{osn}-py{pyk}" src="badges/python-{osn}-py{pyk}.svg">'
@@ -416,9 +470,7 @@ jobs:
 
           html = home.read_text(encoding="utf-8", errors="ignore")
 
-          blocks = []
-
-          blocks.append("""
+          cpp_block = """
           <hr>
           <!-- MODULE:CPP_COVERAGE_BEGIN -->
           <h2>C++ Coverage</h2>
@@ -429,9 +481,9 @@ jobs:
           </p>
           <p><a href="modules/cpp-coverage/">Open C++ Coverage Dashboard</a></p>
           <!-- MODULE:CPP_COVERAGE_END -->
-          """.strip())
+          """.strip()
 
-          blocks.append("""
+          py_block = """
           <hr>
           <!-- MODULE:PYTHON_COVERAGE_BEGIN -->
           <h2>Python Coverage</h2>
@@ -442,18 +494,18 @@ jobs:
           </p>
           <p><a href="modules/python-coverage/">Open Python Coverage Dashboard</a></p>
           <!-- MODULE:PYTHON_COVERAGE_END -->
-          """.strip())
+          """.strip()
 
-          def upsert(html: str, begin: str, end: str, block: str) -> str:
+          def upsert(s: str, begin: str, end: str, block: str) -> str:
             pattern = re.compile(re.escape(begin) + r"(.|\n)*?" + re.escape(end), re.M)
-            if pattern.search(html):
-              return pattern.sub(block, html, count=1)
-            if "</body>" in html:
-              return html.replace("</body>", block + "\n</body>", 1)
-            return html + "\n" + block + "\n"
+            if pattern.search(s):
+              return pattern.sub(block, s, count=1)
+            if "</body>" in s:
+              return s.replace("</body>", block + "\n</body>", 1)
+            return s + "\n" + block + "\n"
 
-          html = upsert(html, "<!-- MODULE:CPP_COVERAGE_BEGIN -->", "<!-- MODULE:CPP_COVERAGE_END -->", blocks[0])
-          html = upsert(html, "<!-- MODULE:PYTHON_COVERAGE_BEGIN -->", "<!-- MODULE:PYTHON_COVERAGE_END -->", blocks[1])
+          html = upsert(html, "<!-- MODULE:CPP_COVERAGE_BEGIN -->", "<!-- MODULE:CPP_COVERAGE_END -->", cpp_block)
+          html = upsert(html, "<!-- MODULE:PYTHON_COVERAGE_BEGIN -->", "<!-- MODULE:PYTHON_COVERAGE_END -->", py_block)
 
           home.write_text(html, encoding="utf-8")
           PY
