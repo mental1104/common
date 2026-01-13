@@ -5,7 +5,7 @@ This file captures recent work plus portability guidance, grouped by language.
 ## General
 - 有关于仓库的公共规范在每次更新完代码后都往AGENTS.md里及时更新。
 - Walkthrough Pages: coverage run-id resolution falls back to the default branch when the triggering branch has no successful run, preventing missing modules.
-- Walkthrough Pages: wait for any in-progress Pages deployment before deploy to avoid 400 "deployment in progress" failures.
+- Walkthrough Pages: deploy retries handle in-progress Pages deployments without relying on the Pages API.
 
 ### Performance: Non-IO Benchmark Protocol (must follow)
 

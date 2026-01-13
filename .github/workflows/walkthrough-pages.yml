@@ -543,28 +543,25 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+      url: ${{ steps.deployment.outputs.page_url || steps.deployment_retry_1.outputs.page_url || steps.deployment_retry_2.outputs.page_url }}
     steps:
-      - name: Wait for Pages deployment slot
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          repo="${GITHUB_REPOSITORY}"
-          ready="no"
-          for i in $(seq 1 30); do
-            status="$(gh api "repos/${repo}/pages/deployments?per_page=1" --jq '.[0].status // ""' || true)"
-            if [ -z "$status" ] || [ "$status" = "success" ] || [ "$status" = "failed" ] || [ "$status" = "cancelled" ]; then
-              echo "Pages status=${status:-none}, proceeding"
-              ready="yes"
-              break
-            fi
-            echo "Pages status=$status, waiting..."
-            sleep 20
-          done
-          if [ "$ready" != "yes" ]; then
-            echo "Pages deployment still in progress; aborting." >&2
-            exit 1
-          fi
       - id: deployment
+        uses: actions/deploy-pages@v4
+        continue-on-error: true
+
+      - name: Wait before retry
+        if: steps.deployment.outcome == 'failure'
+        run: sleep 30
+
+      - id: deployment_retry_1
+        if: steps.deployment.outcome == 'failure'
+        uses: actions/deploy-pages@v4
+        continue-on-error: true
+
+      - name: Wait before retry
+        if: steps.deployment_retry_1.outcome == 'failure'
+        run: sleep 60
+
+      - id: deployment_retry_2
+        if: steps.deployment_retry_1.outcome == 'failure'
         uses: actions/deploy-pages@v4
