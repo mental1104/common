@@ -4,12 +4,6 @@
 
 [![walkthrough](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fmental1104.github.io%2Fcommon%2Fprogress.json&query=%24.pct&suffix=%25&label=walkthrough)](https://mental1104.github.io/common/)
 
-## C++ Coverage (by OS / compiler / C++ standard)
-
-**Overall:**
-![overall](https://<OWNER>.github.io/<REPO>/badges/overall.svg)
-
-## C++ Coverage (by OS / compiler / C++ standard)
 
 ## C++ 覆盖率（按平台 / 编译器 / 标准）
 
