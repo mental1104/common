@@ -2,7 +2,7 @@ name: Walkthrough Pages
 
 on:
   workflow_run:
-    workflows: ["C++"]
+    workflows: ["cpp"]
     types: [completed]
     branches: [develop, master, main]
   workflow_dispatch: {}
@@ -21,10 +21,11 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout (same commit as upstream run)
+      - name: Checkout (target commit)
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.workflow_run.head_sha }}
+          # workflow_dispatch 时没有 workflow_run 事件，这里兼容两种触发
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
           fetch-depth: 0
 
       - name: Configure Pages
@@ -40,7 +41,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y jq
 
-      # 1) Walkthrough：无条件生成 dist/（保留原用途：语言标记统计）
+      # 1) 原 walkthrough：生成 dist/（保持原用途：语言标记统计）
       - name: Generate dist/ (walkthrough)
         run: python tools/walkthrough/scan.py --out dist
 
@@ -52,8 +53,9 @@ jobs:
           fi
 
       # 2) 下载 C++ workflow 上传的 coverage artifacts 到 _cov/
+      #    workflow_dispatch 时拿不到 run-id，所以只在 workflow_run 场景下载
       - name: Download C++ coverage artifacts (from triggering run)
-        if: always()
+        if: ${{ github.event_name == 'workflow_run' }}
         continue-on-error: true
         uses: actions/download-artifact@v4
         with:
@@ -75,7 +77,7 @@ jobs:
           echo "=== cov.json files ==="
           find _cov -name cov.json -print || true
 
-      # 3) 构建 coverage 模块到 dist/modules/cpp-coverage/（不覆盖 walkthrough 根页面）
+      # 3) 构建 coverage 模块到 dist/modules/cpp-coverage/
       - name: Build C++ coverage module (dist/modules/cpp-coverage)
         if: always()
         run: |
@@ -127,7 +129,6 @@ jobs:
               '</svg>',
             ])
 
-          # 关键修复：artifact 根目录应取 _cov/<artifact_root>/...，不能用 p.parent.name
           cov_files = [Path(p) for p in glob.glob("_cov/**/cov.json", recursive=True)]
 
           raw = []
@@ -167,12 +168,8 @@ jobs:
             else:
               cs = "unknown"
 
-            raw.append({
-              "key": key, "os": os_name, "cs": cs, "cxx": cxx,
-              "pct": pct, "status": status, "src": str(p),
-            })
+            raw.append({"key": key, "os": os_name, "cs": cs, "cxx": cxx, "pct": pct, "status": status, "src": str(p)})
 
-          # 全量矩阵（缺的也生成 N/A）
           expected = []
           for std in (11, 14, 17, 20, 23):
             expected += [
@@ -200,9 +197,8 @@ jobs:
           for (osn, cs, std) in expected:
             e = best.get((osn, cs, std))
             if e:
-              msg = f'{e["pct"]:.1f}%'
               (badges / f"{osn}-{cs}-cxx{std}.svg").write_text(
-                svg_badge("cov", msg, badge_color(e["pct"], e["status"])),
+                svg_badge("cov", f'{e["pct"]:.1f}%', badge_color(e["pct"], e["status"])),
                 encoding="utf-8"
               )
               selected.append(e)
@@ -212,21 +208,15 @@ jobs:
                 encoding="utf-8"
               )
 
-          # integration 单独一张（按你现有 key）
           integ = next((e for e in raw if e["key"] == "linux-gpp-cxx20-integration"), None)
-          if integ:
-            (badges / "linux-gpp-cxx20-integration.svg").write_text(
-              svg_badge("cov", f'{integ["pct"]:.1f}%', badge_color(integ["pct"], integ["status"])),
-              encoding="utf-8",
-            )
-          else:
-            (badges / "linux-gpp-cxx20-integration.svg").write_text(
-              svg_badge("cov", "N/A", badge_color(0.0, "na")),
-              encoding="utf-8",
-            )
+          (badges / "linux-gpp-cxx20-integration.svg").write_text(
+            svg_badge("cov",
+                      f'{integ["pct"]:.1f}%' if integ else "N/A",
+                      badge_color(integ["pct"], integ["status"]) if integ else badge_color(0.0, "na")),
+            encoding="utf-8",
+          )
 
-          real = [e["pct"] for e in selected
-                  if (e["status"] or "").lower() not in ("placeholder","unknown","fail","failure","error")]
+          real = [e["pct"] for e in selected if (e["status"] or "").lower() not in ("placeholder","unknown","fail","failure","error")]
           overall = statistics.mean(real) if real else 0.0
           (badges / "overall.svg").write_text(
             svg_badge("cov", f"{overall:.1f}%", badge_color(overall, "ok" if real else "placeholder")),
@@ -242,7 +232,6 @@ jobs:
               "status": (e["status"] if e else "na"),
               "src": (e["src"] if e else ""),
             })
-
           (data / "coverage.json").write_text(
             json.dumps({"overall": overall, "entries": out_entries}, ensure_ascii=False, indent=2),
             encoding="utf-8",
@@ -253,8 +242,7 @@ jobs:
           comp_by_os = {"linux":["clangpp","gpp"], "macos":["clangpp","gpp"], "windows":["msvc"]}
 
           def cell(osn, cs, st):
-            fn = f"badges/{osn}-{cs}-cxx{st}.svg"
-            return f'<img alt="{osn}-{cs}-cxx{st}" src="{fn}">'
+            return f'<img alt="{osn}-{cs}-cxx{st}" src="badges/{osn}-{cs}-cxx{st}.svg">'
 
           rows = []
           for osn in os_list:
@@ -262,7 +250,7 @@ jobs:
               tds = "".join(f"<td>{cell(osn,cs,st)}</td>" for st in stds)
               rows.append(f"<tr><th>{osn} / {cs}</th>{tds}</tr>")
 
-          index = f"""<!doctype html>
+          (module_root / "index.html").write_text(f"""<!doctype html>
           <meta charset="utf-8">
           <meta name="viewport" content="width=device-width,initial-scale=1">
           <title>C++ Coverage</title>
@@ -275,8 +263,7 @@ jobs:
           <h2>Integration</h2>
           <p><img alt="linux-gpp-cxx20-integration" src="badges/linux-gpp-cxx20-integration.svg"></p>
           <p>Data: <a href="data/coverage.json">coverage.json</a></p>
-          """
-          (module_root / "index.html").write_text(index, encoding="utf-8")
+          """, encoding="utf-8")
 
           print(f"[coverage-module] cov.json found={len(cov_files)} raw={len(raw)} best={len(best)} overall={overall:.2f}%")
           PY
@@ -290,7 +277,7 @@ jobs:
           cp -f dist/modules/cpp-coverage/badges/*.svg dist/badges/ 2>/dev/null || true
           cp -f dist/modules/cpp-coverage/data/*.json dist/data/ 2>/dev/null || true
 
-      # 5) “嵌入”到 walkthrough 首页：支持重复运行（已存在则替换整段）
+      # 5) 注入到 walkthrough 首页（可重复运行）
       - name: Inject/Update C++ coverage section into walkthrough home
         if: always()
         run: |
@@ -304,7 +291,6 @@ jobs:
             raise SystemExit(0)
 
           html = home.read_text(encoding="utf-8", errors="ignore")
-
           block = """
           <hr>
           <!-- MODULE:CPP_COVERAGE_BEGIN -->
@@ -316,11 +302,11 @@ jobs:
           </p>
           <p><a href="modules/cpp-coverage/">Open C++ Coverage Dashboard</a></p>
           <!-- MODULE:CPP_COVERAGE_END -->
-          """
+          """.strip()
 
           pattern = re.compile(r"<!-- MODULE:CPP_COVERAGE_BEGIN -->(.|\n)*?<!-- MODULE:CPP_COVERAGE_END -->", re.M)
           if pattern.search(html):
-            html = pattern.sub(block.strip(), html, count=1)
+            html = pattern.sub(block, html, count=1)
           else:
             if "</body>" in html:
               html = html.replace("</body>", block + "\n</body>", 1)
