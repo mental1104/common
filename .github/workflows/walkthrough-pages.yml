@@ -210,12 +210,23 @@ jobs:
             return s + e["pct"]
 
           best = {}
+          integ_map = {}
+
+          # 先把“矩阵产物(best)”和“integration产物(integ_map)”分别挑最优
           for e in raw:
-            # integration 不进矩阵 best，避免污染 linux/gpp/cxx20
-            if "integration" in e["key"]:
-              continue
             k = (e["os"], e["cs"], e["cxx"])
+
+            if "integration" in e["key"]:
+              if k not in integ_map or score(e) > score(integ_map[k]):
+                integ_map[k] = e
+              continue
+
             if k not in best or score(e) > score(best[k]):
+              best[k] = e
+
+          # 再用 integration 去补齐缺失格子（仅 best 缺失时补）
+          for k, e in integ_map.items():
+            if k not in best:
               best[k] = e
 
           selected = []
