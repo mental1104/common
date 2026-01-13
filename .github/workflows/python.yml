@@ -151,7 +151,7 @@ jobs:
         run: exit 1
 
   linux-integration:
-    name: Linux / Python 3.12 / coverage
+    name: Linux / Python 3.12
     runs-on: ubuntu-latest
     services:
       postgres:
