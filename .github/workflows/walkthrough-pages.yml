@@ -18,18 +18,10 @@ concurrency:
 
 jobs:
   build:
-    # 只对 develop/master/main 的 workflow_run 生效；手动触发不受限
-    if: >-
-      ${{
-        github.event_name == 'workflow_dispatch' ||
-        github.event.workflow_run.head_branch == 'develop' ||
-        github.event.workflow_run.head_branch == 'master' ||
-        github.event.workflow_run.head_branch == 'main'
-      }}
     runs-on: ubuntu-latest
 
     steps:
-      # ===== checkout：严格区分两种触发，避免 ref 表达式坑 =====
+      # ===== checkout：严格区分两种触发 =====
       - name: Checkout (workflow_run)
         if: ${{ github.event_name == 'workflow_run' }}
         uses: actions/checkout@v4
@@ -57,7 +49,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y jq
 
-      # ===== 1) Walkthrough：保持原用途（语言标记统计），无条件生成 dist/ =====
+      # ===== 1) Walkthrough：无条件生成 dist/ =====
       - name: Generate dist/ (walkthrough)
         run: python tools/walkthrough/scan.py --out dist
 
@@ -68,37 +60,68 @@ jobs:
             cat dist/summary.md >> "$GITHUB_STEP_SUMMARY"
           fi
 
-      # =====================================================================
-      # C++ pipeline: only when workflow_run AND triggering workflow is "cpp"
-      # =====================================================================
-      - name: Download C++ coverage artifacts (from triggering run)
+      # ===== 1.5) 载入 gh-pages 里“上一版站点”，用于保留其它语言 coverage（关键）=====
+      - name: Checkout gh-pages (previous site)
+        uses: actions/checkout@v4
+        with:
+          ref: gh-pages
+          path: _prev_pages
+          fetch-depth: 1
+
+      - name: Preserve existing coverage modules/badges/data from gh-pages
+        run: |
+          set -euo pipefail
+          mkdir -p dist/modules dist/badges dist/data
+          if [ -d _prev_pages/modules ]; then
+            cp -R _prev_pages/modules/* dist/modules/ 2>/dev/null || true
+          fi
+          if [ -d _prev_pages/badges ]; then
+            cp -R _prev_pages/badges/* dist/badges/ 2>/dev/null || true
+          fi
+          if [ -d _prev_pages/data ]; then
+            cp -R _prev_pages/data/* dist/data/ 2>/dev/null || true
+          fi
+
+      # ===== 2) 下载触发方 coverage artifacts（按触发 workflow 分流）=====
+      - name: Ensure _cov exists
+        run: mkdir -p _cov
+
+      - name: Download C++ coverage artifacts
         if: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.name == 'cpp' }}
         continue-on-error: true
         uses: actions/download-artifact@v4
         with:
-          path: _cov_cpp
+          path: _cov
           pattern: cpp-cov-*
           merge-multiple: false
           run-id: ${{ github.event.workflow_run.id }}
           github-token: ${{ github.token }}
 
-      - name: Ensure _cov_cpp exists
-        if: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.name == 'cpp' }}
-        run: mkdir -p _cov_cpp
+      - name: Download Python coverage artifacts
+        if: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.name == 'Python' }}
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          path: _cov
+          pattern: py-cov-*
+          merge-multiple: false
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
 
-      - name: Debug list C++ inputs
-        if: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.name == 'cpp' }}
+      - name: Debug inputs
+        if: always()
         run: |
-          echo "=== cpp event ==="
-          echo "workflow=${{ github.event.workflow_run.name }}"
+          echo "event_name=${{ github.event_name }}"
+          echo "workflow_run.name=${{ github.event.workflow_run.name }}"
           echo "head_branch=${{ github.event.workflow_run.head_branch }}"
           echo "head_sha=${{ github.event.workflow_run.head_sha }}"
           echo "run_id=${{ github.event.workflow_run.id }}"
-          echo "=== _cov_cpp tree ==="
-          ls -R _cov_cpp || true
+          echo "=== _cov tree ==="
+          ls -R _cov || true
           echo "=== cov.json files ==="
-          find _cov_cpp -name cov.json -print || true
+          find _cov -name cov.json -print || true
 
+      # ===== 3) C++ module（仅 cpp workflow_run 时更新）=====
       - name: Build C++ coverage module (dist/modules/cpp-coverage)
         if: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.name == 'cpp' }}
         run: |
@@ -150,51 +173,32 @@ jobs:
               '</svg>',
             ])
 
-          cov_files = [Path(p) for p in glob.glob("_cov_cpp/**/cov.json", recursive=True)]
-
+          cov_files = [Path(p) for p in glob.glob("_cov/**/cov.json", recursive=True)]
           raw = []
           for p in cov_files:
-            rel = p.relative_to("_cov_cpp")
-            if not rel.parts:
+            rel = p.relative_to("_cov")
+            artifact_root = rel.parts[0]
+            if not artifact_root.startswith("cpp-cov-"):
               continue
-            artifact_root = rel.parts[0]  # e.g. cpp-cov-linux-gpp-cxx11
-            key = artifact_root[len("cpp-cov-"):] if artifact_root.startswith("cpp-cov-") else artifact_root
-
+            key = artifact_root[len("cpp-cov-"):]
             try:
               d = json.loads(p.read_text(encoding="utf-8"))
             except Exception:
               d = {}
-
             os_name = str(d.get("os", "unknown"))
             comp = str(d.get("compiler", "unknown")).lower()
-            try:
-              cxx = int(d.get("cxx_std", 0) or 0)
-            except Exception:
-              cxx = 0
-            try:
-              pct = float(d.get("line_pct", 0.0) or 0.0)
-            except Exception:
-              pct = 0.0
+            cxx = int(d.get("cxx_std", 0) or 0)
+            pct = float(d.get("line_pct", 0.0) or 0.0)
             status = str(d.get("status", "ok"))
-
-            if "clang" in comp:
-              cs = "clangpp"
-            elif "g++" in comp or "gcc" in comp:
-              cs = "gpp"
-            elif "msvc" in comp:
-              cs = "msvc"
-            else:
-              cs = "unknown"
-
+            if "clang" in comp: cs = "clangpp"
+            elif "g++" in comp or "gcc" in comp: cs = "gpp"
+            elif "msvc" in comp: cs = "msvc"
+            else: cs = "unknown"
             raw.append({"key": key, "os": os_name, "cs": cs, "cxx": cxx, "pct": pct, "status": status, "src": str(p)})
 
           expected = []
-          for std in (11, 14, 17, 20, 23):
-            expected += [
-              ("linux","clangpp",std), ("linux","gpp",std),
-              ("macos","clangpp",std), ("macos","gpp",std),
-              ("windows","msvc",std),
-            ]
+          for std in (11,14,17,20,23):
+            expected += [("linux","clangpp",std),("linux","gpp",std),("macos","clangpp",std),("macos","gpp",std),("windows","msvc",std)]
 
           def score(e):
             st = (e["status"] or "").lower()
@@ -203,66 +207,38 @@ jobs:
               s += 1000
             return s + e["pct"]
 
-          best, integ_map = {}, {}
-
+          best = {}
+          integ = {}
           for e in raw:
             k = (e["os"], e["cs"], e["cxx"])
             if "integration" in e["key"]:
-              if k not in integ_map or score(e) > score(integ_map[k]):
-                integ_map[k] = e
+              if k not in integ or score(e) > score(integ[k]): integ[k] = e
               continue
-            if k not in best or score(e) > score(best[k]):
-              best[k] = e
+            if k not in best or score(e) > score(best[k]): best[k] = e
 
-          for k, e in integ_map.items():
+          for k,e in integ.items():
             if k not in best:
               best[k] = e
 
           selected = []
-          for (osn, cs, std) in expected:
-            e = best.get((osn, cs, std))
+          for (osn,cs,std) in expected:
+            e = best.get((osn,cs,std))
             if e:
-              (badges / f"{osn}-{cs}-cxx{std}.svg").write_text(
-                svg_badge("cov", f'{e["pct"]:.1f}%', badge_color(e["pct"], e["status"])),
-                encoding="utf-8"
-              )
+              (badges/f"{osn}-{cs}-cxx{std}.svg").write_text(svg_badge("cov", f'{e["pct"]:.1f}%', badge_color(e["pct"], e["status"])), encoding="utf-8")
               selected.append(e)
             else:
-              (badges / f"{osn}-{cs}-cxx{std}.svg").write_text(
-                svg_badge("cov", "N/A", badge_color(0.0, "na")),
-                encoding="utf-8"
-              )
-
-          integ = next((e for e in raw if e["key"] == "linux-gpp-cxx20-integration"), None)
-          (badges / "linux-gpp-cxx20-integration.svg").write_text(
-            svg_badge("cov",
-                      f'{integ["pct"]:.1f}%' if integ else "N/A",
-                      badge_color(integ["pct"], integ["status"]) if integ else badge_color(0.0, "na")),
-            encoding="utf-8",
-          )
+              (badges/f"{osn}-{cs}-cxx{std}.svg").write_text(svg_badge("cov","N/A", badge_color(0.0,"na")), encoding="utf-8")
 
           real = [e["pct"] for e in selected if (e["status"] or "").lower() not in ("placeholder","unknown","fail","failure","error")]
           overall = statistics.mean(real) if real else 0.0
-          (badges / "overall.svg").write_text(
-            svg_badge("cov", f"{overall:.1f}%", badge_color(overall, "ok" if real else "placeholder")),
-            encoding="utf-8",
-          )
+          (badges/"overall.svg").write_text(svg_badge("cov", f"{overall:.1f}%", badge_color(overall, "ok" if real else "placeholder")), encoding="utf-8")
 
-          (data / "coverage.json").write_text(
-            json.dumps({"overall": overall, "entries": []}, ensure_ascii=False, indent=2),
-            encoding="utf-8",
-          )
+          (data/"coverage.json").write_text(json.dumps({"overall": overall, "entries": best}, ensure_ascii=False, indent=2), encoding="utf-8")
 
-          (module_root / "index.html").write_text(
-            "<!doctype html><meta charset='utf-8'><title>C++ Coverage</title>"
-            "<h1>C++ Coverage</h1><p><img alt='overall' src='badges/overall.svg'></p>",
-            encoding="utf-8",
-          )
-
-          print(f"[cpp] cov.json found={len(cov_files)} raw={len(raw)} best={len(best)} overall={overall:.2f}%")
+          print(f"[cpp] cov.json={len(cov_files)} raw={len(raw)} best={len(best)} overall={overall:.2f}%")
           PY
 
-      - name: Publish C++ coverage compatibility paths (dist/badges, dist/data)
+      - name: Publish C++ compatibility paths (dist/badges, dist/data)
         if: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.name == 'cpp' }}
         run: |
           set -euo pipefail
@@ -270,68 +246,7 @@ jobs:
           cp -f dist/modules/cpp-coverage/badges/*.svg dist/badges/ 2>/dev/null || true
           cp -f dist/modules/cpp-coverage/data/*.json dist/data/ 2>/dev/null || true
 
-      - name: Inject/Update C++ coverage section into walkthrough home
-        if: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.name == 'cpp' }}
-        run: |
-          set -euo pipefail
-          python3 - <<'PY'
-          import re
-          from pathlib import Path
-          home = Path("dist/index.html")
-          if not home.exists():
-            raise SystemExit(0)
-          html = home.read_text(encoding="utf-8", errors="ignore")
-          block = """
-          <hr>
-          <!-- MODULE:CPP_COVERAGE_BEGIN -->
-          <h2>C++ Coverage</h2>
-          <p>
-            <a href="modules/cpp-coverage/">
-              <img alt="overall" src="modules/cpp-coverage/badges/overall.svg">
-            </a>
-          </p>
-          <p><a href="modules/cpp-coverage/">Open C++ Coverage Dashboard</a></p>
-          <!-- MODULE:CPP_COVERAGE_END -->
-          """.strip()
-          pattern = re.compile(r"<!-- MODULE:CPP_COVERAGE_BEGIN -->(.|\n)*?<!-- MODULE:CPP_COVERAGE_END -->", re.M)
-          if pattern.search(html):
-            html = pattern.sub(block, html, count=1)
-          else:
-            html = (html.replace("</body>", block + "\n</body>", 1) if "</body>" in html else html + "\n" + block + "\n")
-          home.write_text(html, encoding="utf-8")
-          PY
-
-      # =====================================================================
-      # Python pipeline: only when workflow_run AND triggering workflow is "Python"
-      # =====================================================================
-      - name: Download Python coverage artifacts (from triggering run)
-        if: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.name == 'Python' }}
-        continue-on-error: true
-        uses: actions/download-artifact@v4
-        with:
-          path: _cov_py
-          pattern: py-cov-*
-          merge-multiple: false
-          run-id: ${{ github.event.workflow_run.id }}
-          github-token: ${{ github.token }}
-
-      - name: Ensure _cov_py exists
-        if: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.name == 'Python' }}
-        run: mkdir -p _cov_py
-
-      - name: Debug list Python inputs
-        if: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.name == 'Python' }}
-        run: |
-          echo "=== py event ==="
-          echo "workflow=${{ github.event.workflow_run.name }}"
-          echo "head_branch=${{ github.event.workflow_run.head_branch }}"
-          echo "head_sha=${{ github.event.workflow_run.head_sha }}"
-          echo "run_id=${{ github.event.workflow_run.id }}"
-          echo "=== _cov_py tree ==="
-          ls -R _cov_py || true
-          echo "=== cov.json files ==="
-          find _cov_py -name cov.json -print || true
-
+      # ===== 4) Python module（仅 Python workflow_run 时更新）=====
       - name: Build Python coverage module (dist/modules/python-coverage)
         if: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.name == 'Python' }}
         run: |
@@ -383,37 +298,29 @@ jobs:
               '</svg>',
             ])
 
-          cov_files = [Path(p) for p in glob.glob("_cov_py/**/cov.json", recursive=True)]
+          def pykey(ver: str) -> str:
+            return ver.replace(".","")
 
+          cov_files = [Path(p) for p in glob.glob("_cov/**/cov.json", recursive=True)]
           raw = []
           for p in cov_files:
-            rel = p.relative_to("_cov_py")
-            if not rel.parts:
+            rel = p.relative_to("_cov")
+            artifact_root = rel.parts[0]
+            if not artifact_root.startswith("py-cov-"):
               continue
-            artifact_root = rel.parts[0]  # e.g. py-cov-macos-py3.12
-            key = artifact_root[len("py-cov-"):] if artifact_root.startswith("py-cov-") else artifact_root
-
             try:
               d = json.loads(p.read_text(encoding="utf-8"))
             except Exception:
               d = {}
+            os_name = str(d.get("os","unknown"))
+            ver = str(d.get("python","unknown"))
+            pct = float(d.get("line_pct",0.0) or 0.0)
+            status = str(d.get("status","ok"))
+            raw.append({"os": os_name, "py": ver, "pyk": pykey(ver), "pct": pct, "status": status, "src": str(p)})
 
-            os_name = str(d.get("os", "unknown"))
-            pyver = str(d.get("python", "unknown"))
-            try:
-              pct = float(d.get("line_pct", 0.0) or 0.0)
-            except Exception:
-              pct = 0.0
-            status = str(d.get("status", "ok"))
+          expected_py = ["38","39","310","311","312","313","314"]
+          expected_os = ["linux","macos","windows"]
 
-            raw.append({"key": key, "os": os_name, "py": pyver, "pct": pct, "status": status, "src": str(p)})
-
-          # 期望矩阵（OS x 3.8~3.14）
-          os_list = ["linux", "macos", "windows"]
-          vers = ["3.8","3.9","3.10","3.11","3.12","3.13","3.14"]
-          expected = [(osn, v) for osn in os_list for v in vers]
-
-          # best by (os, py)
           def score(e):
             st = (e["status"] or "").lower()
             s = 0
@@ -423,42 +330,57 @@ jobs:
 
           best = {}
           for e in raw:
-            k = (e["os"], e["py"])
+            k = (e["os"], e["pyk"])
             if k not in best or score(e) > score(best[k]):
               best[k] = e
 
           selected = []
-          for (osn, v) in expected:
-            e = best.get((osn, v))
-            fn = f"{osn}-py{v}.svg"
-            if e:
-              (badges / fn).write_text(svg_badge("cov", f'{e["pct"]:.1f}%', badge_color(e["pct"], e["status"])), encoding="utf-8")
-              selected.append(e)
-            else:
-              (badges / fn).write_text(svg_badge("cov", "N/A", badge_color(0.0, "na")), encoding="utf-8")
+          for osn in expected_os:
+            for pyk in expected_py:
+              e = best.get((osn, pyk))
+              fn = f"python-{osn}-py{pyk}.svg"
+              if e:
+                (badges/fn).write_text(svg_badge("cov", f'{e["pct"]:.1f}%', badge_color(e["pct"], e["status"])), encoding="utf-8")
+                selected.append(e)
+              else:
+                (badges/fn).write_text(svg_badge("cov","N/A", badge_color(0.0,"na")), encoding="utf-8")
 
           real = [e["pct"] for e in selected if (e["status"] or "").lower() not in ("placeholder","unknown","fail","failure","error")]
           overall = statistics.mean(real) if real else 0.0
-          (badges / "py-overall.svg").write_text(
-            svg_badge("cov", f"{overall:.1f}%", badge_color(overall, "ok" if real else "placeholder")),
-            encoding="utf-8",
-          )
+          (badges/"python-overall.svg").write_text(svg_badge("cov", f"{overall:.1f}%", badge_color(overall, "ok" if real else "placeholder")), encoding="utf-8")
 
-          (data / "coverage.json").write_text(
+          (data/"python-coverage.json").write_text(
             json.dumps({"overall": overall, "entries": raw}, ensure_ascii=False, indent=2),
             encoding="utf-8",
           )
 
-          (module_root / "index.html").write_text(
-            "<!doctype html><meta charset='utf-8'><title>Python Coverage</title>"
-            "<h1>Python Coverage</h1><p><img alt='overall' src='badges/py-overall.svg'></p>",
-            encoding="utf-8",
-          )
+          # index
+          cols = expected_py
+          def cell(osn, pyk):
+            return f'<img alt="{osn}-py{pyk}" src="badges/python-{osn}-py{pyk}.svg">'
+          rows = []
+          for osn in expected_os:
+            tds = "".join(f"<td>{cell(osn,pyk)}</td>" for pyk in cols)
+            rows.append(f"<tr><th>{osn}</th>{tds}</tr>")
 
-          print(f"[py] cov.json found={len(cov_files)} raw={len(raw)} best={len(best)} overall={overall:.2f}%")
+          header = "".join(f"<th>py{c}</th>" for c in cols)
+          (module_root/"index.html").write_text(f"""<!doctype html>
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width,initial-scale=1">
+          <title>Python Coverage</title>
+          <h1>Python Coverage</h1>
+          <p><img alt="python-overall" src="badges/python-overall.svg"></p>
+          <table border="1" cellpadding="6" cellspacing="0">
+            <thead><tr><th>os</th>{header}</tr></thead>
+            <tbody>{''.join(rows)}</tbody>
+          </table>
+          <p>Data: <a href="data/python-coverage.json">python-coverage.json</a></p>
+          """, encoding="utf-8")
+
+          print(f"[python] raw={len(raw)} best={len(best)} overall={overall:.2f}%")
           PY
 
-      - name: Publish Python coverage compatibility paths (dist/badges, dist/data)
+      - name: Publish Python compatibility paths (dist/badges, dist/data)
         if: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.name == 'Python' }}
         run: |
           set -euo pipefail
@@ -466,38 +388,63 @@ jobs:
           cp -f dist/modules/python-coverage/badges/*.svg dist/badges/ 2>/dev/null || true
           cp -f dist/modules/python-coverage/data/*.json dist/data/ 2>/dev/null || true
 
-      - name: Inject/Update Python coverage section into walkthrough home
-        if: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.name == 'Python' }}
+      # ===== 5) 注入到 walkthrough 首页（始终执行：确保手动触发也保留模块入口）=====
+      - name: Inject/Update coverage sections into walkthrough home
+        if: always()
         run: |
           set -euo pipefail
           python3 - <<'PY'
           import re
           from pathlib import Path
+
           home = Path("dist/index.html")
           if not home.exists():
             raise SystemExit(0)
+
           html = home.read_text(encoding="utf-8", errors="ignore")
-          block = """
+
+          blocks = []
+
+          blocks.append("""
           <hr>
-          <!-- MODULE:PY_COVERAGE_BEGIN -->
+          <!-- MODULE:CPP_COVERAGE_BEGIN -->
+          <h2>C++ Coverage</h2>
+          <p>
+            <a href="modules/cpp-coverage/">
+              <img alt="overall" src="modules/cpp-coverage/badges/overall.svg">
+            </a>
+          </p>
+          <p><a href="modules/cpp-coverage/">Open C++ Coverage Dashboard</a></p>
+          <!-- MODULE:CPP_COVERAGE_END -->
+          """.strip())
+
+          blocks.append("""
+          <hr>
+          <!-- MODULE:PYTHON_COVERAGE_BEGIN -->
           <h2>Python Coverage</h2>
           <p>
             <a href="modules/python-coverage/">
-              <img alt="py-overall" src="modules/python-coverage/badges/py-overall.svg">
+              <img alt="python-overall" src="modules/python-coverage/badges/python-overall.svg">
             </a>
           </p>
           <p><a href="modules/python-coverage/">Open Python Coverage Dashboard</a></p>
-          <!-- MODULE:PY_COVERAGE_END -->
-          """.strip()
-          pattern = re.compile(r"<!-- MODULE:PY_COVERAGE_BEGIN -->(.|\n)*?<!-- MODULE:PY_COVERAGE_END -->", re.M)
-          if pattern.search(html):
-            html = pattern.sub(block, html, count=1)
-          else:
-            html = (html.replace("</body>", block + "\n</body>", 1) if "</body>" in html else html + "\n" + block + "\n")
+          <!-- MODULE:PYTHON_COVERAGE_END -->
+          """.strip())
+
+          def upsert(html: str, begin: str, end: str, block: str) -> str:
+            pattern = re.compile(re.escape(begin) + r"(.|\n)*?" + re.escape(end), re.M)
+            if pattern.search(html):
+              return pattern.sub(block, html, count=1)
+            if "</body>" in html:
+              return html.replace("</body>", block + "\n</body>", 1)
+            return html + "\n" + block + "\n"
+
+          html = upsert(html, "<!-- MODULE:CPP_COVERAGE_BEGIN -->", "<!-- MODULE:CPP_COVERAGE_END -->", blocks[0])
+          html = upsert(html, "<!-- MODULE:PYTHON_COVERAGE_BEGIN -->", "<!-- MODULE:PYTHON_COVERAGE_END -->", blocks[1])
+
           home.write_text(html, encoding="utf-8")
           PY
 
-      # ===== 6) Pages artifact =====
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
