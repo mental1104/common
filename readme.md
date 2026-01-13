@@ -17,6 +17,15 @@
 | macOS / g++ | [![cov](https://mental1104.github.io/common/badges/macos-gpp-cxx11.svg)](https://mental1104.github.io/common/) | [![cov](https://mental1104.github.io/common/badges/macos-gpp-cxx14.svg)](https://mental1104.github.io/common/) | [![cov](https://mental1104.github.io/common/badges/macos-gpp-cxx17.svg)](https://mental1104.github.io/common/) | [![cov](https://mental1104.github.io/common/badges/macos-gpp-cxx20.svg)](https://mental1104.github.io/common/) | [![cov](https://mental1104.github.io/common/badges/macos-gpp-cxx23.svg)](https://mental1104.github.io/common/) |
 | Windows / MSVC | [![cov](https://mental1104.github.io/common/badges/windows-msvc-cxx11.svg)](https://mental1104.github.io/common/) | [![cov](https://mental1104.github.io/common/badges/windows-msvc-cxx14.svg)](https://mental1104.github.io/common/) | [![cov](https://mental1104.github.io/common/badges/windows-msvc-cxx17.svg)](https://mental1104.github.io/common/) | [![cov](https://mental1104.github.io/common/badges/windows-msvc-cxx20.svg)](https://mental1104.github.io/common/) | [![cov](https://mental1104.github.io/common/badges/windows-msvc-cxx23.svg)](https://mental1104.github.io/common/) |
 
+## Python覆盖率
+
+![Python Coverage (overall)](https://mental1104.github.io/common/badges/py-overall.svg)
+
+| OS | 3.8 | 3.9 | 3.10 | 3.11 | 3.12 | 3.13 | 3.14 |
+|---|---|---|---|---|---|---|---|
+| linux   | ![](https://mental1104.github.io/common/badges/linux-py3.8.svg) | ![](https://mental1104.github.io/common/badges/linux-py3.9.svg) | ![](https://mental1104.github.io/common/badges/linux-py3.10.svg) | ![](https://mental1104.github.io/common/badges/linux-py3.11.svg) | ![](https://mental1104.github.io/common/badges/linux-py3.12.svg) | ![](https://mental1104.github.io/common/badges/linux-py3.13.svg) | ![](https://mental1104.github.io/common/badges/linux-py3.14.svg) |
+| macos   | ![](https://mental1104.github.io/common/badges/macos-py3.8.svg) | ![](https://mental1104.github.io/common/badges/macos-py3.9.svg) | ![](https://mental1104.github.io/common/badges/macos-py3.10.svg) | ![](https://mental1104.github.io/common/badges/macos-py3.11.svg) | ![](https://mental1104.github.io/common/badges/macos-py3.12.svg) | ![](https://mental1104.github.io/common/badges/macos-py3.13.svg) | ![](https://mental1104.github.io/common/badges/macos-py3.14.svg) |
+| windows | ![](https://mental1104.github.io/common/badges/windows-py3.8.svg) | ![](https://mental1104.github.io/common/badges/windows-py3.9.svg) | ![](https://mental1104.github.io/common/badges/windows-py3.10.svg) | ![](https://mental1104.github.io/common/badges/windows-py3.11.svg) | ![](https://mental1104.github.io/common/badges/windows-py3.12.svg) | ![](https://mental1104.github.io/common/badges/windows-py3.13.svg) | ![](https://mental1104.github.io/common/badges/windows-py3.14.svg) |
 
 Python + C++ 混合工程，使用统一的 `dev` 命令驱动（macOS/Linux：`./dev`，Windows：`dev`）。子命令按语言拆分，后续扩展只需新增文件。
 
