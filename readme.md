@@ -18,18 +18,6 @@
 | Windows / MSVC | [![cov](https://mental1104.github.io/common/badges/windows-msvc-cxx11.svg)](https://mental1104.github.io/common/) | [![cov](https://mental1104.github.io/common/badges/windows-msvc-cxx14.svg)](https://mental1104.github.io/common/) | [![cov](https://mental1104.github.io/common/badges/windows-msvc-cxx17.svg)](https://mental1104.github.io/common/) | [![cov](https://mental1104.github.io/common/badges/windows-msvc-cxx20.svg)](https://mental1104.github.io/common/) | [![cov](https://mental1104.github.io/common/badges/windows-msvc-cxx23.svg)](https://mental1104.github.io/common/) |
 
 
-### Integration
-
-| Job | Coverage |
-|---|---:|
-| Linux g++ C++20 integration | ![linux-gpp-cxx20-integration](https://mental1104.github.io/common/badges/linux-gpp-cxx20-integration.svg) |
-
-### Integration (optional)
-
-| Job | Coverage |
-|---|---:|
-| Linux g++ C++20 integration | ![linux-gpp-cxx20-integration](https://<OWNER>.github.io/<REPO>/badges/linux-gpp-cxx20-integration.svg) |
-
 Python + C++ 混合工程，使用统一的 `dev` 命令驱动（macOS/Linux：`./dev`，Windows：`dev`）。子命令按语言拆分，后续扩展只需新增文件。
 
 ## 本地依赖（最小子集）
