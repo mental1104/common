@@ -5,11 +5,13 @@ on:
     paths:
       - "python/**"
       - "devops/**"
+      - "tools/ci/**"
       - ".github/workflows/python.yml"
   pull_request:
     paths:
       - "python/**"
       - "devops/**"
+      - "tools/ci/**"
       - ".github/workflows/python.yml"
   workflow_dispatch:
     inputs:
@@ -32,7 +34,8 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
-      matrix: ${{ fromJson((github.event.inputs.enable_python_314 == false || github.event.inputs.enable_python_314 == 'false' || vars.CI_ENABLE_PYTHON_314 == 'false') && '{"include":[{"python":"3.8","python_spec":"3.8"},{"python":"3.9","python_spec":"3.9"},{"python":"3.10","python_spec":"3.10"},{"python":"3.11","python_spec":"3.11"},{"python":"3.13","python_spec":"3.13"}]}' || '{"include":[{"python":"3.8","python_spec":"3.8"},{"python":"3.9","python_spec":"3.9"},{"python":"3.10","python_spec":"3.10"},{"python":"3.11","python_spec":"3.11"},{"python":"3.13","python_spec":"3.13"},{"python":"3.14","python_spec":"3.14-dev","prerelease":true}]}') }}
+      # 关键修复：fromJson 必须是单行表达式，JSON 也必须是单行字符串
+      matrix: ${{ fromJson((vars.CI_ENABLE_PYTHON_314 == 'false' || (github.event_name == 'workflow_dispatch' && (github.event.inputs.enable_python_314 == false || github.event.inputs.enable_python_314 == 'false'))) ? '{"include":[{"python":"3.8","python_spec":"3.8"},{"python":"3.9","python_spec":"3.9"},{"python":"3.10","python_spec":"3.10"},{"python":"3.11","python_spec":"3.11"},{"python":"3.12","python_spec":"3.12"},{"python":"3.13","python_spec":"3.13"}]}' : '{"include":[{"python":"3.8","python_spec":"3.8"},{"python":"3.9","python_spec":"3.9"},{"python":"3.10","python_spec":"3.10"},{"python":"3.11","python_spec":"3.11"},{"python":"3.12","python_spec":"3.12"},{"python":"3.13","python_spec":"3.13"},{"python":"3.14","python_spec":"3.14-dev","prerelease":true}]}' ) }}
     env:
       PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/devops
     defaults:
@@ -45,6 +48,7 @@ jobs:
         with:
           submodules: false
           fetch-depth: 0
+
       - name: Init submodules (sparse Boost)
         run: |
           python3 - <<'PY'
@@ -53,24 +57,102 @@ jobs:
           from devtool.commands.ops import cpp as cpp_ops
           sys.exit(cpp_ops.git_submodules(base_env()) or 0)
           PY
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python_spec }}
           allow-prereleases: ${{ matrix.prerelease == true }}
+
       - name: Cache pip
         uses: actions/cache@v4
         with:
           path: ~/.cache/pip
-          key: pip-${{ runner.os }}-${{ hashFiles('python/requirements.txt') }}
+          key: pip-${{ runner.os }}-${{ matrix.python }}-${{ hashFiles('python/requirements.txt') }}
           restore-keys: |
+            pip-${{ runner.os }}-${{ matrix.python }}-
             pip-${{ runner.os }}-
+
       - name: Setup Python
         run: ./dev setup-python
+
       - name: Build Python
         run: ./dev build-python
+
       - name: Coverage Python
         run: ./dev coverage-python
+
+      # 生成 python/coverage.xml（如果你的 ./dev coverage-python 已经生成，这步会覆盖/保持一致）
+      - name: Export coverage.xml (never fail)
+        if: always()
+        continue-on-error: true
+        run: |
+          set +e
+          if [ -d python ]; then
+            rm -f python/coverage.xml
+            # coverage.py XML 输出
+            (cd python && python3 -m coverage xml -o coverage.xml) || true
+          fi
+          if [ ! -f python/coverage.xml ]; then
+            printf '%s\n' \
+              "<?xml version='1.0' encoding='UTF-8'?>" \
+              "<coverage line-rate=\"0.0\" branch-rate=\"0.0\" lines-covered=\"0\" lines-valid=\"0\" branches-covered=\"0\" branches-valid=\"0\" complexity=\"0.0\" timestamp=\"0\" version=\"placeholder\">" \
+              "  <sources><source>.</source></sources>" \
+              "  <packages/>" \
+              "</coverage>" \
+              > python/coverage.xml
+          fi
+
+      - name: Extract cov.json (never fail)
+        if: always()
+        continue-on-error: true
+        run: |
+          set +e
+          python3 tools/ci/extract_coverage_python.py \
+            --os linux \
+            --python "${{ matrix.python }}" \
+            --xml python/coverage.xml \
+            --out cov.json || true
+
+          if [ ! -f cov.json ]; then
+            python3 - <<'PY'
+            import json,os
+            obj={
+              "lang":"python",
+              "os":"linux",
+              "python":os.getenv("PY_VER",""),
+              "line_pct":0.0,
+              "status":"placeholder",
+              "sha":os.getenv("GITHUB_SHA",""),
+              "run_id":os.getenv("GITHUB_RUN_ID",""),
+              "source":"placeholder",
+              "src":"python/coverage.xml",
+            }
+            json.dump(obj,open("cov.json","w",encoding="utf-8"),ensure_ascii=False,indent=2)
+            PY
+          fi
+        env:
+          PY_VER: ${{ matrix.python }}
+
+      - name: Stash coverage files (unique path)
+        if: always()
+        continue-on-error: true
+        run: |
+          set +e
+          key="linux-py${{ matrix.python }}"
+          mkdir -p "_cov/${key}"
+          cp -f cov.json "_cov/${key}/cov.json" 2>/dev/null || true
+          cp -f python/coverage.xml "_cov/${key}/coverage.xml" 2>/dev/null || true
+
+      - name: Upload coverage artifacts (unique)
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: py-cov-linux-py${{ matrix.python }}
+          path: _cov/linux-py${{ matrix.python }}
+          retention-days: 7
+          if-no-files-found: warn
 
   linux-integration:
     name: Linux / Python 3.12 / coverage
@@ -121,6 +203,7 @@ jobs:
         with:
           submodules: false
           fetch-depth: 0
+
       - name: Init submodules (sparse Boost)
         run: |
           python3 - <<'PY'
@@ -129,6 +212,7 @@ jobs:
           from devtool.commands.ops import cpp as cpp_ops
           sys.exit(cpp_ops.git_submodules(base_env()) or 0)
           PY
+
       - name: Start Pulsar (standalone -nss)
         run: |
           docker rm -f pulsar || true
@@ -136,6 +220,7 @@ jobs:
             -p ${PULSAR_BROKER_PORT}:${PULSAR_BROKER_PORT} -p ${PULSAR_ADMIN_PORT}:${PULSAR_ADMIN_PORT} \
             apachepulsar/pulsar:3.2.0 \
             bin/pulsar standalone -nss
+
       - name: Wait for postgres/redis/pulsar
         run: |
           for i in {1..40}; do
@@ -144,36 +229,115 @@ jobs:
           done
           echo "services not ready" >&2
           exit 1
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+
       - name: Cache pip
         uses: actions/cache@v4
         with:
           path: ~/.cache/pip
-          key: pip-${{ runner.os }}-${{ hashFiles('python/requirements.txt') }}
+          key: pip-${{ runner.os }}-3.12-${{ hashFiles('python/requirements.txt') }}
           restore-keys: |
+            pip-${{ runner.os }}-3.12-
             pip-${{ runner.os }}-
+
       - name: Setup Python
         run: ./dev setup-python
+
       - name: Format Python
         run: ./dev fmt-python
+
       - name: Build Python
         run: ./dev build-python
+
       - name: Coverage Python
         run: ./dev coverage-python
+
       - name: Vet Python
         run: ./dev vet-python
+
       - name: Guard Python
         run: ./dev guard-python
+
+      - name: Export coverage.xml (never fail)
+        if: always()
+        continue-on-error: true
+        run: |
+          set +e
+          if [ -d python ]; then
+            rm -f python/coverage.xml
+            (cd python && python3 -m coverage xml -o coverage.xml) || true
+          fi
+          if [ ! -f python/coverage.xml ]; then
+            printf '%s\n' \
+              "<?xml version='1.0' encoding='UTF-8'?>" \
+              "<coverage line-rate=\"0.0\" branch-rate=\"0.0\" lines-covered=\"0\" lines-valid=\"0\" branches-covered=\"0\" branches-valid=\"0\" complexity=\"0.0\" timestamp=\"0\" version=\"placeholder\">" \
+              "  <sources><source>.</source></sources>" \
+              "  <packages/>" \
+              "</coverage>" \
+              > python/coverage.xml
+          fi
+
+      - name: Extract cov.json (never fail)
+        if: always()
+        continue-on-error: true
+        run: |
+          set +e
+          python3 tools/ci/extract_coverage_python.py \
+            --os linux \
+            --python "3.12" \
+            --kind integration \
+            --xml python/coverage.xml \
+            --out cov.json || true
+
+          if [ ! -f cov.json ]; then
+            python3 - <<'PY'
+            import json,os
+            obj={
+              "lang":"python",
+              "os":"linux",
+              "python":"3.12",
+              "kind":"integration",
+              "line_pct":0.0,
+              "status":"placeholder",
+              "sha":os.getenv("GITHUB_SHA",""),
+              "run_id":os.getenv("GITHUB_RUN_ID",""),
+              "source":"placeholder",
+              "src":"python/coverage.xml",
+            }
+            json.dump(obj,open("cov.json","w",encoding="utf-8"),ensure_ascii=False,indent=2)
+            PY
+          fi
+
+      - name: Stash coverage files (unique path)
+        if: always()
+        continue-on-error: true
+        run: |
+          set +e
+          key="linux-py3.12-integration"
+          mkdir -p "_cov/${key}"
+          cp -f cov.json "_cov/${key}/cov.json" 2>/dev/null || true
+          cp -f python/coverage.xml "_cov/${key}/coverage.xml" 2>/dev/null || true
+
+      - name: Upload coverage artifacts (unique)
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: py-cov-linux-py3.12-integration
+          path: _cov/linux-py3.12-integration
+          retention-days: 7
+          if-no-files-found: warn
 
   macos:
     name: macOS / Python ${{ matrix.python }}
     runs-on: macos-latest
     strategy:
       fail-fast: false
-      matrix: ${{ fromJson((github.event.inputs.enable_python_314 == false || github.event.inputs.enable_python_314 == 'false' || vars.CI_ENABLE_PYTHON_314 == 'false') && '{"include":[{"python":"3.8","python_spec":"3.8"},{"python":"3.9","python_spec":"3.9"},{"python":"3.10","python_spec":"3.10"},{"python":"3.11","python_spec":"3.11"},{"python":"3.12","python_spec":"3.12"},{"python":"3.13","python_spec":"3.13"}]}' || '{"include":[{"python":"3.8","python_spec":"3.8"},{"python":"3.9","python_spec":"3.9"},{"python":"3.10","python_spec":"3.10"},{"python":"3.11","python_spec":"3.11"},{"python":"3.12","python_spec":"3.12"},{"python":"3.13","python_spec":"3.13"},{"python":"3.14","python_spec":"3.14-dev","prerelease":true}]}') }}
+      matrix: ${{ fromJson((vars.CI_ENABLE_PYTHON_314 == 'false' || (github.event_name == 'workflow_dispatch' && (github.event.inputs.enable_python_314 == false || github.event.inputs.enable_python_314 == 'false'))) ? '{"include":[{"python":"3.8","python_spec":"3.8"},{"python":"3.9","python_spec":"3.9"},{"python":"3.10","python_spec":"3.10"},{"python":"3.11","python_spec":"3.11"},{"python":"3.12","python_spec":"3.12"},{"python":"3.13","python_spec":"3.13"}]}' : '{"include":[{"python":"3.8","python_spec":"3.8"},{"python":"3.9","python_spec":"3.9"},{"python":"3.10","python_spec":"3.10"},{"python":"3.11","python_spec":"3.11"},{"python":"3.12","python_spec":"3.12"},{"python":"3.13","python_spec":"3.13"},{"python":"3.14","python_spec":"3.14-dev","prerelease":true}]}' ) }}
     env:
       PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/devops
     defaults:
@@ -186,6 +350,7 @@ jobs:
         with:
           submodules: false
           fetch-depth: 0
+
       - name: Init submodules (sparse Boost)
         run: |
           python3 - <<'PY'
@@ -194,31 +359,106 @@ jobs:
           from devtool.commands.ops import cpp as cpp_ops
           sys.exit(cpp_ops.git_submodules(base_env()) or 0)
           PY
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python_spec }}
           allow-prereleases: ${{ matrix.prerelease == true }}
+
       - name: Cache pip
         uses: actions/cache@v4
         with:
           path: ~/Library/Caches/pip
-          key: pip-${{ runner.os }}-${{ hashFiles('python/requirements.txt') }}
+          key: pip-${{ runner.os }}-${{ matrix.python }}-${{ hashFiles('python/requirements.txt') }}
           restore-keys: |
+            pip-${{ runner.os }}-${{ matrix.python }}-
             pip-${{ runner.os }}-
+
       - name: Setup Python
         run: ./dev setup-python
+
       - name: Build Python
         run: ./dev build-python
+
       - name: Coverage Python
         run: ./dev coverage-python
+
+      - name: Export coverage.xml (never fail)
+        if: always()
+        continue-on-error: true
+        run: |
+          set +e
+          if [ -d python ]; then
+            rm -f python/coverage.xml
+            (cd python && python3 -m coverage xml -o coverage.xml) || true
+          fi
+          if [ ! -f python/coverage.xml ]; then
+            printf '%s\n' \
+              "<?xml version='1.0' encoding='UTF-8'?>" \
+              "<coverage line-rate=\"0.0\" branch-rate=\"0.0\" lines-covered=\"0\" lines-valid=\"0\" branches-covered=\"0\" branches-valid=\"0\" complexity=\"0.0\" timestamp=\"0\" version=\"placeholder\">" \
+              "  <sources><source>.</source></sources>" \
+              "  <packages/>" \
+              "</coverage>" \
+              > python/coverage.xml
+          fi
+
+      - name: Extract cov.json (never fail)
+        if: always()
+        continue-on-error: true
+        run: |
+          set +e
+          python3 tools/ci/extract_coverage_python.py \
+            --os macos \
+            --python "${{ matrix.python }}" \
+            --xml python/coverage.xml \
+            --out cov.json || true
+
+          if [ ! -f cov.json ]; then
+            python3 - <<'PY'
+            import json,os
+            obj={
+              "lang":"python",
+              "os":"macos",
+              "python":os.getenv("PY_VER",""),
+              "line_pct":0.0,
+              "status":"placeholder",
+              "sha":os.getenv("GITHUB_SHA",""),
+              "run_id":os.getenv("GITHUB_RUN_ID",""),
+              "source":"placeholder",
+              "src":"python/coverage.xml",
+            }
+            json.dump(obj,open("cov.json","w",encoding="utf-8"),ensure_ascii=False,indent=2)
+            PY
+        env:
+          PY_VER: ${{ matrix.python }}
+
+      - name: Stash coverage files (unique path)
+        if: always()
+        continue-on-error: true
+        run: |
+          set +e
+          key="macos-py${{ matrix.python }}"
+          mkdir -p "_cov/${key}"
+          cp -f cov.json "_cov/${key}/cov.json" 2>/dev/null || true
+          cp -f python/coverage.xml "_cov/${key}/coverage.xml" 2>/dev/null || true
+
+      - name: Upload coverage artifacts (unique)
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: py-cov-macos-py${{ matrix.python }}
+          path: _cov/macos-py${{ matrix.python }}
+          retention-days: 7
+          if-no-files-found: warn
 
   windows:
     name: Windows / Python ${{ matrix.python }}
     runs-on: windows-latest
     strategy:
       fail-fast: false
-      matrix: ${{ fromJson((github.event.inputs.enable_python_314 == false || github.event.inputs.enable_python_314 == 'false' || vars.CI_ENABLE_PYTHON_314 == 'false') && '{"include":[{"python":"3.8","python_spec":"3.8"},{"python":"3.9","python_spec":"3.9"},{"python":"3.10","python_spec":"3.10"},{"python":"3.11","python_spec":"3.11"},{"python":"3.12","python_spec":"3.12"},{"python":"3.13","python_spec":"3.13"}]}' || '{"include":[{"python":"3.8","python_spec":"3.8"},{"python":"3.9","python_spec":"3.9"},{"python":"3.10","python_spec":"3.10"},{"python":"3.11","python_spec":"3.11"},{"python":"3.12","python_spec":"3.12"},{"python":"3.13","python_spec":"3.13"},{"python":"3.14","python_spec":"3.14-dev","prerelease":true}]}') }}
+      matrix: ${{ fromJson((vars.CI_ENABLE_PYTHON_314 == 'false' || (github.event_name == 'workflow_dispatch' && (github.event.inputs.enable_python_314 == false || github.event.inputs.enable_python_314 == 'false'))) ? '{"include":[{"python":"3.8","python_spec":"3.8"},{"python":"3.9","python_spec":"3.9"},{"python":"3.10","python_spec":"3.10"},{"python":"3.11","python_spec":"3.11"},{"python":"3.12","python_spec":"3.12"},{"python":"3.13","python_spec":"3.13"}]}' : '{"include":[{"python":"3.8","python_spec":"3.8"},{"python":"3.9","python_spec":"3.9"},{"python":"3.10","python_spec":"3.10"},{"python":"3.11","python_spec":"3.11"},{"python":"3.12","python_spec":"3.12"},{"python":"3.13","python_spec":"3.13"},{"python":"3.14","python_spec":"3.14-dev","prerelease":true}]}' ) }}
     env:
       PYTHON: python
       PYTHONPATH: ${{ github.workspace }};${{ github.workspace }}/devops
@@ -234,23 +474,99 @@ jobs:
         with:
           submodules: false
           fetch-depth: 0
+
       - name: Init submodules (sparse Boost)
         run: python -c "import sys;from devtool.commands.common import base_env;from devtool.commands.ops import cpp as cpp_ops;sys.exit(cpp_ops.git_submodules(base_env()) or 0)"
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python_spec }}
           allow-prereleases: ${{ matrix.prerelease == true }}
+
       - name: Cache pip
         uses: actions/cache@v4
         with:
           path: ~\AppData\Local\pip\Cache
-          key: pip-${{ runner.os }}-${{ hashFiles('python/requirements.txt') }}
+          key: pip-${{ runner.os }}-${{ matrix.python }}-${{ hashFiles('python/requirements.txt') }}
           restore-keys: |
+            pip-${{ runner.os }}-${{ matrix.python }}-
             pip-${{ runner.os }}-
+
       - name: Setup Python
         run: python -m devtool.cli setup-python
+
       - name: Build Python
         run: python -m devtool.cli build-python
+
       - name: Coverage Python
         run: python -m devtool.cli coverage-python
+
+      - name: Export coverage.xml (never fail)
+        if: always()
+        continue-on-error: true
+        run: |
+          if (Test-Path python) {
+            Remove-Item -Force -ErrorAction SilentlyContinue python\coverage.xml
+            Push-Location python
+            python -m coverage xml -o coverage.xml
+            Pop-Location
+          }
+          if (-not (Test-Path python\coverage.xml)) {
+            @(
+              "<?xml version='1.0' encoding='UTF-8'?>",
+              "<coverage line-rate=""0.0"" branch-rate=""0.0"" lines-covered=""0"" lines-valid=""0"" branches-covered=""0"" branches-valid=""0"" complexity=""0.0"" timestamp=""0"" version=""placeholder"">",
+              "  <sources><source>.</source></sources>",
+              "  <packages/>",
+              "</coverage>"
+            ) | Out-File -Encoding utf8 python\coverage.xml
+          }
+
+      - name: Extract cov.json (never fail)
+        if: always()
+        continue-on-error: true
+        run: |
+          python tools/ci/extract_coverage_python.py `
+            --os windows `
+            --python "${{ matrix.python }}" `
+            --xml python/coverage.xml `
+            --out cov.json
+
+          if (-not (Test-Path cov.json)) {
+            python - <<'PY'
+            import json,os
+            obj={
+              "lang":"python",
+              "os":"windows",
+              "python":os.getenv("PY_VER",""),
+              "line_pct":0.0,
+              "status":"placeholder",
+              "sha":os.getenv("GITHUB_SHA",""),
+              "run_id":os.getenv("GITHUB_RUN_ID",""),
+              "source":"placeholder",
+              "src":"python/coverage.xml",
+            }
+            json.dump(obj,open("cov.json","w",encoding="utf-8"),ensure_ascii=False,indent=2)
+            PY
+          }
+        env:
+          PY_VER: ${{ matrix.python }}
+
+      - name: Stash coverage files (unique path)
+        if: always()
+        continue-on-error: true
+        run: |
+          $key = "windows-py${{ matrix.python }}"
+          New-Item -ItemType Directory -Force -Path "_cov/$key" | Out-Null
+          Copy-Item -Force cov.json "_cov/$key/cov.json" -ErrorAction SilentlyContinue
+          Copy-Item -Force python\coverage.xml "_cov/$key/coverage.xml" -ErrorAction SilentlyContinue
+
+      - name: Upload coverage artifacts (unique)
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: py-cov-windows-py${{ matrix.python }}
+          path: _cov/windows-py${{ matrix.python }}
+          retention-days: 7
+          if-no-files-found: warn

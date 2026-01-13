@@ -281,7 +281,11 @@ def coverage(env: Mapping[str, str], *, file_pattern: str | None, filter_expr: s
     ]
     run(args, env=extra_env, cwd=PY_DIR)
     run([extra_env["PY_VENV_PYTHON"], "-m", "coverage", "report"], env=extra_env, cwd=PY_DIR)
-
+    run(
+        [extra_env["PY_VENV_PYTHON"], "-m", "coverage", "xml", "-o", "coverage.xml"],
+        env=extra_env,
+        cwd=PY_DIR,
+    )
 
 def fmt(env: Mapping[str, str]) -> None:
     venv_env = _ensure_venv(env)
