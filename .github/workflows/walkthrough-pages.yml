@@ -70,6 +70,7 @@ jobs:
         run: |
           set -euo pipefail
           repo="${GITHUB_REPOSITORY}"
+          default_branch="$(gh api "repos/${repo}" | jq -r '.default_branch' || true)"
 
           if [ "${{ github.event_name }}" = "workflow_run" ]; then
             branch="${{ github.event.workflow_run.head_branch }}"
@@ -91,7 +92,11 @@ jobs:
           latest_success_run_id() {
             local wf_id="$1"
             local br="$2"
-            gh api "repos/${repo}/actions/workflows/${wf_id}/runs?branch=${br}&status=completed&per_page=30" \
+            local url="repos/${repo}/actions/workflows/${wf_id}/runs?status=completed&per_page=30"
+            if [ -n "${br:-}" ]; then
+              url="${url}&branch=${br}"
+            fi
+            gh api "${url}" \
               | jq -r '.workflow_runs[] | select(.conclusion=="success") | .id' \
               | head -n1
           }
@@ -112,12 +117,19 @@ jobs:
 
           if [ -z "$cpp_run_id" ] && [ -n "${cpp_wf_id:-}" ] && [ "${cpp_wf_id:-null}" != "null" ]; then
             cpp_run_id="$(latest_success_run_id "$cpp_wf_id" "$branch" || true)"
+            if [ -z "$cpp_run_id" ] && [ -n "${default_branch:-}" ] && [ "${branch:-}" != "${default_branch:-}" ]; then
+              cpp_run_id="$(latest_success_run_id "$cpp_wf_id" "$default_branch" || true)"
+            fi
           fi
           if [ -z "$py_run_id" ] && [ -n "${py_wf_id:-}" ] && [ "${py_wf_id:-null}" != "null" ]; then
             py_run_id="$(latest_success_run_id "$py_wf_id" "$branch" || true)"
+            if [ -z "$py_run_id" ] && [ -n "${default_branch:-}" ] && [ "${branch:-}" != "${default_branch:-}" ]; then
+              py_run_id="$(latest_success_run_id "$py_wf_id" "$default_branch" || true)"
+            fi
           fi
 
           echo "branch=$branch" >> "$GITHUB_OUTPUT"
+          echo "default_branch=${default_branch:-}" >> "$GITHUB_OUTPUT"
           echo "cpp_run_id=${cpp_run_id:-}" >> "$GITHUB_OUTPUT"
           echo "py_run_id=${py_run_id:-}" >> "$GITHUB_OUTPUT"
 
@@ -152,6 +164,7 @@ jobs:
         run: |
           echo "event_name=${{ github.event_name }}"
           echo "branch=${{ steps.resolve.outputs.branch }}"
+          echo "default_branch=${{ steps.resolve.outputs.default_branch }}"
           echo "cpp_run_id=${{ steps.resolve.outputs.cpp_run_id }}"
           echo "py_run_id=${{ steps.resolve.outputs.py_run_id }}"
           echo "=== _cov tree ==="
