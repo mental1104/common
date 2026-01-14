@@ -1,234 +1,226 @@
-# 使用ubuntu:24.04镜像
+# syntax=docker/dockerfile:1.7
 FROM ubuntu:24.04
 
+ENV DEBIAN_FRONTEND=noninteractive \
+    LANG=C.UTF-8 \
+    TZ=Asia/Shanghai
 
-ENV DEBIAN_FRONTEND=noninteractive
-
+# 让 /tmp 权限明确且稳定
 RUN chmod 1777 /tmp
 
-## 1. 安装基础库
-RUN echo "deb http://mirrors.aliyun.com/ubuntu/ focal main restricted universe multiverse" > /etc/apt/sources.list && \
-    echo "deb http://mirrors.aliyun.com/ubuntu/ focal-updates main restricted universe multiverse" >> /etc/apt/sources.list && \
-    echo "deb http://mirrors.aliyun.com/ubuntu/ focal-backports main restricted universe multiverse" >> /etc/apt/sources.list && \
-    echo "deb http://mirrors.aliyun.com/ubuntu/ focal-security main restricted universe multiverse" >> /etc/apt/sources.list && \
-    echo "deb https://mirrors.tuna.tsinghua.edu.cn/clickhouse/deb stable main" | tee /etc/apt/sources.list.d/clickhouse.list && \
-    apt-get update && apt-get upgrade -y && apt-get install -y \
-    gcc \
-    g++ \
-    make \
-    libpq-dev \
-    zlib1g-dev \
-    libffi-dev \
-    libssl-dev \
-    libbz2-dev \
-    liblzma-dev \
-    pkg-config \
-    wget \
-    build-essential \
-    gdb-multiarch \
-    qemu-system-misc \
-    gcc-riscv64-linux-gnu \
-    binutils-riscv64-linux-gnu \
-    libpcap-dev \
-    libglib2.0-dev \
-    pkg-config \
-    libpixman-1-dev \
-    clang \
-    clang-format \
-    cmake \
-    gdb \
-    strace \
-    ltrace \
-    curl \
-    nodejs \
-    lua5.3 \
-    tree \
-    npm \
-    git \
-    libtinfo6 \
-    libncurses-dev \
-    libncursesw5 \
-    openssl \
-    netcat \
-    telnet \
-    tcpdump \
-    iptables \
-    openssh-server \
-    bison \
-    cmake \
-    unzip \
-    gzip \
-    zip \
-    iputils-ping \
-    redis-tools \
-    mongodb-clients \
-    postgresql-client \
-    ffmpeg \
-    rustc \
-    cargo \
-    rust-doc \
-    rust-src \
-    pip \
-    dotnet-sdk-8.0 \
-    aspnetcore-runtime-8.0 \
-    libgtest-dev \
-    libbenchmark-dev \
-    libboost-all-dev \
-    lcov \
-    clickhouse-client \
-    cron \
-    logrotate \
-    pandoc \
-    jq \
-    xclip \
-    xsel \
-    clangd \
-    libmpfr-dev \
-    libgmp-dev \
-    && \
-    ln -s /lib/x86_64-linux-gnu/libtinfo.so.6 /lib/x86_64-linux-gnu/libtinfow.so.6 && ldconfig && \
-    cd /usr/src/googletest && cmake . && make -j$(nproc) && make install
-## 2 安装很少变动的软件
+# -----------------------------
+# A) 最低频：系统源 + 系统包（尽量一次性）
+#    说明：这里不要做 apt upgrade，会降低可复现性且让缓存价值变差
+# -----------------------------
+RUN set -eux; \
+    cat > /etc/apt/sources.list <<'EOF' \
+deb http://mirrors.aliyun.com/ubuntu/ noble main restricted universe multiverse \
+deb http://mirrors.aliyun.com/ubuntu/ noble-updates main restricted universe multiverse \
+deb http://mirrors.aliyun.com/ubuntu/ noble-backports main restricted universe multiverse \
+deb http://mirrors.aliyun.com/ubuntu/ noble-security main restricted universe multiverse \
+EOF \
+    ; \
+    echo "deb https://mirrors.tuna.tsinghua.edu.cn/clickhouse/deb stable main" > /etc/apt/sources.list.d/clickhouse.list
 
-### 2.1 安装qemu
-RUN cd /tmp && wget https://download.qemu.org/qemu-4.1.0.tar.xz && tar xvJf qemu-4.1.0.tar.xz && cd qemu-4.1.0/ && \
-    ./configure --disable-kvm --disable-werror --prefix=/usr/local --target-list="riscv64-softmmu " && \
-    make -j$(nproc) && \
-    make install && PATH=$PATH:/opt/qemu/bin && \
-    rm -rf /tmp/qemu*
+RUN --mount=type=cache,target=/var/cache/apt \
+    --mount=type=cache,target=/var/lib/apt \
+    set -eux; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends \
+      # 构建/调试基础
+      build-essential gcc g++ make cmake pkg-config clang clangd clang-format \
+      gdb gdb-multiarch strace ltrace \
+      # 依赖库
+      libpq-dev zlib1g-dev libffi-dev libssl-dev libbz2-dev liblzma-dev \
+      libpcap-dev libglib2.0-dev libpixman-1-dev \
+      libtinfo6 libncurses-dev libncursesw5 openssl \
+      libgtest-dev libbenchmark-dev libboost-all-dev lcov \
+      libmpfr-dev libgmp-dev \
+      # 网络/运维工具
+      curl wget git tree unzip gzip zip jq \
+      netcat-openbsd telnet tcpdump iptables iputils-ping \
+      openssh-server cron logrotate \
+      # DB/中间件客户端
+      redis-tools mongodb-clients postgresql-client clickhouse-client \
+      # 多语言工具链（你原本就在装）
+      python3 python3-pip python3-venv \
+      nodejs npm lua5.3 \
+      rustc cargo \
+      dotnet-sdk-8.0 aspnetcore-runtime-8.0 \
+      # 其他
+      ffmpeg pandoc xclip xsel vim \
+      # qemu 相关（你后续源码编译仍需要）
+      qemu-system-misc gcc-riscv64-linux-gnu binutils-riscv64-linux-gnu bison \
+    ; \
+    rm -rf /var/lib/apt/lists/*; \
+    ln -sf /lib/x86_64-linux-gnu/libtinfo.so.6 /lib/x86_64-linux-gnu/libtinfow.so.6; \
+    ldconfig; \
+    cd /usr/src/googletest && cmake . && make -j"$(nproc)" && make install
 
+# -----------------------------
+# B) 中频：离线资源（INSTALLROOT）先拷贝
+#    说明：仅保留当前目录里已有的配置/清单文件
+# -----------------------------
 COPY devops/INSTALLROOT/amd64 /
 
-### 2.2 安装golang
-RUN tar -C /usr/local -xzf /tmp/go1.23.4.linux-amd64.tar.gz
-ENV PATH $PATH:/usr/local/go/bin
-ENV GOPROXY=https://goproxy.cn,direct
+# -----------------------------
+# C) 低频但耗时：qemu 源码编译（单独一段，且放在“离线资源”之后）
+#    说明：这样 INSTALLROOT 不变时，这一层也更稳定
+# -----------------------------
+RUN set -eux; \
+    cd /tmp; \
+    wget -q https://download.qemu.org/qemu-4.1.0.tar.xz; \
+    tar -xvJf qemu-4.1.0.tar.xz; \
+    cd qemu-4.1.0/; \
+    ./configure --disable-kvm --disable-werror --prefix=/usr/local --target-list="riscv64-softmmu "; \
+    make -j"$(nproc)"; \
+    make install; \
+    rm -rf /tmp/qemu*
 
-ENV GOPATH="/go"
-ENV GOBIN="/go/bin"
-ENV PATH="${GOBIN}:${PATH}"
-ENV GO111MODULE="on"
+# -----------------------------
+# D) 中频：Go 工具链 + gopls
+# -----------------------------
+ARG GO_VERSION=1.23.4
+RUN set -eux; \
+    curl -fsSL "https://go.dev/dl/go${GO_VERSION}.linux-amd64.tar.gz" -o /tmp/go.tar.gz; \
+    tar -C /usr/local -xzf /tmp/go.tar.gz; \
+    rm -f /tmp/go.tar.gz
 
-# 安装 gopls
-RUN go install golang.org/x/tools/gopls@latest
+ENV GOPROXY=https://goproxy.cn,direct \
+    GOPATH=/go \
+    GOBIN=/go/bin \
+    GO111MODULE=on \
+    GOWORK=/opt/mental1104/go.work \
+    PATH=/usr/local/go/bin:/go/bin:$PATH
 
-### 2.4 neovim # 这一步要放早一点
-RUN cd /tmp && tar -zxvf nvim-linux64.tar.gz \ 
-    && cd nvim-linux64 && cp -rf ./* /usr/local && \
-    ln -s  /usr/local/bin/nvim /usr/local/bin/vim
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    set -eux; \
+    go install golang.org/x/tools/gopls@latest; \
+    ln -sf /usr/local/go/bin/go /usr/bin/go; \
+    ln -sf /go/bin/gopls /usr/bin/gopls
 
+# -----------------------------
+# E) 低频：Okteto + Syncthing（官网最新）
+# -----------------------------
+RUN set -eux; \
+    mkdir -p /root/.okteto; \
+    syncthing_url="$(curl -fsSL https://api.github.com/repos/syncthing/syncthing/releases/latest | jq -r '.assets[] | select(.name | test("^syncthing-linux-amd64-.*\\.tar\\.gz$")) | .browser_download_url' | head -n 1)"; \
+    test -n "$syncthing_url"; \
+    curl -fsSL "$syncthing_url" -o /tmp/syncthing.tar.gz; \
+    syncthing_dir="$(tar -tf /tmp/syncthing.tar.gz | head -n 1 | cut -d/ -f1)"; \
+    tar -xzf /tmp/syncthing.tar.gz -C /tmp; \
+    install -m 0755 "/tmp/${syncthing_dir}/syncthing" /root/.okteto/syncthing; \
+    ln -sf /root/.okteto/syncthing /usr/local/bin/syncthing; \
+    rm -rf /tmp/syncthing.tar.gz "/tmp/${syncthing_dir}"; \
+    curl -fsSL "https://downloads.okteto.com/cli/okteto-Linux-x86_64" -o /root/.okteto/okteto; \
+    chmod +x /root/.okteto/okteto; \
+    ln -sf /root/.okteto/okteto /usr/local/bin/okteto
 
-## 3. vscode相关
-
-### 3.1 安装vscode离线ssh连接套件
-
+# -----------------------------
+# F) 中频：VSCode Server + Extensions（只受 commit/version 与 extensions.txt 影响）
+# -----------------------------
 ENV VSCODE_COMMIT_VERSION=f1a4fb101478ce6ec82fe9627c43efbf9e98c813
-RUN mkdir -p /root/.vscode-server/bin/${VSCODE_COMMIT_VERSION}
-COPY devops/INSTALLROOT/root/.vscode-server /root/.vscode-server
-COPY devops/INSTALLROOT/root/extensions.txt /root/extensions.txt
-RUN tar -zxvf /root/.vscode-server/vscode-server-linux-x64.tar.gz -C /root/.vscode-server/bin/${VSCODE_COMMIT_VERSION} --strip 1 && touch /root/.vscode-server/bin/${VSCODE_COMMIT_VERSION}/0
 
-### 3.2 下载并安装插件
-RUN while read extension; do \
-        /root/.vscode-server/bin/*/bin/code-server --install-extension $extension || true; \
+RUN set -eux; \
+    mkdir -p /root/.vscode-server/bin/${VSCODE_COMMIT_VERSION}; \
+    curl -fsSL "https://update.code.visualstudio.com/commit:${VSCODE_COMMIT_VERSION}/server-linux-x64/stable" \
+      -o /tmp/vscode-server.tar.gz; \
+    tar -xzf /tmp/vscode-server.tar.gz \
+      -C /root/.vscode-server/bin/${VSCODE_COMMIT_VERSION} --strip 1; \
+    rm -f /tmp/vscode-server.tar.gz; \
+    touch /root/.vscode-server/bin/${VSCODE_COMMIT_VERSION}/0
+
+COPY devops/INSTALLROOT/root/extensions.txt /root/extensions.txt
+
+RUN set -eux; \
+    while read -r extension; do \
+        /root/.vscode-server/bin/*/bin/code-server --install-extension "$extension" || true; \
     done < /root/extensions.txt
 
-## 4. 安装pip模块
+# -----------------------------
+# G) 中频：pip 依赖（只受 requirements.txt 影响，单独层）
+# -----------------------------
 COPY devops/INSTALLROOT/root/requirements.txt /root/requirements.txt
-RUN pip3 install  -i https://mirrors.aliyun.com/pypi/simple -r /root/requirements.txt --break-system-packages && rm -f /root/requirements.txt
 
-# 安装 cJSON
-COPY devops/INSTALLROOT/lib/ /tmp/lib
-RUN cd /tmp/lib && cd cJSON && \
-    mkdir build && \
-    cd build && \
-    cmake -DCMAKE_INSTALL_PREFIX=/usr/local .. && \
-    make -j$(nproc)&& \
-    make install && \
-    cd /tmp/lib && rm -rf cJSON*
+RUN --mount=type=cache,target=/root/.cache/pip \
+    set -eux; \
+    pip3 install -i https://mirrors.aliyun.com/pypi/simple -r /root/requirements.txt --break-system-packages; \
+    rm -f /root/requirements.txt
 
-# 安装pystring
-RUN cd /tmp/lib && cd pystring && \
-mkdir build && cd build && cmake .. && make -j$(nproc) && make install && \
-cd /tmp/lib && rm -rf pystring*
-
-# 安装rapidjson
-RUN cd /tmp/lib && cd rapidjson && \
-    mkdir build && cd build && cmake -DRAPIDJSON_BUILD_CXX11=OFF -DCMAKE_CXX_STANDARD=20 -DCMAKE_CXX_STANDARD_REQUIRED=ON -DCMAKE_CXX_EXTENSIONS=OFF .. && \
-    make -j$(nproc) && make install && \
-    cd /tmp/lib && rm -rf rapidjson*
-
-# 安装DataStruncture
-RUN cd /tmp/lib && cd DataStructure && \
-    mkdir build && cd build && cmake .. && \
-    make -j$(nproc) && make install && \
-    cd /tmp/lib && rm -rf DataStructure*
-
-# 安装lazyvim
+# -----------------------------
+# H) 低频：配置文件（htop/clang-format/时区）
+# -----------------------------
 COPY devops/INSTALLROOT/root/.config /root/.config
-COPY devops/INSTALLROOT/root/.local /root/.local
 
-# 安装redis相关库
-RUN cd /tmp/lib && cd hiredis && \
-    mkdir build && cd build && cmake .. && \
-    make -j$(nproc) && make install && \
-    cd /tmp/lib && rm -rf hiredis* && \
-    cd redis-plus-plus && \
-    mkdir build && cd build && cmake .. && \
-    make -j$(nproc) && make install && \
-    cd /tmp/lib && rm -rf redis-plus-plus*
-
-## 5. 安装自定义代码
-
-### 5.1 安装cpp代码
-COPY cpp /tmp/cpp/
-RUN cd /tmp/cpp && mkdir -p build && cd build && cmake .. && make -j "$(nproc)" && make install
-
-### 5.2 安装python代码
-COPY python /tmp/python/
-RUN cd /tmp/python && pip install . --break-system-packages
-
-### 5.3 安装自定义必要脚本
-COPY devops/utils /usr/local/bin
-RUN chmod -R +x /usr/local/bin
-
-## 6. 快速配置项
-
-### 6.1 杂项
-RUN git config --global core.editor "vim"
-ENV LANG=C.UTF-8
-RUN echo "PS1='\\[\033[32;1m\]\\u@\\[\033[38;5;214;1m\]\\h:\\[\033[01;34m\]\\w\\[\033[00m\] \$ '" >> /root/.bashrc
-
-### 6.2 加载环境变量
-### 这里赋一个默认的.env文件，期望宿主机通过挂载环境变量文件的方式将环境变量导入容器，以便ssh使用
-RUN touch /root/.env && echo "MENTAL1104_NOENVRION=TRUE" >> /root/.env && echo "export \$(grep -v '^#' ~/.env | xargs)" >> /root/.bashrc
-
-### 6.3 别名命令定义
-RUN echo "alias vi='vim'" >> /root/.bashrc && \
-    echo "alias view='vim -R'" >> /root/.bashrc && \
-    echo "alias python='python3'" >> /root/.bashrc && \
-    echo 'alias redis="redis-cli -h ${REDIS_HOST} -p ${REDIS_PORT}"' >> /root/.bashrc && \
-    echo 'alias clickhouse="clickhouse-client -h ${CLICKHOUSE_HOST} --port ${CLICKHOUSE_PORT} -d ${CLICKHOUSE_DATABASE} -u ${CLICKHOUSE_USER}"' >> /root/.bashrc && \
-    echo 'alias mongodb="mongo --host ${MONGO_HOST} --port ${MONGO_PORT}"' >> /root/.bashrc
-
-### 6.4 生成 SSH 主机密钥 && 修改SSH配置文件以允许密码认证
-ARG SSH_PRIVATE_KEY
-ENV SSH_PRIVATE_KEY=${SSH_PRIVATE_KEY}
-RUN echo "root:${SSH_PRIVATE_KEY}" | chpasswd && mkdir -p /run/sshd && echo 'PasswordAuthentication yes' | tee -a /etc/ssh/sshd_config && \
-    echo 'PermitRootLogin yes' | tee -a /etc/ssh/sshd_config
-
-### 6.5 调整时区
-RUN ln -sf /usr/share/zoneinfo/Asia/Shanghai /etc/localtime
-### 6.6 映射neovim的clangd为系统clangd
-RUN mkdir -p /root/.local/share/nvim/mason/packages/clangd/clangd_19.1.2/bin && ln -s /usr/bin/clangd /root/.local/share/nvim/mason/packages/clangd/clangd_19.1.2/bin/clangd
-### 6.7 送入clang-format
+# clang-format 放置（低频）
 COPY devops/INSTALLROOT/root/.clang-format /usr/lib/llvm-18/bin
 COPY devops/INSTALLROOT/root/.clang-format /root
 
-### 6.8 建立go相关的软链接
-RUN ln -s /usr/local/go/bin/go /usr/bin/go && ln -s /go/bin/gopls /usr/bin/gopls
-RUN ldconfig
+# 时区/缓存（低频）
+RUN set -eux; \
+    ln -sf /usr/share/zoneinfo/Asia/Shanghai /etc/localtime; \
+    ldconfig
+
+# -----------------------------
+# I) 高频：你的自定义代码（使用 ./dev install）
+# -----------------------------
+COPY . /opt/mental1104/
+RUN --mount=type=cache,target=/root/.cache/pip \
+    set -eux; \
+    cd /opt/mental1104; \
+    BUILD_SUBMODULES=all ./dev build cpp; \
+    ./dev install cpp; \
+    ./dev build go; \
+    ./dev install go; \
+    ./dev build rust; \
+    ./dev install rust; \
+    ./dev build dotnet; \
+    ./dev install dotnet; \
+    ./dev install python; \
+    mkdir -p /go/src/github.com/mental1104/common; \
+    ln -sf /opt/mental1104/golang /go/src/github.com/mental1104/common/golang; \
+    mkdir -p /root/.cargo; \
+    printf '%s\n' \
+      '[patch.crates-io]' \
+      'mental1104 = { path = "/opt/mental1104/rust/mental1104" }' \
+      > /root/.cargo/config.toml; \
+    mkdir -p /usr/local/share/nuget; \
+    dotnet pack dotnet/src/Mental1104/Mental1104.csproj --configuration Release --output /usr/local/share/nuget; \
+    mkdir -p /root/.config/NuGet; \
+    printf '%s\n' \
+      '<?xml version="1.0" encoding="utf-8"?>' \
+      '<configuration>' \
+      '  <packageSources>' \
+      '    <add key="local" value="/usr/local/share/nuget" />' \
+      '    <add key="nuget.org" value="https://api.nuget.org/v3/index.json" />' \
+      '  </packageSources>' \
+      '</configuration>' \
+      > /root/.config/NuGet/NuGet.Config
+
+# -----------------------------
+# J) 高频/变量层：SSH 密码注入与 sshd 配置（必须放到最后，避免打爆缓存）
+# -----------------------------
+ARG SSH_PRIVATE_KEY
+ENV SSH_PRIVATE_KEY=${SSH_PRIVATE_KEY}
+
+RUN set -eux; \
+    git config --global core.editor "vim"; \
+    echo "PS1='\\[\033[32;1m\]\\u@\\[\033[38;5;214;1m\]\\h:\\[\033[01;34m\]\\w\\[\033[00m\] \$ '" >> /root/.bashrc; \
+    touch /root/.env; \
+    echo "MENTAL1104_NOENVRION=TRUE" >> /root/.env; \
+    echo "export \$(grep -v '^#' ~/.env | xargs)" >> /root/.bashrc; \
+    echo "alias vi='vim'" >> /root/.bashrc; \
+    echo "alias view='vim -R'" >> /root/.bashrc; \
+    echo "alias python='python3'" >> /root/.bashrc; \
+    echo 'alias redis="redis-cli -h ${REDIS_HOST} -p ${REDIS_PORT}"' >> /root/.bashrc; \
+    echo 'alias clickhouse="clickhouse-client -h ${CLICKHOUSE_HOST} --port ${CLICKHOUSE_PORT} -d ${CLICKHOUSE_DATABASE} -u ${CLICKHOUSE_USER}"' >> /root/.bashrc; \
+    echo 'alias mongodb="mongo --host ${MONGO_HOST} --port ${MONGO_PORT}"' >> /root/.bashrc; \
+    echo "root:${SSH_PRIVATE_KEY}" | chpasswd; \
+    mkdir -p /run/sshd; \
+    echo 'PasswordAuthentication yes' >> /etc/ssh/sshd_config; \
+    echo 'PermitRootLogin yes' >> /etc/ssh/sshd_config
 
 EXPOSE 22
-CMD ["/usr/sbin/sshd", "-D"]
 WORKDIR /root
+CMD ["/usr/sbin/sshd", "-D"]

@@ -20,6 +20,8 @@ This file captures recent work plus portability guidance, grouped by language.
 - Rust coverage: fallback now probes rustup toolchain sysroot (`RUSTUP_TOOLCHAIN` or stable) when PATH rustc lacks llvm tools.
 - Rust coverage: set `RUST_COVER_XML=1` (optional `RUST_COVER_XML_PATH`) to make `./dev coverage-rust` emit Cobertura XML for local cov.json extraction.
 - Rust coverage: Cobertura XML is generated under `rust/mental1104/coverage.xml` to match the crate root.
+- Dockerfile: align INSTALLROOT inputs to current files; fetch Go/VSCode server/okteto/syncthing at build time; use `./dev build/install` for C++/Python installs.
+- Dockerfile: build all C++ submodules; install Go/Rust/.NET artifacts for reuse with Go workspace, Cargo patch config, and local NuGet feed.
 
 ### Performance: Non-IO Benchmark Protocol (must follow)
 
