@@ -1,6 +1,16 @@
 name: Python
 
 on:
+  workflow_call:
+    inputs:
+      enable_python_314:
+        description: "Run Python 3.14 jobs (pre-release)"
+        type: boolean
+        default: true
+      verbose_logs:
+        description: "Enable verbose test output"
+        type: boolean
+        default: true
   push:
     paths:
       - "python/**"
@@ -25,8 +35,8 @@ on:
         default: true
 
 env:
-  PYTEST_ADDOPTS: ${{ (vars.CI_VERBOSE_LOGS == 'false' || (github.event_name == 'workflow_dispatch' && (github.event.inputs.verbose_logs == false || github.event.inputs.verbose_logs == 'false'))) && '' || '-s -vv' }}
-  PYTHONUNBUFFERED: ${{ (vars.CI_VERBOSE_LOGS == 'false' || (github.event_name == 'workflow_dispatch' && (github.event.inputs.verbose_logs == false || github.event.inputs.verbose_logs == 'false'))) && '' || '1' }}
+  PYTEST_ADDOPTS: ${{ (vars.CI_VERBOSE_LOGS == 'false' || (github.event_name == 'workflow_dispatch' && (github.event.inputs.verbose_logs == false || github.event.inputs.verbose_logs == 'false')) || (github.event_name == 'workflow_call' && (inputs.verbose_logs == false || inputs.verbose_logs == 'false'))) && '' || '-s -vv' }}
+  PYTHONUNBUFFERED: ${{ (vars.CI_VERBOSE_LOGS == 'false' || (github.event_name == 'workflow_dispatch' && (github.event.inputs.verbose_logs == false || github.event.inputs.verbose_logs == 'false')) || (github.event_name == 'workflow_call' && (inputs.verbose_logs == false || inputs.verbose_logs == 'false'))) && '' || '1' }}
 
 jobs:
   linux:
@@ -68,6 +78,10 @@ jobs:
           if [ "${{ matrix.prerelease }}" = "true" ]; then
             if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
               if [ "${{ github.event.inputs.enable_python_314 }}" = "false" ]; then
+                enable="false"
+              fi
+            elif [ "${{ github.event_name }}" = "workflow_call" ]; then
+              if [ "${{ inputs.enable_python_314 }}" = "false" ]; then
                 enable="false"
               fi
             else
@@ -135,9 +149,9 @@ jobs:
           set +e
           pykey="$(echo "${{ matrix.python }}" | tr -d '.')"
           key="linux-py${pykey}"
-          mkdir -p "_cov/${key}"
-          cp -f cov.json "_cov/${key}/cov.json" 2>/dev/null || true
-          cp -f python/coverage.xml "_cov/${key}/coverage.xml" 2>/dev/null || true
+          mkdir -p "_cov/python/${key}"
+          cp -f cov.json "_cov/python/${key}/cov.json" 2>/dev/null || true
+          cp -f python/coverage.xml "_cov/python/${key}/coverage.xml" 2>/dev/null || true
 
       - name: Compute pykey
         if: always()
@@ -152,7 +166,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: py-cov-linux-py${{ steps.pykey.outputs.pykey }}
-          path: _cov/linux-py${{ steps.pykey.outputs.pykey }}
+          path: _cov
           retention-days: 7
           if-no-files-found: warn
 
@@ -289,9 +303,9 @@ jobs:
         run: |
           set +e
           key="linux-py312-integration"
-          mkdir -p "_cov/${key}"
-          cp -f cov.json "_cov/${key}/cov.json" 2>/dev/null || true
-          cp -f python/coverage.xml "_cov/${key}/coverage.xml" 2>/dev/null || true
+          mkdir -p "_cov/python/${key}"
+          cp -f cov.json "_cov/python/${key}/cov.json" 2>/dev/null || true
+          cp -f python/coverage.xml "_cov/python/${key}/coverage.xml" 2>/dev/null || true
 
       - name: Upload coverage artifacts (unique)
         if: always()
@@ -299,7 +313,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: py-cov-linux-py312-integration
-          path: _cov/linux-py312-integration
+          path: _cov
           retention-days: 7
           if-no-files-found: warn
 
@@ -342,6 +356,10 @@ jobs:
           if [ "${{ matrix.prerelease }}" = "true" ]; then
             if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
               if [ "${{ github.event.inputs.enable_python_314 }}" = "false" ]; then
+                enable="false"
+              fi
+            elif [ "${{ github.event_name }}" = "workflow_call" ]; then
+              if [ "${{ inputs.enable_python_314 }}" = "false" ]; then
                 enable="false"
               fi
             else
@@ -409,9 +427,9 @@ jobs:
           set +e
           pykey="$(echo "${{ matrix.python }}" | tr -d '.')"
           key="macos-py${pykey}"
-          mkdir -p "_cov/${key}"
-          cp -f cov.json "_cov/${key}/cov.json" 2>/dev/null || true
-          cp -f python/coverage.xml "_cov/${key}/coverage.xml" 2>/dev/null || true
+          mkdir -p "_cov/python/${key}"
+          cp -f cov.json "_cov/python/${key}/cov.json" 2>/dev/null || true
+          cp -f python/coverage.xml "_cov/python/${key}/coverage.xml" 2>/dev/null || true
 
       - name: Compute pykey
         if: always()
@@ -426,7 +444,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: py-cov-macos-py${{ steps.pykey.outputs.pykey }}
-          path: _cov/macos-py${{ steps.pykey.outputs.pykey }}
+          path: _cov
           retention-days: 7
           if-no-files-found: warn
 
@@ -474,6 +492,8 @@ jobs:
           if ("${{ matrix.prerelease }}" -eq "true") {
             if ("${{ github.event_name }}" -eq "workflow_dispatch") {
               if ("${{ github.event.inputs.enable_python_314 }}" -eq "false") { $enable = "false" }
+            } elseif ("${{ github.event_name }}" -eq "workflow_call") {
+              if ("${{ inputs.enable_python_314 }}" -eq "false") { $enable = "false" }
             } else {
               if ("${{ vars.CI_ENABLE_PYTHON_314 }}" -eq "false") { $enable = "false" }
             }
@@ -544,9 +564,9 @@ jobs:
         run: |
           $pykey = "${{ matrix.python }}".Replace(".","")
           $key = "windows-py$pykey"
-          New-Item -ItemType Directory -Force -Path "_cov/$key" | Out-Null
-          Copy-Item -Force cov.json "_cov/$key/cov.json" -ErrorAction SilentlyContinue
-          Copy-Item -Force python/coverage.xml "_cov/$key/coverage.xml" -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Force -Path "_cov/python/$key" | Out-Null
+          Copy-Item -Force cov.json "_cov/python/$key/cov.json" -ErrorAction SilentlyContinue
+          Copy-Item -Force python/coverage.xml "_cov/python/$key/coverage.xml" -ErrorAction SilentlyContinue
 
       - name: Compute pykey
         if: always()
@@ -561,7 +581,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: py-cov-windows-py${{ steps.pykey.outputs.pykey }}
-          path: _cov/windows-py${{ steps.pykey.outputs.pykey }}
+          path: _cov
           retention-days: 7
           if-no-files-found: warn
 

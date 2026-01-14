@@ -1,10 +1,7 @@
-name: Walkthrough Pages
+name: Pages
 
 on:
-  workflow_run:
-    workflows: ["cpp", "Python"]
-    types: [completed]
-  workflow_dispatch: {}
+  workflow_call: {}
 
 permissions:
   contents: read
@@ -21,19 +18,9 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # ===== checkout：严格区分两种触发 =====
-      - name: Checkout (workflow_run)
-        if: ${{ github.event_name == 'workflow_run' }}
+      - name: Checkout
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.workflow_run.head_sha }}
-          fetch-depth: 0
-
-      - name: Checkout (workflow_dispatch)
-        if: ${{ github.event_name == 'workflow_dispatch' }}
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.sha }}
           fetch-depth: 0
 
       - name: Configure Pages
@@ -44,165 +31,87 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install jq
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y jq
-
-      # ===== 0) 生成 dist/（walkthrough 基础页）=====
       - name: Generate dist/ (walkthrough)
         run: python tools/walkthrough/scan.py --out dist
 
-      - name: Job Summary (walkthrough)
-        if: always()
-        run: |
-          if [ -f dist/summary.md ]; then
-            cat dist/summary.md >> "$GITHUB_STEP_SUMMARY"
-          fi
-
-      # ===== 1) 解析要下载的 run-id：当前触发 run + 另一个 workflow 最近成功 run =====
-      # - workflow_run：触发者用“本次 run”，另一方用“最近成功”
-      # - workflow_dispatch：两边都用“最近成功”（全量构建，避免 404）
-      - name: Resolve coverage run ids
-        id: resolve
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          repo="${GITHUB_REPOSITORY}"
-          default_branch="$(gh api "repos/${repo}" | jq -r '.default_branch' || true)"
-
-          if [ "${{ github.event_name }}" = "workflow_run" ]; then
-            branch="${{ github.event.workflow_run.head_branch }}"
-            trigger_name="${{ github.event.workflow_run.name }}"
-            trigger_run_id="${{ github.event.workflow_run.id }}"
-          else
-            branch="${{ github.ref_name }}"
-            trigger_name=""
-            trigger_run_id=""
-          fi
-
-          get_wf_id() {
-            local name="$1"
-            gh api "repos/${repo}/actions/workflows" \
-              | jq -r --arg n "$name" '.workflows[] | select(.name==$n) | .id' \
-              | head -n1
-          }
-
-          latest_success_run_id() {
-            local wf_id="$1"
-            local br="$2"
-            local url="repos/${repo}/actions/workflows/${wf_id}/runs?status=completed&per_page=30"
-            if [ -n "${br:-}" ]; then
-              url="${url}&branch=${br}"
-            fi
-            gh api "${url}" \
-              | jq -r '.workflow_runs[] | select(.conclusion=="success") | .id' \
-              | head -n1
-          }
-
-          cpp_wf_id="$(get_wf_id "cpp" || true)"
-          py_wf_id="$(get_wf_id "Python" || true)"
-
-          cpp_run_id=""
-          py_run_id=""
-
-          if [ "${{ github.event_name }}" = "workflow_run" ]; then
-            if [ "$trigger_name" = "cpp" ]; then
-              cpp_run_id="$trigger_run_id"
-            elif [ "$trigger_name" = "Python" ]; then
-              py_run_id="$trigger_run_id"
-            fi
-          fi
-
-          if [ -z "$cpp_run_id" ] && [ -n "${cpp_wf_id:-}" ] && [ "${cpp_wf_id:-null}" != "null" ]; then
-            cpp_run_id="$(latest_success_run_id "$cpp_wf_id" "$branch" || true)"
-            if [ -z "$cpp_run_id" ] && [ -n "${default_branch:-}" ] && [ "${branch:-}" != "${default_branch:-}" ]; then
-              cpp_run_id="$(latest_success_run_id "$cpp_wf_id" "$default_branch" || true)"
-            fi
-          fi
-          if [ -z "$py_run_id" ] && [ -n "${py_wf_id:-}" ] && [ "${py_wf_id:-null}" != "null" ]; then
-            py_run_id="$(latest_success_run_id "$py_wf_id" "$branch" || true)"
-            if [ -z "$py_run_id" ] && [ -n "${default_branch:-}" ] && [ "${branch:-}" != "${default_branch:-}" ]; then
-              py_run_id="$(latest_success_run_id "$py_wf_id" "$default_branch" || true)"
-            fi
-          fi
-
-          echo "branch=$branch" >> "$GITHUB_OUTPUT"
-          echo "default_branch=${default_branch:-}" >> "$GITHUB_OUTPUT"
-          echo "cpp_run_id=${cpp_run_id:-}" >> "$GITHUB_OUTPUT"
-          echo "py_run_id=${py_run_id:-}" >> "$GITHUB_OUTPUT"
-
-      # ===== 2) 下载 coverage artifacts（尝试把 C++ + Python 都下载到 _cov/）=====
       - name: Ensure _cov exists
         run: mkdir -p _cov
 
       - name: Download C++ coverage artifacts
-        if: ${{ steps.resolve.outputs.cpp_run_id != '' }}
         continue-on-error: true
         uses: actions/download-artifact@v4
         with:
           path: _cov
           pattern: cpp-cov-*
-          merge-multiple: false
-          run-id: ${{ steps.resolve.outputs.cpp_run_id }}
-          github-token: ${{ github.token }}
+          merge-multiple: true
 
       - name: Download Python coverage artifacts
-        if: ${{ steps.resolve.outputs.py_run_id != '' }}
         continue-on-error: true
         uses: actions/download-artifact@v4
         with:
           path: _cov
           pattern: py-cov-*
-          merge-multiple: false
-          run-id: ${{ steps.resolve.outputs.py_run_id }}
-          github-token: ${{ github.token }}
+          merge-multiple: true
 
-      - name: Debug inputs
-        if: always()
-        run: |
-          echo "event_name=${{ github.event_name }}"
-          echo "branch=${{ steps.resolve.outputs.branch }}"
-          echo "default_branch=${{ steps.resolve.outputs.default_branch }}"
-          echo "cpp_run_id=${{ steps.resolve.outputs.cpp_run_id }}"
-          echo "py_run_id=${{ steps.resolve.outputs.py_run_id }}"
-          echo "=== _cov tree ==="
-          ls -R _cov || true
-          echo "=== cov.json files ==="
-          find _cov -name cov.json -print || true
+      - name: Download Rust coverage artifacts
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          path: _cov
+          pattern: rust-cov-*
+          merge-multiple: true
 
-      # ===== 3) C++ module（始终构建：没数据也生成 N/A，避免 404）=====
-      - name: Build C++ coverage module (dist/modules/cpp-coverage)
+      - name: Download .NET coverage artifacts
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          path: _cov
+          pattern: dotnet-cov-*
+          merge-multiple: true
+
+      - name: Download Go coverage artifacts
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          path: _cov
+          pattern: go-cov-*
+          merge-multiple: true
+
+      - name: Build coverage modules (dist/modules)
         run: |
           set -euo pipefail
           python3 - <<'PY'
-          import json, glob, statistics, html
+          import json
+          import statistics
+          import html
           from pathlib import Path
 
-          module_root = Path("dist/modules/cpp-coverage")
-          badges = module_root / "badges"
-          data = module_root / "data"
-          module_root.mkdir(parents=True, exist_ok=True)
-          badges.mkdir(parents=True, exist_ok=True)
-          data.mkdir(parents=True, exist_ok=True)
+          def is_placeholder(status: str) -> bool:
+            st = (status or "").lower()
+            return st in ("placeholder", "unknown", "fail", "failure", "error", "na", "n/a")
 
           def badge_color(pct: float, status: str) -> str:
-            st = (status or "").lower()
-            if st in ("placeholder","unknown","fail","failure","error","na","n/a"):
+            if is_placeholder(status):
               return "#9f9f9f"
-            if pct >= 95: return "#4c1"
-            if pct >= 85: return "#97CA00"
-            if pct >= 70: return "#dfb317"
-            if pct >= 50: return "#fe7d37"
+            if pct >= 95:
+              return "#4c1"
+            if pct >= 85:
+              return "#97CA00"
+            if pct >= 70:
+              return "#dfb317"
+            if pct >= 50:
+              return "#fe7d37"
             return "#e05d44"
 
           def est_w(text: str) -> int:
             return max(40, int(len(text) * 7 + 18))
 
           def svg_badge(label: str, msg: str, color: str) -> str:
-            lw = est_w(label); mw = est_w(msg); w = lw + mw
-            label_e = html.escape(label); msg_e = html.escape(msg)
+            lw = est_w(label)
+            mw = est_w(msg)
+            w = lw + mw
+            label_e = html.escape(label)
+            msg_e = html.escape(msg)
             aria = html.escape(f"{label}: {msg}")
             return "\n".join([
               f'<svg xmlns="http://www.w3.org/2000/svg" width="{w}" height="20" role="img" aria-label="{aria}">',
@@ -223,262 +132,579 @@ jobs:
               '</svg>',
             ])
 
-          cov_files = [Path(p) for p in glob.glob("_cov/**/cov.json", recursive=True)]
-          raw = []
-          for p in cov_files:
-            rel = p.relative_to("_cov")
-            artifact_root = rel.parts[0]
-            if not artifact_root.startswith("cpp-cov-"):
-              continue
-            key = artifact_root[len("cpp-cov-"):]
-            try:
-              d = json.loads(p.read_text(encoding="utf-8"))
-            except Exception:
-              d = {}
-            os_name = str(d.get("os", "unknown"))
-            comp = str(d.get("compiler", "unknown")).lower()
-            cxx = int(d.get("cxx_std", 0) or 0)
-            pct = float(d.get("line_pct", 0.0) or 0.0)
-            status = str(d.get("status", "ok"))
-            if "clang" in comp: cs = "clangpp"
-            elif "g++" in comp or "gcc" in comp: cs = "gpp"
-            elif "msvc" in comp: cs = "msvc"
-            else: cs = "unknown"
-            raw.append({"key": key, "os": os_name, "cs": cs, "cxx": cxx, "pct": pct, "status": status, "src": str(p)})
+          def pct_msg(pct: float, status: str) -> str:
+            return "N/A" if is_placeholder(status) else f"{pct:.1f}%"
 
-          expected = []
-          for std in (11,14,17,20,23):
-            expected += [
-              ("linux","clangpp",std), ("linux","gpp",std),
-              ("macos","clangpp",std), ("macos","gpp",std),
-              ("windows","msvc",std),
-            ]
+          def write_badge(path: Path, label: str, msg: str, status: str) -> None:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            pct = 0.0
+            if msg.endswith("%"):
+              try:
+                pct = float(msg[:-1])
+              except Exception:
+                pct = 0.0
+            path.write_text(svg_badge(label, msg, badge_color(pct, status)), encoding="utf-8")
 
-          def score(e):
-            st = (e["status"] or "").lower()
-            s = 0
-            if st not in ("placeholder","unknown","fail","failure","error"):
-              s += 1000
-            return s + e["pct"]
+          def compiler_slug(comp: str) -> str:
+            s = (comp or "unknown").lower()
+            if "clang" in s:
+              return "clangpp"
+            if "g++" in s or "gcc" in s:
+              return "gpp"
+            if "msvc" in s:
+              return "msvc"
+            return "".join(ch for ch in s.replace("+", "p").replace(" ", "") if ch.isalnum() or ch in "-_")
 
-          best = {}
-          integ = {}
-          for e in raw:
-            k = (e["os"], e["cs"], e["cxx"])
-            if "integration" in e["key"]:
-              if k not in integ or score(e) > score(integ[k]): integ[k] = e
-              continue
-            if k not in best or score(e) > score(best[k]): best[k] = e
+          def build_cpp_module() -> None:
+            module_root = Path("dist/modules/cpp-coverage")
+            badges = module_root / "badges"
+            data = module_root / "data"
+            badges.mkdir(parents=True, exist_ok=True)
+            data.mkdir(parents=True, exist_ok=True)
 
-          for k,e in integ.items():
-            if k not in best:
-              best[k] = e
+            raw = []
+            cpp_root = Path("_cov/cpp")
+            if cpp_root.exists():
+              for p in cpp_root.rglob("cov.json"):
+                key = p.parent.name
+                try:
+                  d = json.loads(p.read_text(encoding="utf-8"))
+                except Exception:
+                  d = {}
+                os_name = str(d.get("os", "unknown"))
+                comp = str(d.get("compiler", "unknown"))
+                try:
+                  cxx = int(d.get("cxx_std", 0) or 0)
+                except Exception:
+                  cxx = 0
+                try:
+                  pct = float(d.get("line_pct", 0.0) or 0.0)
+                except Exception:
+                  pct = 0.0
+                status = str(d.get("status", "ok"))
+                raw.append({
+                  "key": key,
+                  "os": os_name,
+                  "compiler": comp,
+                  "compiler_slug": compiler_slug(comp),
+                  "cxx_std": cxx,
+                  "line_pct": pct,
+                  "status": status,
+                  "src": str(p),
+                })
 
-          selected = []
-          for (osn,cs,std) in expected:
-            e = best.get((osn,cs,std))
-            fn = f"{osn}-{cs}-cxx{std}.svg"
-            if e:
-              (badges/fn).write_text(svg_badge("cov", f'{e["pct"]:.1f}%', badge_color(e["pct"], e["status"])), encoding="utf-8")
-              selected.append(e)
-            else:
-              (badges/fn).write_text(svg_badge("cov", "N/A", badge_color(0.0, "na")), encoding="utf-8")
+            expected = []
+            for std in (11, 14, 17, 20, 23):
+              expected.extend([
+                ("linux", "clangpp", std),
+                ("linux", "gpp", std),
+                ("macos", "clangpp", std),
+                ("macos", "gpp", std),
+                ("windows", "msvc", std),
+              ])
 
-          real = [e["pct"] for e in selected if (e["status"] or "").lower() not in ("placeholder","unknown","fail","failure","error")]
-          overall = statistics.mean(real) if real else 0.0
-          (badges/"overall.svg").write_text(svg_badge("cov", f"{overall:.1f}%", badge_color(overall, "ok" if real else "placeholder")), encoding="utf-8")
+            def score(e):
+              s = 0
+              if not is_placeholder(e["status"]):
+                s += 1000
+              return s + e["line_pct"]
 
-          # JSON 不允许 tuple key：转换为 string key
-          entries = {f"{osn}/{cs}/cxx{std}": e for (osn, cs, std), e in best.items()}
-          (data/"coverage.json").write_text(json.dumps({"overall": overall, "entries": entries}, ensure_ascii=False, indent=2), encoding="utf-8")
+            matrix_entries = [e for e in raw if "integration" not in e["key"]]
+            best = {}
+            for e in matrix_entries:
+              k = (e["os"], e["compiler_slug"], e["cxx_std"])
+              if k not in best or score(e) > score(best[k]):
+                best[k] = e
+            for e in raw:
+              if "integration" not in e["key"]:
+                continue
+              k = (e["os"], e["compiler_slug"], e["cxx_std"])
+              if k not in best:
+                best[k] = e
 
-          (module_root/"index.html").write_text(
-            """<!doctype html>
-          <meta charset="utf-8">
-          <meta name="viewport" content="width=device-width,initial-scale=1">
-          <title>C++ Coverage</title>
-          <h1>C++ Coverage</h1>
-          <p><img alt="overall" src="badges/overall.svg"></p>
-          <p>Data: <a href="data/coverage.json">coverage.json</a></p>
-          """,
-            encoding="utf-8",
-          )
-
-          print(f"[cpp] raw={len(raw)} best={len(best)} overall={overall:.2f}%")
-          PY
-
-      # 兼容旧 README（/badges + /data）——C++ 文件名不会跟 Python 冲突
-      - name: Publish C++ compatibility paths (dist/badges, dist/data)
-        run: |
-          set -euo pipefail
-          mkdir -p dist/badges dist/data
-          cp -f dist/modules/cpp-coverage/badges/*.svg dist/badges/ 2>/dev/null || true
-          cp -f dist/modules/cpp-coverage/data/*.json dist/data/ 2>/dev/null || true
-
-      # ===== 4) Python module（始终构建：没数据也生成 N/A，避免 404）=====
-      - name: Build Python coverage module (dist/modules/python-coverage)
-        run: |
-          set -euo pipefail
-          python3 - <<'PY'
-          import json, glob, statistics, html
-          from pathlib import Path
-
-          module_root = Path("dist/modules/python-coverage")
-          badges = module_root / "badges"
-          data = module_root / "data"
-          module_root.mkdir(parents=True, exist_ok=True)
-          badges.mkdir(parents=True, exist_ok=True)
-          data.mkdir(parents=True, exist_ok=True)
-
-          def badge_color(pct: float, status: str) -> str:
-            st = (status or "").lower()
-            if st in ("placeholder","unknown","fail","failure","error","na","n/a"):
-              return "#9f9f9f"
-            if pct >= 95: return "#4c1"
-            if pct >= 85: return "#97CA00"
-            if pct >= 70: return "#dfb317"
-            if pct >= 50: return "#fe7d37"
-            return "#e05d44"
-
-          def est_w(text: str) -> int:
-            return max(40, int(len(text) * 7 + 18))
-
-          def svg_badge(label: str, msg: str, color: str) -> str:
-            lw = est_w(label); mw = est_w(msg); w = lw + mw
-            label_e = html.escape(label); msg_e = html.escape(msg)
-            aria = html.escape(f"{label}: {msg}")
-            return "\n".join([
-              f'<svg xmlns="http://www.w3.org/2000/svg" width="{w}" height="20" role="img" aria-label="{aria}">',
-              '  <linearGradient id="s" x2="0" y2="100%">',
-              '    <stop offset="0" stop-color="#bbb" stop-opacity=".1"/>',
-              '    <stop offset="1" stop-opacity=".1"/>',
-              '  </linearGradient>',
-              f'  <clipPath id="r"><rect width="{w}" height="20" rx="3" fill="#fff"/></clipPath>',
-              '  <g clip-path="url(#r)">',
-              f'    <rect width="{lw}" height="20" fill="#555"/>',
-              f'    <rect x="{lw}" width="{mw}" height="20" fill="{color}"/>',
-              f'    <rect width="{w}" height="20" fill="url(#s)"/>',
-              '  </g>',
-              '  <g fill="#fff" text-anchor="middle" font-family="Verdana,Geneva,DejaVu Sans,sans-serif" font-size="11">',
-              f'    <text x="{lw/2}" y="14">{label_e}</text>',
-              f'    <text x="{lw + mw/2}" y="14">{msg_e}</text>',
-              '  </g>',
-              '</svg>',
-            ])
-
-          def pykey(ver: str) -> str:
-            return ver.replace(".","")
-
-          cov_files = [Path(p) for p in glob.glob("_cov/**/cov.json", recursive=True)]
-          raw = []
-          for p in cov_files:
-            rel = p.relative_to("_cov")
-            artifact_root = rel.parts[0]
-            if not artifact_root.startswith("py-cov-"):
-              continue
-            try:
-              d = json.loads(p.read_text(encoding="utf-8"))
-            except Exception:
-              d = {}
-            os_name = str(d.get("os","unknown"))
-            ver = str(d.get("python","unknown"))
-            pct = float(d.get("line_pct",0.0) or 0.0)
-            status = str(d.get("status","ok"))
-            raw.append({"os": os_name, "py": ver, "pyk": pykey(ver), "pct": pct, "status": status, "src": str(p)})
-
-          expected_py = ["38","39","310","311","312","313","314"]
-          expected_os = ["linux","macos","windows"]
-
-          def score(e):
-            st = (e["status"] or "").lower()
-            s = 0
-            if st not in ("placeholder","unknown","fail","failure","error"):
-              s += 1000
-            return s + e["pct"]
-
-          best = {}
-          for e in raw:
-            k = (e["os"], e["pyk"])
-            if k not in best or score(e) > score(best[k]):
-              best[k] = e
-
-          selected = []
-          for osn in expected_os:
-            for pyk in expected_py:
-              e = best.get((osn, pyk))
-              fn = f"python-{osn}-py{pyk}.svg"
+            selected = []
+            for (osn, cs, std) in expected:
+              e = best.get((osn, cs, std))
               if e:
-                (badges/fn).write_text(svg_badge("cov", f'{e["pct"]:.1f}%', badge_color(e["pct"], e["status"])), encoding="utf-8")
+                msg = pct_msg(e["line_pct"], e["status"])
+                write_badge(badges / f"{osn}-{cs}-cxx{std}.svg", "cov", msg, e["status"])
                 selected.append(e)
               else:
-                (badges/fn).write_text(svg_badge("cov", "N/A", badge_color(0.0,"na")), encoding="utf-8")
+                write_badge(badges / f"{osn}-{cs}-cxx{std}.svg", "cov", "N/A", "na")
 
-          real = [e["pct"] for e in selected if (e["status"] or "").lower() not in ("placeholder","unknown","fail","failure","error")]
-          overall = statistics.mean(real) if real else 0.0
-          (badges/"python-overall.svg").write_text(svg_badge("cov", f"{overall:.1f}%", badge_color(overall, "ok" if real else "placeholder")), encoding="utf-8")
+            integration = next((e for e in raw if e["key"] == "linux-gpp-cxx20-integration"), None)
+            if integration:
+              write_badge(
+                badges / "linux-gpp-cxx20-integration.svg",
+                "cov",
+                pct_msg(integration["line_pct"], integration["status"]),
+                integration["status"],
+              )
+            else:
+              write_badge(badges / "linux-gpp-cxx20-integration.svg", "cov", "N/A", "na")
 
-          (data/"python-coverage.json").write_text(json.dumps({"overall": overall, "entries": raw}, ensure_ascii=False, indent=2), encoding="utf-8")
+            real = [e["line_pct"] for e in selected if not is_placeholder(e["status"])]
+            overall = statistics.mean(real) if real else 0.0
+            overall_msg = "N/A" if not real else f"{overall:.1f}%"
+            write_badge(badges / "overall.svg", "cov", overall_msg, "placeholder" if not real else "ok")
 
-          cols = expected_py
-          def cell(osn, pyk):
-            return f'<img alt="{osn}-py{pyk}" src="badges/python-{osn}-py{pyk}.svg">'
-          rows = []
-          for osn in expected_os:
-            tds = "".join(f"<td>{cell(osn,pyk)}</td>" for pyk in cols)
-            rows.append(f"<tr><th>{osn}</th>{tds}</tr>")
+            data_entries = []
+            for (osn, cs, std) in expected:
+              e = best.get((osn, cs, std))
+              if e:
+                data_entries.append(e)
+              else:
+                data_entries.append({
+                  "key": f"{osn}-{cs}-cxx{std}",
+                  "os": osn,
+                  "compiler": cs,
+                  "compiler_slug": cs,
+                  "cxx_std": std,
+                  "line_pct": 0.0,
+                  "status": "na",
+                  "src": "",
+                })
 
-          header = "".join(f"<th>py{c}</th>" for c in cols)
-          (module_root/"index.html").write_text(f"""<!doctype html>
-          <meta charset="utf-8">
-          <meta name="viewport" content="width=device-width,initial-scale=1">
-          <title>Python Coverage</title>
-          <h1>Python Coverage</h1>
-          <p><img alt="python-overall" src="badges/python-overall.svg"></p>
-          <table border="1" cellpadding="6" cellspacing="0">
-            <thead><tr><th>os</th>{header}</tr></thead>
-            <tbody>{''.join(rows)}</tbody>
-          </table>
-          <p>Data: <a href="data/python-coverage.json">python-coverage.json</a></p>
-          """, encoding="utf-8")
+            (data / "coverage.json").write_text(
+              json.dumps({"overall": overall if real else None, "entries": data_entries}, ensure_ascii=False, indent=2),
+              encoding="utf-8",
+            )
 
-          print(f"[python] raw={len(raw)} best={len(best)} overall={overall:.2f}%")
+            os_list = ["linux", "macos", "windows"]
+            stds = [11, 14, 17, 20, 23]
+            comp_by_os = {"linux": ["clangpp", "gpp"], "macos": ["clangpp", "gpp"], "windows": ["msvc"]}
+
+            def cell(osn, cs, st):
+              fn = f"badges/{osn}-{cs}-cxx{st}.svg"
+              return f'<img alt="{osn}-{cs}-cxx{st}" src="{fn}">'
+
+            rows = []
+            for osn in os_list:
+              for cs in comp_by_os[osn]:
+                tds = "".join(f"<td>{cell(osn, cs, st)}</td>" for st in stds)
+                rows.append(f"<tr><th>{osn} / {cs}</th>{tds}</tr>")
+
+            index = f"""<!doctype html>
+            <meta charset=\"utf-8\">
+            <meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">
+            <title>C++ Coverage</title>
+            <h1>C++ Coverage</h1>
+            <p><img alt=\"overall\" src=\"badges/overall.svg\"></p>
+
+            <h2>Matrix</h2>
+            <table border=\"1\" cellpadding=\"6\" cellspacing=\"0\">
+              <thead>
+                <tr><th>platform / compiler</th><th>C++11</th><th>C++14</th><th>C++17</th><th>C++20</th><th>C++23</th></tr>
+              </thead>
+              <tbody>
+                {''.join(rows)}
+              </tbody>
+            </table>
+
+            <h2>Integration</h2>
+            <p><img alt=\"linux-gpp-cxx20-integration\" src=\"badges/linux-gpp-cxx20-integration.svg\"></p>
+
+            <p>Data: <a href=\"data/coverage.json\">coverage.json</a></p>
+            """
+            module_root.mkdir(parents=True, exist_ok=True)
+            (module_root / "index.html").write_text(index, encoding="utf-8")
+
+          def build_python_module() -> None:
+            module_root = Path("dist/modules/python-coverage")
+            badges = module_root / "badges"
+            data = module_root / "data"
+            badges.mkdir(parents=True, exist_ok=True)
+            data.mkdir(parents=True, exist_ok=True)
+
+            def pykey(ver: str) -> str:
+              return ver.replace(".", "")
+
+            raw = []
+            py_root = Path("_cov/python")
+            if py_root.exists():
+              for p in py_root.rglob("cov.json"):
+                try:
+                  d = json.loads(p.read_text(encoding="utf-8"))
+                except Exception:
+                  d = {}
+                os_name = str(d.get("os", "unknown"))
+                ver = str(d.get("python", "unknown"))
+                try:
+                  pct = float(d.get("line_pct", 0.0) or 0.0)
+                except Exception:
+                  pct = 0.0
+                status = str(d.get("status", "ok"))
+                raw.append({
+                  "os": os_name,
+                  "python": ver,
+                  "pyk": pykey(ver),
+                  "line_pct": pct,
+                  "status": status,
+                  "src": str(p),
+                })
+
+            expected_py = ["38", "39", "310", "311", "312", "313", "314"]
+            expected_os = ["linux", "macos", "windows"]
+
+            def score(e):
+              s = 0
+              if not is_placeholder(e["status"]):
+                s += 1000
+              return s + e["line_pct"]
+
+            best = {}
+            for e in raw:
+              k = (e["os"], e["pyk"])
+              if k not in best or score(e) > score(best[k]):
+                best[k] = e
+
+            selected = []
+            for osn in expected_os:
+              for pyk in expected_py:
+                e = best.get((osn, pyk))
+                fn = f"python-{osn}-py{pyk}.svg"
+                if e:
+                  msg = pct_msg(e["line_pct"], e["status"])
+                  write_badge(badges / fn, "cov", msg, e["status"])
+                  selected.append(e)
+                else:
+                  write_badge(badges / fn, "cov", "N/A", "na")
+
+            real = [e["line_pct"] for e in selected if not is_placeholder(e["status"])]
+            overall = statistics.mean(real) if real else 0.0
+            overall_msg = "N/A" if not real else f"{overall:.1f}%"
+            write_badge(badges / "python-overall.svg", "cov", overall_msg, "placeholder" if not real else "ok")
+
+            (data / "python-coverage.json").write_text(
+              json.dumps({"overall": overall if real else None, "entries": raw}, ensure_ascii=False, indent=2),
+              encoding="utf-8",
+            )
+
+            cols = expected_py
+            def cell(osn, pyk):
+              return f'<img alt="{osn}-py{pyk}" src="badges/python-{osn}-py{pyk}.svg">'
+            rows = []
+            for osn in expected_os:
+              tds = "".join(f"<td>{cell(osn,pyk)}</td>" for pyk in cols)
+              rows.append(f"<tr><th>{osn}</th>{tds}</tr>")
+
+            header = "".join(f"<th>py{c}</th>" for c in cols)
+            (module_root / "index.html").write_text(
+              f"""<!doctype html>
+            <meta charset=\"utf-8\">
+            <meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">
+            <title>Python Coverage</title>
+            <h1>Python Coverage</h1>
+            <p><img alt=\"python-overall\" src=\"badges/python-overall.svg\"></p>
+            <table border=\"1\" cellpadding=\"6\" cellspacing=\"0\">
+              <thead><tr><th>os</th>{header}</tr></thead>
+              <tbody>{''.join(rows)}</tbody>
+            </table>
+            <p>Data: <a href=\"data/python-coverage.json\">python-coverage.json</a></p>
+            """,
+              encoding="utf-8",
+            )
+
+          def sanitize_version(ver: str) -> str:
+            return "".join(ch for ch in (ver or "unknown").lower() if ch.isalnum())
+
+          def build_rust_module() -> None:
+            module_root = Path("dist/modules/rust-coverage")
+            badges = module_root / "badges"
+            data = module_root / "data"
+            badges.mkdir(parents=True, exist_ok=True)
+            data.mkdir(parents=True, exist_ok=True)
+
+            raw = []
+            rust_root = Path("_cov/rust")
+            if rust_root.exists():
+              for p in rust_root.rglob("cov.json"):
+                try:
+                  d = json.loads(p.read_text(encoding="utf-8"))
+                except Exception:
+                  d = {}
+                os_name = str(d.get("os", "unknown"))
+                ver = str(d.get("toolchain", "unknown"))
+                ver_key = sanitize_version(ver)
+                try:
+                  pct = float(d.get("line_pct", 0.0) or 0.0)
+                except Exception:
+                  pct = 0.0
+                status = str(d.get("status", "ok"))
+                raw.append({
+                  "os": os_name,
+                  "toolchain": ver,
+                  "ver_key": ver_key,
+                  "line_pct": pct,
+                  "status": status,
+                  "src": str(p),
+                })
+
+            expected_versions = ["stable", "1.85.0"]
+            expected_os = ["linux", "macos", "windows"]
+
+            def score(e):
+              s = 0
+              if not is_placeholder(e["status"]):
+                s += 1000
+              return s + e["line_pct"]
+
+            best = {}
+            for e in raw:
+              k = (e["os"], e["ver_key"])
+              if k not in best or score(e) > score(best[k]):
+                best[k] = e
+
+            selected = []
+            for osn in expected_os:
+              for ver in expected_versions:
+                ver_key = sanitize_version(ver)
+                e = best.get((osn, ver_key))
+                fn = f"rust-{osn}-{ver_key}.svg"
+                if e:
+                  msg = pct_msg(e["line_pct"], e["status"])
+                  write_badge(badges / fn, "cov", msg, e["status"])
+                  selected.append(e)
+                else:
+                  write_badge(badges / fn, "cov", "N/A", "na")
+
+            real = [e["line_pct"] for e in selected if not is_placeholder(e["status"])]
+            overall = statistics.mean(real) if real else 0.0
+            overall_msg = "N/A" if not real else f"{overall:.1f}%"
+            write_badge(badges / "rust-overall.svg", "cov", overall_msg, "placeholder" if not real else "ok")
+
+            (data / "rust-coverage.json").write_text(
+              json.dumps({"overall": overall if real else None, "entries": raw}, ensure_ascii=False, indent=2),
+              encoding="utf-8",
+            )
+
+            cols = expected_versions
+            def cell(osn, ver):
+              ver_key = sanitize_version(ver)
+              return f'<img alt="{osn}-rust-{ver}" src="badges/rust-{osn}-{ver_key}.svg">'
+            rows = []
+            for osn in expected_os:
+              tds = "".join(f"<td>{cell(osn,ver)}</td>" for ver in cols)
+              rows.append(f"<tr><th>{osn}</th>{tds}</tr>")
+
+            header = "".join(f"<th>{v}</th>" for v in cols)
+            (module_root / "index.html").write_text(
+              f"""<!doctype html>
+            <meta charset=\"utf-8\">
+            <meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">
+            <title>Rust Coverage</title>
+            <h1>Rust Coverage</h1>
+            <p><img alt=\"rust-overall\" src=\"badges/rust-overall.svg\"></p>
+            <table border=\"1\" cellpadding=\"6\" cellspacing=\"0\">
+              <thead><tr><th>os</th>{header}</tr></thead>
+              <tbody>{''.join(rows)}</tbody>
+            </table>
+            <p>Data: <a href=\"data/rust-coverage.json\">rust-coverage.json</a></p>
+            """,
+              encoding="utf-8",
+            )
+
+          def build_dotnet_module() -> None:
+            module_root = Path("dist/modules/dotnet-coverage")
+            badges = module_root / "badges"
+            data = module_root / "data"
+            badges.mkdir(parents=True, exist_ok=True)
+            data.mkdir(parents=True, exist_ok=True)
+
+            raw = []
+            dotnet_root = Path("_cov/dotnet")
+            if dotnet_root.exists():
+              for p in dotnet_root.rglob("cov.json"):
+                try:
+                  d = json.loads(p.read_text(encoding="utf-8"))
+                except Exception:
+                  d = {}
+                os_name = str(d.get("os", "unknown"))
+                ver = str(d.get("dotnet", "unknown"))
+                ver_key = sanitize_version(ver)
+                try:
+                  pct = float(d.get("line_pct", 0.0) or 0.0)
+                except Exception:
+                  pct = 0.0
+                status = str(d.get("status", "ok"))
+                raw.append({
+                  "os": os_name,
+                  "dotnet": ver,
+                  "ver_key": ver_key,
+                  "line_pct": pct,
+                  "status": status,
+                  "src": str(p),
+                })
+
+            expected_versions = ["8.0.x"]
+            expected_os = ["linux", "macos", "windows"]
+
+            def score(e):
+              s = 0
+              if not is_placeholder(e["status"]):
+                s += 1000
+              return s + e["line_pct"]
+
+            best = {}
+            for e in raw:
+              k = (e["os"], e["ver_key"])
+              if k not in best or score(e) > score(best[k]):
+                best[k] = e
+
+            selected = []
+            for osn in expected_os:
+              for ver in expected_versions:
+                ver_key = sanitize_version(ver)
+                e = best.get((osn, ver_key))
+                fn = f"dotnet-{osn}-dotnet{ver_key}.svg"
+                if e:
+                  msg = pct_msg(e["line_pct"], e["status"])
+                  write_badge(badges / fn, "cov", msg, e["status"])
+                  selected.append(e)
+                else:
+                  write_badge(badges / fn, "cov", "N/A", "na")
+
+            real = [e["line_pct"] for e in selected if not is_placeholder(e["status"])]
+            overall = statistics.mean(real) if real else 0.0
+            overall_msg = "N/A" if not real else f"{overall:.1f}%"
+            write_badge(badges / "dotnet-overall.svg", "cov", overall_msg, "placeholder" if not real else "ok")
+
+            (data / "dotnet-coverage.json").write_text(
+              json.dumps({"overall": overall if real else None, "entries": raw}, ensure_ascii=False, indent=2),
+              encoding="utf-8",
+            )
+
+            cols = expected_versions
+            def cell(osn, ver):
+              ver_key = sanitize_version(ver)
+              return f'<img alt="{osn}-dotnet-{ver}" src="badges/dotnet-{osn}-dotnet{ver_key}.svg">'
+            rows = []
+            for osn in expected_os:
+              tds = "".join(f"<td>{cell(osn,ver)}</td>" for ver in cols)
+              rows.append(f"<tr><th>{osn}</th>{tds}</tr>")
+
+            header = "".join(f"<th>.NET {v}</th>" for v in cols)
+            (module_root / "index.html").write_text(
+              f"""<!doctype html>
+            <meta charset=\"utf-8\">
+            <meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">
+            <title>.NET Coverage</title>
+            <h1>.NET Coverage</h1>
+            <p><img alt=\"dotnet-overall\" src=\"badges/dotnet-overall.svg\"></p>
+            <table border=\"1\" cellpadding=\"6\" cellspacing=\"0\">
+              <thead><tr><th>os</th>{header}</tr></thead>
+              <tbody>{''.join(rows)}</tbody>
+            </table>
+            <p>Data: <a href=\"data/dotnet-coverage.json\">dotnet-coverage.json</a></p>
+            """,
+              encoding="utf-8",
+            )
+
+          def build_golang_module() -> None:
+            module_root = Path("dist/modules/golang-coverage")
+            badges = module_root / "badges"
+            data = module_root / "data"
+            badges.mkdir(parents=True, exist_ok=True)
+            data.mkdir(parents=True, exist_ok=True)
+
+            raw = []
+            go_root = Path("_cov/golang")
+            if go_root.exists():
+              for p in go_root.rglob("cov.json"):
+                try:
+                  d = json.loads(p.read_text(encoding="utf-8"))
+                except Exception:
+                  d = {}
+                os_name = str(d.get("os", "unknown"))
+                ver = str(d.get("go", "unknown"))
+                ver_key = sanitize_version(ver)
+                try:
+                  pct = float(d.get("line_pct", 0.0) or 0.0)
+                except Exception:
+                  pct = 0.0
+                status = str(d.get("status", "ok"))
+                raw.append({
+                  "os": os_name,
+                  "go": ver,
+                  "ver_key": ver_key,
+                  "line_pct": pct,
+                  "status": status,
+                  "src": str(p),
+                })
+
+            expected_versions = ["1.22.x", "1.23.x", "1.24.x", "1.25.x"]
+            expected_os = ["linux", "macos", "windows"]
+
+            def score(e):
+              s = 0
+              if not is_placeholder(e["status"]):
+                s += 1000
+              return s + e["line_pct"]
+
+            best = {}
+            for e in raw:
+              k = (e["os"], e["ver_key"])
+              if k not in best or score(e) > score(best[k]):
+                best[k] = e
+
+            selected = []
+            for osn in expected_os:
+              for ver in expected_versions:
+                ver_key = sanitize_version(ver)
+                e = best.get((osn, ver_key))
+                fn = f"golang-{osn}-go{ver_key}.svg"
+                if e:
+                  msg = pct_msg(e["line_pct"], e["status"])
+                  write_badge(badges / fn, "cov", msg, e["status"])
+                  selected.append(e)
+                else:
+                  write_badge(badges / fn, "cov", "N/A", "na")
+
+            real = [e["line_pct"] for e in selected if not is_placeholder(e["status"])]
+            overall = statistics.mean(real) if real else 0.0
+            overall_msg = "N/A" if not real else f"{overall:.1f}%"
+            write_badge(badges / "golang-overall.svg", "cov", overall_msg, "placeholder" if not real else "ok")
+
+            (data / "golang-coverage.json").write_text(
+              json.dumps({"overall": overall if real else None, "entries": raw}, ensure_ascii=False, indent=2),
+              encoding="utf-8",
+            )
+
+            cols = expected_versions
+            def cell(osn, ver):
+              ver_key = sanitize_version(ver)
+              return f'<img alt="{osn}-go{ver}" src="badges/golang-{osn}-go{ver_key}.svg">'
+            rows = []
+            for osn in expected_os:
+              tds = "".join(f"<td>{cell(osn,ver)}</td>" for ver in cols)
+              rows.append(f"<tr><th>{osn}</th>{tds}</tr>")
+
+            header = "".join(f"<th>go{v}</th>" for v in cols)
+            (module_root / "index.html").write_text(
+              f"""<!doctype html>
+            <meta charset=\"utf-8\">
+            <meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">
+            <title>Go Coverage</title>
+            <h1>Go Coverage</h1>
+            <p><img alt=\"golang-overall\" src=\"badges/golang-overall.svg\"></p>
+            <table border=\"1\" cellpadding=\"6\" cellspacing=\"0\">
+              <thead><tr><th>os</th>{header}</tr></thead>
+              <tbody>{''.join(rows)}</tbody>
+            </table>
+            <p>Data: <a href=\"data/golang-coverage.json\">golang-coverage.json</a></p>
+            """,
+              encoding="utf-8",
+            )
+
+          build_cpp_module()
+          build_python_module()
+          build_rust_module()
+          build_dotnet_module()
+          build_golang_module()
+
+          Path("dist/.nojekyll").write_text("", encoding="utf-8")
           PY
 
-      # 兼容旧 README（/badges + /data），把 module 内的文件“映射”为旧文件名
-      - name: Publish Python compatibility paths (dist/badges, dist/data)
-        run: |
-          set -euo pipefail
-          python3 - <<'PY'
-          from pathlib import Path
-
-          src = Path("dist/modules/python-coverage/badges")
-          dst = Path("dist/badges")
-          dst.mkdir(parents=True, exist_ok=True)
-
-          # overall: python-overall.svg -> py-overall.svg
-          (dst/"py-overall.svg").write_bytes((src/"python-overall.svg").read_bytes())
-
-          # matrix: python-linux-py310.svg -> linux-py3.10.svg
-          mapping = {
-            "38": "3.8",
-            "39": "3.9",
-            "310": "3.10",
-            "311": "3.11",
-            "312": "3.12",
-            "313": "3.13",
-            "314": "3.14",
-          }
-          for osn in ("linux","macos","windows"):
-            for pyk, ver in mapping.items():
-              s = src / f"python-{osn}-py{pyk}.svg"
-              if s.exists():
-                (dst / f"{osn}-py{ver}.svg").write_bytes(s.read_bytes())
-          PY
-
-          mkdir -p dist/data
-          cp -f dist/modules/python-coverage/data/*.json dist/data/ 2>/dev/null || true
-
-      # ===== 5) 注入到 walkthrough 首页（始终执行：保持模块入口稳定）=====
       - name: Inject/Update coverage sections into walkthrough home
         if: always()
         run: |
@@ -493,33 +719,42 @@ jobs:
 
           html = home.read_text(encoding="utf-8", errors="ignore")
 
-          cpp_block = """
-          <hr>
-          <!-- MODULE:CPP_COVERAGE_BEGIN -->
-          <h2>C++ Coverage</h2>
-          <p>
-            <a href="modules/cpp-coverage/">
-              <img alt="overall" src="modules/cpp-coverage/badges/overall.svg">
-            </a>
-          </p>
-          <p><a href="modules/cpp-coverage/">Open C++ Coverage Dashboard</a></p>
-          <!-- MODULE:CPP_COVERAGE_END -->
-          """.strip()
+          blocks = [
+            (
+              "CPP",
+              "modules/cpp-coverage/",
+              "modules/cpp-coverage/badges/overall.svg",
+              "C++ Coverage",
+            ),
+            (
+              "PYTHON",
+              "modules/python-coverage/",
+              "modules/python-coverage/badges/python-overall.svg",
+              "Python Coverage",
+            ),
+            (
+              "RUST",
+              "modules/rust-coverage/",
+              "modules/rust-coverage/badges/rust-overall.svg",
+              "Rust Coverage",
+            ),
+            (
+              "DOTNET",
+              "modules/dotnet-coverage/",
+              "modules/dotnet-coverage/badges/dotnet-overall.svg",
+              ".NET Coverage",
+            ),
+            (
+              "GOLANG",
+              "modules/golang-coverage/",
+              "modules/golang-coverage/badges/golang-overall.svg",
+              "Go Coverage",
+            ),
+          ]
 
-          py_block = """
-          <hr>
-          <!-- MODULE:PYTHON_COVERAGE_BEGIN -->
-          <h2>Python Coverage</h2>
-          <p>
-            <a href="modules/python-coverage/">
-              <img alt="python-overall" src="modules/python-coverage/badges/python-overall.svg">
-            </a>
-          </p>
-          <p><a href="modules/python-coverage/">Open Python Coverage Dashboard</a></p>
-          <!-- MODULE:PYTHON_COVERAGE_END -->
-          """.strip()
-
-          def upsert(s: str, begin: str, end: str, block: str) -> str:
+          def upsert(s: str, tag: str, block: str) -> str:
+            begin = f"<!-- MODULE:{tag}_COVERAGE_BEGIN -->"
+            end = f"<!-- MODULE:{tag}_COVERAGE_END -->"
             pattern = re.compile(re.escape(begin) + r"(.|\n)*?" + re.escape(end), re.M)
             if pattern.search(s):
               return pattern.sub(block, s, count=1)
@@ -527,8 +762,20 @@ jobs:
               return s.replace("</body>", block + "\n</body>", 1)
             return s + "\n" + block + "\n"
 
-          html = upsert(html, "<!-- MODULE:CPP_COVERAGE_BEGIN -->", "<!-- MODULE:CPP_COVERAGE_END -->", cpp_block)
-          html = upsert(html, "<!-- MODULE:PYTHON_COVERAGE_BEGIN -->", "<!-- MODULE:PYTHON_COVERAGE_END -->", py_block)
+          for tag, href, badge, title in blocks:
+            block = f"""
+          <hr>
+          <!-- MODULE:{tag}_COVERAGE_BEGIN -->
+          <h2>{title}</h2>
+          <p>
+            <a href=\"{href}\">
+              <img alt=\"{tag.lower()}-overall\" src=\"{badge}\">
+            </a>
+          </p>
+          <p><a href=\"{href}\">Open {title} Dashboard</a></p>
+          <!-- MODULE:{tag}_COVERAGE_END -->
+            """.strip()
+            html = upsert(html, tag, block)
 
           home.write_text(html, encoding="utf-8")
           PY
