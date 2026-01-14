@@ -12,6 +12,7 @@ This file captures recent work plus portability guidance, grouped by language.
 - CI: language workflows ignore push-to-main; main branch runs only via `ci-main.yml` to prevent duplicate executions.
 - Coverage extractors: add Rust/Go/.NET cov.json extract scripts and wire workflows to parse real reports instead of placeholders.
 - Dev tool: add dotnet setup/build/test/coverage/fmt/bench/clean/install/uninstall/vet/guard commands; dotnet workflow now runs via `./dev` (linux/mac) or `python -m devtool.cli` (windows).
+- Dev tool: add build-docker/push-docker commands (Linux-only) with SSH_PRIVATE_KEY env requirement and docker.io login via DOCKER_USERNAME/DOCKER_PASSWORD.
 - Dev tool: go build now emits main-package binaries (if any) and logs when only library packages are compiled.
 - Dev tool: dotnet test/coverage now auto-roll forward to newer runtimes if net8 is missing (warns), while keeping net8 target frameworks.
 - Rust coverage: dev coverage resolves LLVM_COV/LLVM_PROFDATA via rustc sysroot (lib/rustlib/<host>/bin) plus rustup/xcrun/brew when llvm-tools-preview is unavailable.
