@@ -6,6 +6,7 @@ from devtool.commands import register
 from devtool.commands.common import base_env
 from devtool.commands.ops import (
     cpp as cpp_ops,
+    dotnet as dotnet_ops,
     export as export_ops,
     go as go_ops,
     python as python_ops,
@@ -19,7 +20,7 @@ if TYPE_CHECKING:
 @register("coverage")
 def configure(subparsers: ArgumentParser):
     parser = subparsers.add_parser("coverage", help="Generate coverage reports")
-    parser.add_argument("target", choices=["python", "go", "cpp", "rust", "all"], nargs="?", default="all", help="Target to cover")
+    parser.add_argument("target", choices=["python", "go", "cpp", "rust", "dotnet", "all"], nargs="?", default="all", help="Target to cover")
     parser.add_argument("--filter", help="Filter expression", dest="filter_expr")
     parser.add_argument("--file", help="File pattern")
     parser.add_argument("-v", "--verbose", action="store_true", help="Verbose test output")
@@ -40,3 +41,5 @@ def run(args):
         cpp_ops.coverage(env, file_pattern=args.file, filter_expr=args.filter_expr)
     if target in ("rust", "all"):
         rust_ops.coverage(env)
+    if target in ("dotnet", "all"):
+        dotnet_ops.coverage(env)

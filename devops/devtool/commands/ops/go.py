@@ -32,18 +32,27 @@ def setup(env: Mapping[str, str]) -> None:
 
 
 def build(env: Mapping[str, str]) -> None:
-    run([env["GO"], "build", "./..."], env=env, cwd=GO_DIR)
+    args = [env["GO"], "build"]
+    if str(env.get("VERBOSE", "")).strip().lower() in ("1", "true", "yes", "on"):
+        args.append("-v")
+    run(args + ["./..."], env=env, cwd=GO_DIR)
+    built = build_bins(env)
+    if built == 0:
+        print("[info] go build completed; no main packages to emit binaries")
 
 
-def build_bins(env: Mapping[str, str]) -> None:
+def build_bins(env: Mapping[str, str]) -> int:
     ensure_dir(Path(GO_DIR) / "bin")
     result = os.popen(f'cd "{GO_DIR}" && {env["GO"]} list -f "{{{{if eq .Name \\"main\\"}}}}{{{{.ImportPath}}}}|{{{{.Dir}}}}|{{{{.Name}}}}{{{{end}}}}" ./...').read().splitlines()
+    built = 0
     for line in result:
         if not line.strip():
             continue
         pkg, dir_path, _ = line.split("|")
         name = Path(dir_path).name
         run([env["GO"], "build", "-o", str(Path("bin") / name), pkg], env=env, cwd=GO_DIR)
+        built += 1
+    return built
 
 
 def test(env: Mapping[str, str], *, file_pattern: str | None, filter_expr: str | None) -> None:
