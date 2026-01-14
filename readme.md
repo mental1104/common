@@ -26,6 +26,36 @@
 | macos   | ![](https://mental1104.github.io/common/modules/python-coverage/badges/python-macos-py38.svg) | ![](https://mental1104.github.io/common/modules/python-coverage/badges/python-macos-py39.svg) | ![](https://mental1104.github.io/common/modules/python-coverage/badges/python-macos-py310.svg) | ![](https://mental1104.github.io/common/modules/python-coverage/badges/python-macos-py311.svg) | ![](https://mental1104.github.io/common/modules/python-coverage/badges/python-macos-py312.svg) | ![](https://mental1104.github.io/common/modules/python-coverage/badges/python-macos-py313.svg) | ![](https://mental1104.github.io/common/modules/python-coverage/badges/python-macos-py314.svg) |
 | windows | ![](https://mental1104.github.io/common/modules/python-coverage/badges/python-windows-py38.svg) | ![](https://mental1104.github.io/common/modules/python-coverage/badges/python-windows-py39.svg) | ![](https://mental1104.github.io/common/modules/python-coverage/badges/python-windows-py310.svg) | ![](https://mental1104.github.io/common/modules/python-coverage/badges/python-windows-py311.svg) | ![](https://mental1104.github.io/common/modules/python-coverage/badges/python-windows-py312.svg) | ![](https://mental1104.github.io/common/modules/python-coverage/badges/python-windows-py313.svg) | ![](https://mental1104.github.io/common/modules/python-coverage/badges/python-windows-py314.svg) |
 
+## Rust 覆盖率（按平台 / toolchain）
+
+[![Rust Coverage (overall)](https://mental1104.github.io/common/modules/rust-coverage/badges/rust-overall.svg)](https://mental1104.github.io/common/modules/rust-coverage/)
+
+| OS | stable | 1.85.0 |
+|---|---|---|
+| linux | ![](https://mental1104.github.io/common/modules/rust-coverage/badges/rust-linux-stable.svg) | ![](https://mental1104.github.io/common/modules/rust-coverage/badges/rust-linux-1850.svg) |
+| macos | ![](https://mental1104.github.io/common/modules/rust-coverage/badges/rust-macos-stable.svg) | ![](https://mental1104.github.io/common/modules/rust-coverage/badges/rust-macos-1850.svg) |
+| windows | ![](https://mental1104.github.io/common/modules/rust-coverage/badges/rust-windows-stable.svg) | ![](https://mental1104.github.io/common/modules/rust-coverage/badges/rust-windows-1850.svg) |
+
+## .NET 覆盖率（按平台 / 版本）
+
+[![.NET Coverage (overall)](https://mental1104.github.io/common/modules/dotnet-coverage/badges/dotnet-overall.svg)](https://mental1104.github.io/common/modules/dotnet-coverage/)
+
+| OS | 8.0.x |
+|---|---|
+| linux | ![](https://mental1104.github.io/common/modules/dotnet-coverage/badges/dotnet-linux-dotnet80x.svg) |
+| macos | ![](https://mental1104.github.io/common/modules/dotnet-coverage/badges/dotnet-macos-dotnet80x.svg) |
+| windows | ![](https://mental1104.github.io/common/modules/dotnet-coverage/badges/dotnet-windows-dotnet80x.svg) |
+
+## Go 覆盖率（按平台 / 版本）
+
+[![Go Coverage (overall)](https://mental1104.github.io/common/modules/golang-coverage/badges/golang-overall.svg)](https://mental1104.github.io/common/modules/golang-coverage/)
+
+| OS | 1.22.x | 1.23.x | 1.24.x | 1.25.x |
+|---|---|---|---|---|
+| linux | ![](https://mental1104.github.io/common/modules/golang-coverage/badges/golang-linux-go122x.svg) | ![](https://mental1104.github.io/common/modules/golang-coverage/badges/golang-linux-go123x.svg) | ![](https://mental1104.github.io/common/modules/golang-coverage/badges/golang-linux-go124x.svg) | ![](https://mental1104.github.io/common/modules/golang-coverage/badges/golang-linux-go125x.svg) |
+| macos | ![](https://mental1104.github.io/common/modules/golang-coverage/badges/golang-macos-go122x.svg) | ![](https://mental1104.github.io/common/modules/golang-coverage/badges/golang-macos-go123x.svg) | ![](https://mental1104.github.io/common/modules/golang-coverage/badges/golang-macos-go124x.svg) | ![](https://mental1104.github.io/common/modules/golang-coverage/badges/golang-macos-go125x.svg) |
+| windows | ![](https://mental1104.github.io/common/modules/golang-coverage/badges/golang-windows-go122x.svg) | ![](https://mental1104.github.io/common/modules/golang-coverage/badges/golang-windows-go123x.svg) | ![](https://mental1104.github.io/common/modules/golang-coverage/badges/golang-windows-go124x.svg) | ![](https://mental1104.github.io/common/modules/golang-coverage/badges/golang-windows-go125x.svg) |
+
 
 
 Python + C++ 混合工程，使用统一的 `dev` 命令驱动（macOS/Linux：`./dev`，Windows：`dev`）。子命令按语言拆分，后续扩展只需新增文件。

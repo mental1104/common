@@ -4,8 +4,11 @@ This file captures recent work plus portability guidance, grouped by language.
 
 ## General
 - 有关于仓库的公共规范在每次更新完代码后都往AGENTS.md里及时更新。
-- Walkthrough Pages: coverage run-id resolution falls back to the default branch when the triggering branch has no successful run, preventing missing modules.
-- Walkthrough Pages: deploy retries handle in-progress Pages deployments without relying on the Pages API.
+- Pages: build/deploy is triggered only by the main-branch meta workflow via workflow_call; coverage artifacts come from the same run (no workflow_run/run-id lookup).
+- Pages: deploy retries handle in-progress Pages deployments without relying on the Pages API.
+- Coverage artifacts: stash to `_cov/<lang>/<key>/cov.json` and upload as `<lang>-cov-*`; pages always generates per-language modules with N/A badges to avoid 404s.
+- Coverage modules: Rust/.NET/Go now emit per-OS, per-version badges and tables aligned to current CI matrices.
+- README: Rust/.NET/Go coverage sections show per-OS, per-version badge matrices.
 
 ### Performance: Non-IO Benchmark Protocol (must follow)
 
