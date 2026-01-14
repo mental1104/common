@@ -5,6 +5,7 @@ import re
 import shlex
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 from typing import Mapping
 
@@ -59,6 +60,172 @@ def _install_cargo_llvm_cov(env: Mapping[str, str], versions: list[str]) -> None
                     print(f"[warn] cargo-llvm-cov {version} install failed; trying older version")
     if last_exc:
         raise last_exc
+
+
+def _rustup_which(env: Mapping[str, str], tool: str) -> str:
+    try:
+        path = subprocess.check_output(
+            ["rustup", "which", tool],
+            env={k: str(v) for k, v in env.items()},
+            text=True,
+            stderr=subprocess.DEVNULL,
+        ).strip()
+    except (OSError, subprocess.CalledProcessError):
+        return ""
+    if not path:
+        return ""
+    p = Path(path)
+    return str(p) if p.is_file() else ""
+
+
+def _rustc_sysroot(env: Mapping[str, str]) -> str:
+    try:
+        return subprocess.check_output(
+            ["rustc", "--print", "sysroot"],
+            env={k: str(v) for k, v in env.items()},
+            text=True,
+        ).strip()
+    except (OSError, subprocess.CalledProcessError):
+        return ""
+
+
+def _rustc_host(env: Mapping[str, str]) -> str:
+    try:
+        out = subprocess.check_output(
+            ["rustc", "-vV"],
+            env={k: str(v) for k, v in env.items()},
+            text=True,
+        )
+    except (OSError, subprocess.CalledProcessError):
+        return ""
+    for line in out.splitlines():
+        if line.startswith("host:"):
+            return line.split(":", 1)[1].strip()
+    return ""
+
+
+def _rustc_tool_from_sysroot(env: Mapping[str, str], tool: str) -> str:
+    sysroot = _rustc_sysroot(env)
+    host = _rustc_host(env)
+    if not sysroot or not host:
+        return ""
+    cand = Path(sysroot) / "lib" / "rustlib" / host / "bin" / tool
+    return str(cand) if cand.is_file() else ""
+
+
+def _rustup_run_tool(env: Mapping[str, str], args: list[str]) -> str:
+    if not shutil.which("rustup"):
+        return ""
+    toolchain = (env.get("RUSTUP_TOOLCHAIN") or "").strip() or "stable"
+    try:
+        return subprocess.check_output(
+            ["rustup", "run", toolchain] + args,
+            env={k: str(v) for k, v in env.items()},
+            text=True,
+        ).strip()
+    except (OSError, subprocess.CalledProcessError):
+        return ""
+
+
+def _rustup_tool_from_sysroot(env: Mapping[str, str], tool: str) -> str:
+    sysroot = _rustup_run_tool(env, ["rustc", "--print", "sysroot"])
+    if not sysroot:
+        return ""
+    host = ""
+    rustc_v = _rustup_run_tool(env, ["rustc", "-vV"])
+    for line in rustc_v.splitlines():
+        if line.startswith("host:"):
+            host = line.split(":", 1)[1].strip()
+            break
+    if not host:
+        return ""
+    cand = Path(sysroot) / "lib" / "rustlib" / host / "bin" / tool
+    return str(cand) if cand.is_file() else ""
+
+
+def _is_truthy(value: str | None) -> bool:
+    if value is None:
+        return False
+    return str(value).strip().lower() in ("1", "true", "yes", "on")
+def _xcrun_find(env: Mapping[str, str], tool: str) -> str:
+    if os.name != "posix" or not sys.platform.startswith("darwin"):
+        return ""
+    try:
+        path = subprocess.check_output(
+            ["xcrun", "--find", tool],
+            env={k: str(v) for k, v in env.items()},
+            text=True,
+        ).strip()
+    except (OSError, subprocess.CalledProcessError):
+        return ""
+    if not path:
+        return ""
+    p = Path(path)
+    return str(p) if p.is_file() else ""
+
+
+def _brew_llvm_bin(env: Mapping[str, str], tool: str) -> str:
+    if not shutil.which("brew"):
+        return ""
+    try:
+        prefix = subprocess.check_output(
+            ["brew", "--prefix", "llvm"],
+            env={k: str(v) for k, v in env.items()},
+            text=True,
+        ).strip()
+    except (OSError, subprocess.CalledProcessError):
+        return ""
+    if not prefix:
+        return ""
+    cand = Path(prefix) / "bin" / tool
+    return str(cand) if cand.is_file() else ""
+
+
+def _resolve_llvm_tool(env: Mapping[str, str], tool: str, env_key: str) -> str:
+    provided = env.get(env_key, "")
+    if provided and Path(provided).is_file():
+        return provided
+    sysroot_path = _rustc_tool_from_sysroot(env, tool)
+    if sysroot_path:
+        return sysroot_path
+    rustup_sysroot_path = _rustup_tool_from_sysroot(env, tool)
+    if rustup_sysroot_path:
+        return rustup_sysroot_path
+    rustup_path = _rustup_which(env, tool)
+    if rustup_path:
+        return rustup_path
+    which_path = shutil.which(tool)
+    if which_path and Path(which_path).is_file():
+        return which_path
+    xcrun_path = _xcrun_find(env, tool)
+    if xcrun_path:
+        return xcrun_path
+    brew_path = _brew_llvm_bin(env, tool)
+    if brew_path:
+        return brew_path
+    return ""
+
+
+def _ensure_llvm_tools(env: Mapping[str, str]) -> dict[str, str]:
+    env_np = dict(env)
+    if not env_np.get("LLVM_COV") or not env_np.get("LLVM_PROFDATA"):
+        last_exc: Exception | None = None
+        for comp in ("llvm-tools-preview", "llvm-tools"):
+            try:
+                run(["rustup", "component", "add", comp], env=env_np)
+                last_exc = None
+                break
+            except Exception as exc:
+                last_exc = exc
+        if last_exc:
+            print(f"[warn] rustup component add llvm-tools failed: {last_exc}")
+    llvm_cov = _resolve_llvm_tool(env_np, "llvm-cov", "LLVM_COV")
+    if llvm_cov:
+        env_np["LLVM_COV"] = llvm_cov
+    llvm_profdata = _resolve_llvm_tool(env_np, "llvm-profdata", "LLVM_PROFDATA")
+    if llvm_profdata:
+        env_np["LLVM_PROFDATA"] = llvm_profdata
+    return env_np
 
 
 def setup(env: Mapping[str, str]) -> None:
@@ -150,7 +317,7 @@ def uninstall(env: Mapping[str, str]) -> None:
 
 def coverage(env: Mapping[str, str]) -> None:
     env_np = strip_proxies(env)
-    run(["rustup", "component", "add", "llvm-tools-preview"], env=env_np)
+    env_np = _ensure_llvm_tools(env_np)
     if not shutil.which("cargo-llvm-cov", path=env_np.get("PATH")):
         llvm_cov_version = env.get("RUST_LLVM_COV_VERSION", "")
         if llvm_cov_version:
@@ -163,7 +330,27 @@ def coverage(env: Mapping[str, str]) -> None:
                 versions = [""]
         _install_cargo_llvm_cov(env_np, versions)
     ignore = "(^|/)(tests?|benches?|examples)/"
-    run(["cargo", "llvm-cov", "--all-features", f"--ignore-filename-regex={ignore}", "--summary-only"], env=env_np, cwd=RUST_DIR)
+    if _is_truthy(env_np.get("RUST_COVER_XML")):
+        xml_out = env_np.get("RUST_COVER_XML_PATH", "coverage.xml")
+        run(
+            [
+                "cargo",
+                "llvm-cov",
+                "--all-features",
+                f"--ignore-filename-regex={ignore}",
+                "--cobertura",
+                "--output-path",
+                xml_out,
+            ],
+            env=env_np,
+            cwd=RUST_DIR,
+        )
+    else:
+        run(
+            ["cargo", "llvm-cov", "--all-features", f"--ignore-filename-regex={ignore}", "--summary-only"],
+            env=env_np,
+            cwd=RUST_DIR,
+        )
 
 
 def vet(env: Mapping[str, str]) -> None:

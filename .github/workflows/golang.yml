@@ -12,6 +12,8 @@ on:
         type: boolean
         default: true
   push:
+    branches-ignore:
+      - main
     paths:
       - "golang/**"
       - "devops/**"
@@ -91,31 +93,20 @@ jobs:
         if: ${{ matrix.go == '1.22.x' }}
         continue-on-error: true
         run: ./dev guard-go
-      - name: Extract cov.json (placeholder)
+      - name: Extract cov.json (never fail)
         if: always()
         continue-on-error: true
-        env:
-          GO_VERSION: ${{ matrix.go }}
         run: |
           set +e
-          if [ -f cov.json ]; then
-            exit 0
+          python3 tools/ci/extract_coverage_go.py \
+            --os linux \
+            --go "${{ matrix.go }}" \
+            --coverprofile golang/coverage.out \
+            --out cov.json || true
+
+          if [ ! -f cov.json ]; then
+            python3 -c "import json,os;obj={'lang':'golang','os':'linux','go':'${{ matrix.go }}','line_pct':0.0,'status':'placeholder','sha':os.getenv('GITHUB_SHA',''),'run_id':os.getenv('GITHUB_RUN_ID',''),'source':'placeholder'};json.dump(obj,open('cov.json','w',encoding='utf-8'),ensure_ascii=False,indent=2)"
           fi
-          python3 - <<'PY'
-          import json, os
-          obj = {
-            "lang": "golang",
-            "os": "linux",
-            "go": os.getenv("GO_VERSION", "unknown"),
-            "line_pct": 0.0,
-            "status": "placeholder",
-            "sha": os.getenv("GITHUB_SHA", ""),
-            "run_id": os.getenv("GITHUB_RUN_ID", ""),
-            "source": "placeholder",
-          }
-          with open("cov.json", "w", encoding="utf-8") as f:
-            json.dump(obj, f, ensure_ascii=False, indent=2)
-          PY
       - name: Stash coverage files (unique path)
         id: stash
         if: always()
@@ -178,31 +169,20 @@ jobs:
       - name: Coverage Go
         continue-on-error: true
         run: ./dev coverage-go
-      - name: Extract cov.json (placeholder)
+      - name: Extract cov.json (never fail)
         if: always()
         continue-on-error: true
-        env:
-          GO_VERSION: ${{ matrix.go }}
         run: |
           set +e
-          if [ -f cov.json ]; then
-            exit 0
+          python3 tools/ci/extract_coverage_go.py \
+            --os macos \
+            --go "${{ matrix.go }}" \
+            --coverprofile golang/coverage.out \
+            --out cov.json || true
+
+          if [ ! -f cov.json ]; then
+            python3 -c "import json,os;obj={'lang':'golang','os':'macos','go':'${{ matrix.go }}','line_pct':0.0,'status':'placeholder','sha':os.getenv('GITHUB_SHA',''),'run_id':os.getenv('GITHUB_RUN_ID',''),'source':'placeholder'};json.dump(obj,open('cov.json','w',encoding='utf-8'),ensure_ascii=False,indent=2)"
           fi
-          python3 - <<'PY'
-          import json, os
-          obj = {
-            "lang": "golang",
-            "os": "macos",
-            "go": os.getenv("GO_VERSION", "unknown"),
-            "line_pct": 0.0,
-            "status": "placeholder",
-            "sha": os.getenv("GITHUB_SHA", ""),
-            "run_id": os.getenv("GITHUB_RUN_ID", ""),
-            "source": "placeholder",
-          }
-          with open("cov.json", "w", encoding="utf-8") as f:
-            json.dump(obj, f, ensure_ascii=False, indent=2)
-          PY
       - name: Stash coverage files (unique path)
         id: stash
         if: always()
@@ -260,14 +240,15 @@ jobs:
       - name: Coverage Go
         continue-on-error: true
         run: python -m devtool.cli coverage-go
-      - name: Extract cov.json (placeholder)
+      - name: Extract cov.json (never fail)
         if: always()
         continue-on-error: true
-        env:
-          GO_VERSION: ${{ matrix.go }}
         run: |
-          if (Test-Path cov.json) { exit 0 }
-          python -c "import json,os; obj={'lang':'golang','os':'windows','go':os.getenv('GO_VERSION','unknown'),'line_pct':0.0,'status':'placeholder','sha':os.getenv('GITHUB_SHA',''),'run_id':os.getenv('GITHUB_RUN_ID',''),'source':'placeholder'}; json.dump(obj,open('cov.json','w',encoding='utf-8'),ensure_ascii=False,indent=2)"
+          python tools/ci/extract_coverage_go.py --os windows --go "${{ matrix.go }}" --coverprofile golang/coverage.out --out cov.json
+
+          if (-not (Test-Path cov.json)) {
+            python -c "import json,os; obj={'lang':'golang','os':'windows','go':'${{ matrix.go }}','line_pct':0.0,'status':'placeholder','sha':os.getenv('GITHUB_SHA',''),'run_id':os.getenv('GITHUB_RUN_ID',''),'source':'placeholder'}; json.dump(obj,open('cov.json','w',encoding='utf-8'),ensure_ascii=False,indent=2)"
+          }
       - name: Stash coverage files (unique path)
         id: stash
         if: always()

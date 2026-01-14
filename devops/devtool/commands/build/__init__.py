@@ -4,13 +4,13 @@ from argparse import ArgumentParser
 
 from devtool.commands import register
 from devtool.commands.common import base_env
-from devtool.commands.ops import cpp as cpp_ops, go as go_ops, python as python_ops, rust as rust_ops
+from devtool.commands.ops import cpp as cpp_ops, dotnet as dotnet_ops, go as go_ops, python as python_ops, rust as rust_ops
 
 
 @register("build")
 def configure(subparsers: ArgumentParser):
     parser = subparsers.add_parser("build", help="Build project components")
-    parser.add_argument("target", choices=["python", "cpp", "go", "rust", "all"], nargs="?", default="all", help="Target to build")
+    parser.add_argument("target", choices=["python", "cpp", "go", "rust", "dotnet", "all"], nargs="?", default="all", help="Target to build")
     parser.add_argument("--config", default="Debug", help="CMake build type for C++ targets")
     parser.add_argument("--jobs", type=int, help="Parallelism hint")
     parser.add_argument("--build-verbose", action="store_true", default=None, help="Print full CMake build commands")
@@ -44,3 +44,6 @@ def run(args):
     if target in ("rust", "all"):
         rust_ops.setup(env)
         rust_ops.build(env)
+    if target in ("dotnet", "all"):
+        dotnet_ops.setup(env)
+        dotnet_ops.build(env)

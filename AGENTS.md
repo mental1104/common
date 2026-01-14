@@ -9,6 +9,16 @@ This file captures recent work plus portability guidance, grouped by language.
 - Coverage artifacts: stash to `_cov/<lang>/<key>/cov.json` and upload as `<lang>-cov-*`; pages always generates per-language modules with N/A badges to avoid 404s.
 - Coverage modules: Rust/.NET/Go now emit per-OS, per-version badges and tables aligned to current CI matrices.
 - README: Rust/.NET/Go coverage sections show per-OS, per-version badge matrices.
+- CI: language workflows ignore push-to-main; main branch runs only via `ci-main.yml` to prevent duplicate executions.
+- Coverage extractors: add Rust/Go/.NET cov.json extract scripts and wire workflows to parse real reports instead of placeholders.
+- Dev tool: add dotnet setup/build/test/coverage/fmt/bench/clean/install/uninstall/vet/guard commands; dotnet workflow now runs via `./dev` (linux/mac) or `python -m devtool.cli` (windows).
+- Dev tool: go build now emits main-package binaries (if any) and logs when only library packages are compiled.
+- Dev tool: dotnet test/coverage now auto-roll forward to newer runtimes if net8 is missing (warns), while keeping net8 target frameworks.
+- Rust coverage: dev coverage resolves LLVM_COV/LLVM_PROFDATA via rustc sysroot (lib/rustlib/<host>/bin) plus rustup/xcrun/brew when llvm-tools-preview is unavailable.
+- Rust coverage: rustup lookup noise is suppressed; sysroot tools are preferred to avoid spurious errors.
+- Rust coverage: fallback now probes rustup toolchain sysroot (`RUSTUP_TOOLCHAIN` or stable) when PATH rustc lacks llvm tools.
+- Rust coverage: set `RUST_COVER_XML=1` (optional `RUST_COVER_XML_PATH`) to make `./dev coverage-rust` emit Cobertura XML for local cov.json extraction.
+- Rust coverage: Cobertura XML is generated under `rust/mental1104/coverage.xml` to match the crate root.
 
 ### Performance: Non-IO Benchmark Protocol (must follow)
 

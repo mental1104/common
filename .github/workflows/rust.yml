@@ -8,6 +8,8 @@ on:
         type: boolean
         default: true
   push:
+    branches-ignore:
+      - main
     paths:
       - "rust/**"
       - "devops/**"
@@ -89,32 +91,27 @@ jobs:
         if: ${{ matrix.toolchain == 'stable' }}
         continue-on-error: true
         run: ./dev guard-rust
-      - name: Extract cov.json (placeholder)
+      - name: Export coverage.xml (never fail)
         if: always()
         continue-on-error: true
-        env:
-          RUST_OS: linux
-          RUST_TOOLCHAIN: ${{ matrix.toolchain }}
         run: |
           set +e
-          if [ -f cov.json ]; then
-            exit 0
+          (cd rust/mental1104 && cargo llvm-cov --all-features --ignore-filename-regex='(^|/)(tests?|benches?|examples)/' --cobertura --output-path coverage.xml) || true
+
+      - name: Extract cov.json (never fail)
+        if: always()
+        continue-on-error: true
+        run: |
+          set +e
+          python3 tools/ci/extract_coverage_rust.py \
+            --os linux \
+            --toolchain "${{ matrix.toolchain }}" \
+            --xml rust/mental1104/coverage.xml \
+            --out cov.json || true
+
+          if [ ! -f cov.json ]; then
+            python3 -c "import json,os;obj={'lang':'rust','os':'linux','toolchain':os.getenv('RUST_TOOLCHAIN','${{ matrix.toolchain }}'),'line_pct':0.0,'status':'placeholder','sha':os.getenv('GITHUB_SHA',''),'run_id':os.getenv('GITHUB_RUN_ID',''),'source':'placeholder'};json.dump(obj,open('cov.json','w',encoding='utf-8'),ensure_ascii=False,indent=2)"
           fi
-          python3 - <<'PY'
-          import json, os
-          obj = {
-            "lang": "rust",
-            "os": os.getenv("RUST_OS", "linux"),
-            "toolchain": os.getenv("RUST_TOOLCHAIN", "unknown"),
-            "line_pct": 0.0,
-            "status": "placeholder",
-            "sha": os.getenv("GITHUB_SHA", ""),
-            "run_id": os.getenv("GITHUB_RUN_ID", ""),
-            "source": "placeholder",
-          }
-          with open("cov.json", "w", encoding="utf-8") as f:
-            json.dump(obj, f, ensure_ascii=False, indent=2)
-          PY
       - name: Stash coverage files (unique path)
         id: stash
         if: always()
@@ -175,32 +172,27 @@ jobs:
       - name: Coverage Rust
         continue-on-error: true
         run: ./dev coverage-rust
-      - name: Extract cov.json (placeholder)
+      - name: Export coverage.xml (never fail)
         if: always()
         continue-on-error: true
-        env:
-          RUST_OS: macos
-          RUST_TOOLCHAIN: stable
         run: |
           set +e
-          if [ -f cov.json ]; then
-            exit 0
+          (cd rust/mental1104 && cargo llvm-cov --all-features --ignore-filename-regex='(^|/)(tests?|benches?|examples)/' --cobertura --output-path coverage.xml) || true
+
+      - name: Extract cov.json (never fail)
+        if: always()
+        continue-on-error: true
+        run: |
+          set +e
+          python3 tools/ci/extract_coverage_rust.py \
+            --os macos \
+            --toolchain "stable" \
+            --xml rust/mental1104/coverage.xml \
+            --out cov.json || true
+
+          if [ ! -f cov.json ]; then
+            python3 -c "import json,os;obj={'lang':'rust','os':'macos','toolchain':'stable','line_pct':0.0,'status':'placeholder','sha':os.getenv('GITHUB_SHA',''),'run_id':os.getenv('GITHUB_RUN_ID',''),'source':'placeholder'};json.dump(obj,open('cov.json','w',encoding='utf-8'),ensure_ascii=False,indent=2)"
           fi
-          python3 - <<'PY'
-          import json, os
-          obj = {
-            "lang": "rust",
-            "os": os.getenv("RUST_OS", "macos"),
-            "toolchain": os.getenv("RUST_TOOLCHAIN", "stable"),
-            "line_pct": 0.0,
-            "status": "placeholder",
-            "sha": os.getenv("GITHUB_SHA", ""),
-            "run_id": os.getenv("GITHUB_RUN_ID", ""),
-            "source": "placeholder",
-          }
-          with open("cov.json", "w", encoding="utf-8") as f:
-            json.dump(obj, f, ensure_ascii=False, indent=2)
-          PY
       - name: Stash coverage files (unique path)
         id: stash
         if: always()
@@ -255,12 +247,24 @@ jobs:
       - name: Coverage Rust
         continue-on-error: true
         run: python -m devtool.cli coverage-rust
-      - name: Extract cov.json (placeholder)
+      - name: Export coverage.xml (never fail)
         if: always()
         continue-on-error: true
         run: |
-          if (Test-Path cov.json) { exit 0 }
-          python -c "import json,os; obj={'lang':'rust','os':'windows','toolchain':'stable','line_pct':0.0,'status':'placeholder','sha':os.getenv('GITHUB_SHA',''),'run_id':os.getenv('GITHUB_RUN_ID',''),'source':'placeholder'}; json.dump(obj,open('cov.json','w',encoding='utf-8'),ensure_ascii=False,indent=2)"
+          $ErrorActionPreference = "Continue"
+          Push-Location rust/mental1104
+          cargo llvm-cov --all-features --ignore-filename-regex="(^|/)(tests?|benches?|examples)/" --cobertura --output-path coverage.xml
+          Pop-Location
+
+      - name: Extract cov.json (never fail)
+        if: always()
+        continue-on-error: true
+        run: |
+          python tools/ci/extract_coverage_rust.py --os windows --toolchain "stable" --xml rust/mental1104/coverage.xml --out cov.json
+
+          if (-not (Test-Path cov.json)) {
+            python -c "import json,os; obj={'lang':'rust','os':'windows','toolchain':'stable','line_pct':0.0,'status':'placeholder','sha':os.getenv('GITHUB_SHA',''),'run_id':os.getenv('GITHUB_RUN_ID',''),'source':'placeholder'}; json.dump(obj,open('cov.json','w',encoding='utf-8'),ensure_ascii=False,indent=2)"
+          }
       - name: Stash coverage files (unique path)
         id: stash
         if: always()

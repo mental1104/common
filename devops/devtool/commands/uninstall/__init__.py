@@ -6,6 +6,7 @@ from devtool.commands import register
 from devtool.commands.common import base_env
 from devtool.commands.ops import (
     cpp as cpp_ops,
+    dotnet as dotnet_ops,
     go as go_ops,
     python as python_ops,
     rust as rust_ops,
@@ -18,7 +19,7 @@ if TYPE_CHECKING:
 @register("uninstall")
 def configure(subparsers: ArgumentParser):
     parser = subparsers.add_parser("uninstall", help="Uninstall installed artifacts")
-    parser.add_argument("target", choices=["python", "go", "cpp", "rust", "all"], nargs="?", default="all", help="Target to uninstall")
+    parser.add_argument("target", choices=["python", "go", "cpp", "rust", "dotnet", "all"], nargs="?", default="all", help="Target to uninstall")
     parser.add_argument("-v", "--verbose", action="store_true", help="Verbose output")
     parser.add_argument("--jobs", type=int, help="Parallelism hint")
     parser.set_defaults(_runner=run)
@@ -35,3 +36,5 @@ def run(args):
         cpp_ops.uninstall(env)
     if args.target in ("rust", "all"):
         rust_ops.uninstall(env)
+    if args.target in ("dotnet", "all"):
+        dotnet_ops.uninstall(env)

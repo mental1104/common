@@ -6,6 +6,7 @@ from devtool.commands import register
 from devtool.commands.common import ROOT, base_env
 from devtool.commands.ops import (
     cpp as cpp_ops,
+    dotnet as dotnet_ops,
     go as go_ops,
     python as python_ops,
     rust as rust_ops,
@@ -56,3 +57,4 @@ def run(args):
     cpp_ops.prepare_submodules(env, skip_when_ready=True)
     cpp_ops.configure(env)
     rust_ops.setup(env)
+    dotnet_ops.setup(env)

@@ -6,6 +6,7 @@ from devtool.commands import register
 from devtool.commands.common import base_env
 from devtool.commands.ops import (
     cpp as cpp_ops,
+    dotnet as dotnet_ops,
     go as go_ops,
     python as python_ops,
     rust as rust_ops,
@@ -18,7 +19,7 @@ if TYPE_CHECKING:
 @register("guard")
 def configure(subparsers: ArgumentParser):
     parser = subparsers.add_parser("guard", help="Run diagnostic guards (sanitizers/race checks)")
-    parser.add_argument("target", choices=["python", "go", "cpp", "rust", "all"], nargs="?", default="all", help="Target to guard")
+    parser.add_argument("target", choices=["python", "go", "cpp", "rust", "dotnet", "all"], nargs="?", default="all", help="Target to guard")
     parser.add_argument("--mode", help="Guard mode (for C++/Rust)", choices=["mem", "race", "miri", "heap", "all"], default=None)
     parser.add_argument("--filter", help="Filter expression", dest="filter_expr")
     parser.add_argument("--file", help="File pattern")
@@ -38,3 +39,5 @@ def run(args):
         cpp_ops.guard(env, mode=args.mode)
     if args.target in ("rust", "all"):
         rust_ops.guard(env, mode=args.mode)
+    if args.target in ("dotnet", "all"):
+        dotnet_ops.guard(env)

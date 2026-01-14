@@ -78,6 +78,7 @@ def base_env(
     env.setdefault("CTEST", "ctest")
     env.setdefault("GCOV", env.get("GCOV", "gcov"))
     env.setdefault("GO", "go")
+    env.setdefault("DOTNET", "dotnet")
     uid = env.get("UID")
     if uid is None:
         try:
@@ -104,6 +105,8 @@ def base_env(
     env.setdefault("PYTEST_V", "-vv" if env["TEST_VERBOSE"] == "1" else "-q")
     env.setdefault("GO_TEST_V", "-v" if env["TEST_VERBOSE"] == "1" else "")
     env.setdefault("CARGO_TEST_V", "-v" if env["TEST_VERBOSE"] == "1" else "")
+    env.setdefault("DOTNET_CONFIGURATION", env.get("DOTNET_CONFIGURATION", "Release"))
+    env.setdefault("DOTNET_TEST_NO_BUILD", env.get("DOTNET_TEST_NO_BUILD", "0"))
     env.setdefault("PY_BENCHMARK_OPTS", "--benchmark-name=short --benchmark-sort=name")
     env.setdefault("PY_BENCHMARK_CONCURRENCY_OPTS", "--benchmark-max-time=0.25 --benchmark-min-rounds=3")
     env.setdefault("PYTEST_BENCH_K", "bench or benchmark")

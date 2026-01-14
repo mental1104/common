@@ -8,6 +8,8 @@ on:
         type: boolean
         default: true
   push:
+    branches-ignore:
+      - main
     paths:
       - "dotnet/**"
       - "devops/**"
@@ -35,10 +37,12 @@ jobs:
       fail-fast: false
       matrix:
         dotnet: ["8.0.x"]
+    env:
+      PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/devops
     defaults:
       run:
         shell: bash
-        working-directory: dotnet
+        working-directory: ${{ github.workspace }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -49,45 +53,31 @@ jobs:
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: ${{ matrix.dotnet }}
-      - name: Restore
+      - name: Setup .NET
         continue-on-error: true
-        run: dotnet restore mental1104.sln
-      - name: Build
+        run: ./dev setup-dotnet
+      - name: Build .NET
         continue-on-error: true
-        run: dotnet build mental1104.sln --configuration Release --no-restore
-      - name: Coverage
+        run: ./dev build-dotnet
+      - name: Coverage .NET
         continue-on-error: true
-        run: |
-          if [ -n "${DOTNET_TEST_LOGGER}" ]; then
-            dotnet test mental1104.sln --configuration Release --no-build --collect:"XPlat Code Coverage" --logger "${DOTNET_TEST_LOGGER}"
-          else
-            dotnet test mental1104.sln --configuration Release --no-build --collect:"XPlat Code Coverage"
-          fi
-      - name: Extract cov.json (placeholder)
+        env:
+          DOTNET_TEST_NO_BUILD: "1"
+        run: ./dev coverage-dotnet
+      - name: Extract cov.json (never fail)
         if: always()
         continue-on-error: true
         run: |
           set +e
-          if [ -f cov.json ]; then
-            exit 0
+          python3 tools/ci/extract_coverage_dotnet.py \
+            --os linux \
+            --dotnet "${{ matrix.dotnet }}" \
+            --root dotnet \
+            --out cov.json || true
+
+          if [ ! -f cov.json ]; then
+            python3 -c "import json,os;obj={'lang':'dotnet','os':'linux','dotnet':'${{ matrix.dotnet }}','line_pct':0.0,'status':'placeholder','sha':os.getenv('GITHUB_SHA',''),'run_id':os.getenv('GITHUB_RUN_ID',''),'source':'placeholder'};json.dump(obj,open('cov.json','w',encoding='utf-8'),ensure_ascii=False,indent=2)"
           fi
-          python3 - <<'PY'
-          import json, os
-          obj = {
-            "lang": "dotnet",
-            "os": "linux",
-            "dotnet": os.getenv("DOTNET_VERSION", "unknown"),
-            "line_pct": 0.0,
-            "status": "placeholder",
-            "sha": os.getenv("GITHUB_SHA", ""),
-            "run_id": os.getenv("GITHUB_RUN_ID", ""),
-            "source": "placeholder",
-          }
-          with open("cov.json", "w", encoding="utf-8") as f:
-            json.dump(obj, f, ensure_ascii=False, indent=2)
-          PY
-        env:
-          DOTNET_VERSION: ${{ matrix.dotnet }}
       - name: Stash coverage files (unique path)
         id: stash
         if: always()
@@ -116,10 +106,12 @@ jobs:
       fail-fast: false
       matrix:
         dotnet: ["8.0.x"]
+    env:
+      PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/devops
     defaults:
       run:
         shell: bash
-        working-directory: dotnet
+        working-directory: ${{ github.workspace }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -130,45 +122,31 @@ jobs:
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: ${{ matrix.dotnet }}
-      - name: Restore
+      - name: Setup .NET
         continue-on-error: true
-        run: dotnet restore mental1104.sln
-      - name: Build
+        run: ./dev setup-dotnet
+      - name: Build .NET
         continue-on-error: true
-        run: dotnet build mental1104.sln --configuration Release --no-restore
-      - name: Coverage
+        run: ./dev build-dotnet
+      - name: Coverage .NET
         continue-on-error: true
-        run: |
-          if [ -n "${DOTNET_TEST_LOGGER}" ]; then
-            dotnet test mental1104.sln --configuration Release --no-build --collect:"XPlat Code Coverage" --logger "${DOTNET_TEST_LOGGER}"
-          else
-            dotnet test mental1104.sln --configuration Release --no-build --collect:"XPlat Code Coverage"
-          fi
-      - name: Extract cov.json (placeholder)
+        env:
+          DOTNET_TEST_NO_BUILD: "1"
+        run: ./dev coverage-dotnet
+      - name: Extract cov.json (never fail)
         if: always()
         continue-on-error: true
         run: |
           set +e
-          if [ -f cov.json ]; then
-            exit 0
+          python3 tools/ci/extract_coverage_dotnet.py \
+            --os macos \
+            --dotnet "${{ matrix.dotnet }}" \
+            --root dotnet \
+            --out cov.json || true
+
+          if [ ! -f cov.json ]; then
+            python3 -c "import json,os;obj={'lang':'dotnet','os':'macos','dotnet':'${{ matrix.dotnet }}','line_pct':0.0,'status':'placeholder','sha':os.getenv('GITHUB_SHA',''),'run_id':os.getenv('GITHUB_RUN_ID',''),'source':'placeholder'};json.dump(obj,open('cov.json','w',encoding='utf-8'),ensure_ascii=False,indent=2)"
           fi
-          python3 - <<'PY'
-          import json, os
-          obj = {
-            "lang": "dotnet",
-            "os": "macos",
-            "dotnet": os.getenv("DOTNET_VERSION", "unknown"),
-            "line_pct": 0.0,
-            "status": "placeholder",
-            "sha": os.getenv("GITHUB_SHA", ""),
-            "run_id": os.getenv("GITHUB_RUN_ID", ""),
-            "source": "placeholder",
-          }
-          with open("cov.json", "w", encoding="utf-8") as f:
-            json.dump(obj, f, ensure_ascii=False, indent=2)
-          PY
-        env:
-          DOTNET_VERSION: ${{ matrix.dotnet }}
       - name: Stash coverage files (unique path)
         id: stash
         if: always()
@@ -197,10 +175,12 @@ jobs:
       fail-fast: false
       matrix:
         dotnet: ["8.0.x"]
+    env:
+      PYTHONPATH: ${{ github.workspace }};${{ github.workspace }}/devops
     defaults:
       run:
         shell: pwsh
-        working-directory: dotnet
+        working-directory: ${{ github.workspace }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -211,28 +191,26 @@ jobs:
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: ${{ matrix.dotnet }}
-      - name: Restore
+      - name: Setup .NET
         continue-on-error: true
-        run: dotnet restore mental1104.sln
-      - name: Build
+        run: python -m devtool.cli setup-dotnet
+      - name: Build .NET
         continue-on-error: true
-        run: dotnet build mental1104.sln --configuration Release --no-restore
-      - name: Coverage
+        run: python -m devtool.cli build-dotnet
+      - name: Coverage .NET
         continue-on-error: true
-        run: |
-          if ($env:DOTNET_TEST_LOGGER) {
-            dotnet test mental1104.sln --configuration Release --no-build --collect:"XPlat Code Coverage" --logger $env:DOTNET_TEST_LOGGER
-          } else {
-            dotnet test mental1104.sln --configuration Release --no-build --collect:"XPlat Code Coverage"
-          }
-      - name: Extract cov.json (placeholder)
+        env:
+          DOTNET_TEST_NO_BUILD: "1"
+        run: python -m devtool.cli coverage-dotnet
+      - name: Extract cov.json (never fail)
         if: always()
         continue-on-error: true
         run: |
-          if (Test-Path cov.json) { exit 0 }
-          python -c "import json,os; obj={'lang':'dotnet','os':'windows','dotnet':os.getenv('DOTNET_VERSION','unknown'),'line_pct':0.0,'status':'placeholder','sha':os.getenv('GITHUB_SHA',''),'run_id':os.getenv('GITHUB_RUN_ID',''),'source':'placeholder'}; json.dump(obj,open('cov.json','w',encoding='utf-8'),ensure_ascii=False,indent=2)"
-        env:
-          DOTNET_VERSION: ${{ matrix.dotnet }}
+          python tools/ci/extract_coverage_dotnet.py --os windows --dotnet "${{ matrix.dotnet }}" --root dotnet --out cov.json
+
+          if (-not (Test-Path cov.json)) {
+            python -c "import json,os; obj={'lang':'dotnet','os':'windows','dotnet':'${{ matrix.dotnet }}','line_pct':0.0,'status':'placeholder','sha':os.getenv('GITHUB_SHA',''),'run_id':os.getenv('GITHUB_RUN_ID',''),'source':'placeholder'}; json.dump(obj,open('cov.json','w',encoding='utf-8'),ensure_ascii=False,indent=2)"
+          }
       - name: Stash coverage files (unique path)
         id: stash
         if: always()

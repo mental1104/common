@@ -6,6 +6,7 @@ from devtool.commands import register
 from devtool.commands.common import ROOT, base_env
 from devtool.commands.ops import (
     cpp as cpp_ops,
+    dotnet as dotnet_ops,
     go as go_ops,
     python as python_ops,
     rust as rust_ops,
@@ -23,7 +24,7 @@ def _clean_env_files() -> None:
 
 
 def _add_common_args(parser: ArgumentParser) -> None:
-    parser.add_argument("target", choices=["python", "go", "cpp", "rust", "all"], nargs="?", default="all", help="Target to clean")
+    parser.add_argument("target", choices=["python", "go", "cpp", "rust", "dotnet", "all"], nargs="?", default="all", help="Target to clean")
     parser.add_argument("--jobs", type=int, help="Parallelism hint")
     parser.add_argument("-v", "--verbose", action="store_true", help="Verbose output")
 
@@ -57,5 +58,7 @@ def run(args, *, clean_submodules: bool | None = None):
         cpp_ops.clean(env, clean_submodules=clean_submods)
     if args.target in ("rust", "all"):
         rust_ops.clean(env)
+    if args.target in ("dotnet", "all"):
+        dotnet_ops.clean(env)
     if args.target == "all":
         _clean_env_files()

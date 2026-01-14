@@ -7,6 +7,7 @@ from devtool.commands import register
 from devtool.commands.common import base_env
 from devtool.commands.ops import (
     cpp as cpp_ops,
+    dotnet as dotnet_ops,
     export as export_ops,
     go as go_ops,
     python as python_ops,
@@ -21,7 +22,7 @@ if TYPE_CHECKING:
 @register("bench")
 def configure(subparsers: ArgumentParser):
     parser = subparsers.add_parser("bench", help="Run benchmarks")
-    parser.add_argument("target", choices=["python", "go", "cpp", "rust", "all"], nargs="?", default="all", help="Target to benchmark")
+    parser.add_argument("target", choices=["python", "go", "cpp", "rust", "dotnet", "all"], nargs="?", default="all", help="Target to benchmark")
     parser.add_argument("--filter", help="Filter expression", dest="filter_expr")
     parser.add_argument("--file", help="File pattern")
     parser.add_argument("-v", "--verbose", action="store_true", help="Verbose output")
@@ -45,6 +46,9 @@ def run(args):
         ran = True
     if args.target in ("rust", "all"):
         rust_ops.bench(env, file_pattern=args.file, filter_expr=args.filter_expr)
+        ran = True
+    if args.target in ("dotnet", "all"):
+        dotnet_ops.bench(env, file_pattern=args.file, filter_expr=args.filter_expr)
         ran = True
     if ran:
         root = Path(env["BENCH_ARTIFACT_ROOT"])
