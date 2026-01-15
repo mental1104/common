@@ -47,24 +47,61 @@ def _compose_container_names(compose_file: Path) -> set[str]:
     return names
 
 
+def _compose_cmd_ok(cmd: list[str]) -> bool:
+    if not cmd or not shutil.which(cmd[0]):
+        return False
+    try:
+        res = subprocess.run([*cmd, "version"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        return res.returncode == 0
+    except Exception:
+        return False
+
+
 def _detect_compose(env: Mapping[str, str]) -> Optional[list[str]]:
-    """Return compose command argv if available; otherwise None."""
+    """Return compose command argv if available; prefer docker compose."""
     user = env.get("COMPOSE_BIN")
     if user:
         cmd = shlex.split(user)
-        if shutil.which(cmd[0]):
+        if _compose_cmd_ok(cmd):
             return cmd
-    if shutil.which("docker-compose"):
-        return ["docker-compose"]
     docker_bin = shutil.which("docker")
-    if docker_bin:
-        try:
-            res = subprocess.run([docker_bin, "compose", "version"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            if res.returncode == 0:
-                return [docker_bin, "compose"]
-        except Exception:
-            pass
+    if docker_bin and _compose_cmd_ok([docker_bin, "compose"]):
+        return [docker_bin, "compose"]
+    if _compose_cmd_ok(["docker-compose"]):
+        return ["docker-compose"]
     return None
+
+
+def run_docker(env: Mapping[str, str]) -> None:
+    compose_cmd = _detect_compose(env)
+    if compose_cmd is None:
+        print("[warn] 未检测到 docker compose（docker compose 或 docker-compose），跳过 run-docker")
+        return
+    compose_file = ROOT / env.get("COMPOSE_FILE_NAME", "docker-compose.yaml")
+    if not compose_file.exists():
+        print(f"[warn] 未找到 {compose_file}，跳过 run-docker")
+        return
+    env_src, _ = _env_files()
+    env_file_opt: Iterable[str] = ["--env-file", str(env_src)] if env_src.exists() else []
+    cmd_base = [*compose_cmd, "-f", str(compose_file), *env_file_opt]
+    try:
+        res = subprocess.run(
+            [*cmd_base, "ps", "-q"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+            env={k: str(v) for k, v in env.items()},
+        )
+    except Exception:
+        res = None
+    running = bool(res and res.returncode == 0 and res.stdout.strip())
+    if running:
+        print(">> DOWN (root compose)")
+        run([*cmd_base, "down"], env=env)
+    else:
+        print("[skip] compose 未在运行，跳过 down")
+    print(">> UP (root compose)")
+    run([*cmd_base, "up", "-d"], env=env)
 
 
 def _env_files() -> tuple[Path, Path]:
