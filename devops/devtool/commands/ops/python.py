@@ -345,7 +345,14 @@ def install(env: Mapping[str, str]) -> None:
     break_flag = env.get("BREAK_FLAG", "")
     pip3 = env.get("PIP3", "pip3")
     mirror_args = _pip_mirror_args(run_env)
-    run([pip3, "install", "--upgrade", *mirror_args, "pip", "setuptools", "wheel", *break_flag.split()], env=run_env)
+    try:
+        run([pip3, "install", "--upgrade", *mirror_args, "pip", "setuptools", "wheel", *break_flag.split()], env=run_env)
+    except Exception:
+        print("[warn] pip upgrade failed; retrying with --ignore-installed")
+        run(
+            [pip3, "install", "--upgrade", "--ignore-installed", *mirror_args, "pip", "setuptools", "wheel", *break_flag.split()],
+            env=run_env,
+        )
     export_dir = ROOT / "export" / "python"
     if wheel_candidates:
         wheel = sorted(wheel_candidates)[-1]
@@ -378,6 +385,7 @@ def clean(_env: Mapping[str, str]) -> None:
     shutil.rmtree(PY_DIR / "build", ignore_errors=True)
     shutil.rmtree(PY_DIR / "dist", ignore_errors=True)
     shutil.rmtree(PY_DIR / ".venv", ignore_errors=True)
+    shutil.rmtree(EXPORT_CPP_BUILD_DIR, ignore_errors=True)
     for pattern in ["*.egg-info", ".pytest_cache", ".mypy_cache", ".ruff_cache", ".benchmarks"]:
         for p in PY_DIR.glob(pattern):
             if p.is_dir():

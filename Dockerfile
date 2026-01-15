@@ -1,5 +1,14 @@
-# syntax=docker/dockerfile:1.7
-FROM ubuntu:24.04
+ARG BASE_IMAGE=ubuntu:24.04
+FROM ${BASE_IMAGE}
+
+ARG HTTP_PROXY
+ARG HTTPS_PROXY
+ARG NO_PROXY
+ARG ALL_PROXY
+ARG http_proxy
+ARG https_proxy
+ARG no_proxy
+ARG all_proxy
 
 ENV DEBIAN_FRONTEND=noninteractive \
     LANG=C.UTF-8 \
@@ -13,27 +22,41 @@ RUN chmod 1777 /tmp
 #    说明：这里不要做 apt upgrade，会降低可复现性且让缓存价值变差
 # -----------------------------
 RUN set -eux; \
-    cat > /etc/apt/sources.list <<'EOF' \
-deb http://mirrors.aliyun.com/ubuntu/ noble main restricted universe multiverse \
-deb http://mirrors.aliyun.com/ubuntu/ noble-updates main restricted universe multiverse \
-deb http://mirrors.aliyun.com/ubuntu/ noble-backports main restricted universe multiverse \
-deb http://mirrors.aliyun.com/ubuntu/ noble-security main restricted universe multiverse \
-EOF \
-    ; \
-    echo "deb https://mirrors.tuna.tsinghua.edu.cn/clickhouse/deb stable main" > /etc/apt/sources.list.d/clickhouse.list
+    printf '%s\n' \
+      'deb http://mirrors.aliyun.com/ubuntu/ noble main restricted universe multiverse' \
+      'deb http://mirrors.aliyun.com/ubuntu/ noble-updates main restricted universe multiverse' \
+      'deb http://mirrors.aliyun.com/ubuntu/ noble-backports main restricted universe multiverse' \
+      'deb http://mirrors.aliyun.com/ubuntu/ noble-security main restricted universe multiverse' \
+      > /etc/apt/sources.list
 
 RUN --mount=type=cache,target=/var/cache/apt \
     --mount=type=cache,target=/var/lib/apt \
     set -eux; \
-    apt-get update; \
-    apt-get install -y --no-install-recommends \
+    APT_ENV="env -u HTTP_PROXY -u HTTPS_PROXY -u NO_PROXY -u ALL_PROXY -u http_proxy -u https_proxy -u no_proxy -u all_proxy"; \
+    $APT_ENV apt-get update; \
+    $APT_ENV apt-get install -y --no-install-recommends ca-certificates gnupg curl; \
+    update-ca-certificates; \
+    clickhouse_key_tmp="$(mktemp)"; \
+    if curl -fsSL https://packages.clickhouse.com/CLICKHOUSE-KEY.GPG -o "$clickhouse_key_tmp" \
+      || curl -fsSL https://mirrors.tuna.tsinghua.edu.cn/clickhouse/deb/CLICKHOUSE-KEY.GPG -o "$clickhouse_key_tmp"; then \
+        gpg --dearmor -o /usr/share/keyrings/clickhouse.gpg "$clickhouse_key_tmp"; \
+        echo "deb [signed-by=/usr/share/keyrings/clickhouse.gpg] https://mirrors.tuna.tsinghua.edu.cn/clickhouse/deb stable main" \
+          > /etc/apt/sources.list.d/clickhouse.list; \
+        $APT_ENV apt-get update; \
+        install_clickhouse=1; \
+    else \
+        echo "[warn] clickhouse key fetch failed; skipping clickhouse repo"; \
+        install_clickhouse=0; \
+    fi; \
+    rm -f "$clickhouse_key_tmp"; \
+    $APT_ENV apt-get install -y --no-install-recommends \
       # 构建/调试基础
       build-essential gcc g++ make cmake pkg-config clang clangd clang-format \
       gdb gdb-multiarch strace ltrace \
       # 依赖库
       libpq-dev zlib1g-dev libffi-dev libssl-dev libbz2-dev liblzma-dev \
       libpcap-dev libglib2.0-dev libpixman-1-dev \
-      libtinfo6 libncurses-dev libncursesw5 openssl \
+      libtinfo6 libncurses-dev libncursesw6 openssl \
       libgtest-dev libbenchmark-dev libboost-all-dev lcov \
       libmpfr-dev libgmp-dev \
       # 网络/运维工具
@@ -41,17 +64,27 @@ RUN --mount=type=cache,target=/var/cache/apt \
       netcat-openbsd telnet tcpdump iptables iputils-ping \
       openssh-server cron logrotate \
       # DB/中间件客户端
-      redis-tools mongodb-clients postgresql-client clickhouse-client \
+      redis-tools postgresql-client \
       # 多语言工具链（你原本就在装）
       python3 python3-pip python3-venv \
       nodejs npm lua5.3 \
-      rustc cargo \
       dotnet-sdk-8.0 aspnetcore-runtime-8.0 \
       # 其他
       ffmpeg pandoc xclip xsel vim \
       # qemu 相关（你后续源码编译仍需要）
       qemu-system-misc gcc-riscv64-linux-gnu binutils-riscv64-linux-gnu bison \
     ; \
+    if [ "$install_clickhouse" = "1" ]; then \
+        $APT_ENV apt-get install -y --no-install-recommends clickhouse-client; \
+    fi; \
+    mongo_pkg=""; \
+    for cand in mongodb-clients mongodb-mongosh; do \
+        if apt-cache show "$cand" >/dev/null 2>&1; then mongo_pkg="$cand"; break; fi; \
+    done; \
+    if [ -n "$mongo_pkg" ]; then apt-get install -y --no-install-recommends "$mongo_pkg"; fi; \
+    if command -v mongosh >/dev/null 2>&1 && ! command -v mongo >/dev/null 2>&1; then \
+        ln -sf "$(command -v mongosh)" /usr/local/bin/mongo; \
+    fi; \
     rm -rf /var/lib/apt/lists/*; \
     ln -sf /lib/x86_64-linux-gnu/libtinfo.so.6 /lib/x86_64-linux-gnu/libtinfow.so.6; \
     ldconfig; \
@@ -86,12 +119,18 @@ RUN set -eux; \
     tar -C /usr/local -xzf /tmp/go.tar.gz; \
     rm -f /tmp/go.tar.gz
 
+ARG RUSTUP_DIST_SERVER=https://rsproxy.cn
+ARG RUSTUP_UPDATE_ROOT=https://rsproxy.cn/rustup
 ENV GOPROXY=https://goproxy.cn,direct \
     GOPATH=/go \
     GOBIN=/go/bin \
     GO111MODULE=on \
     GOWORK=/opt/mental1104/go.work \
-    PATH=/usr/local/go/bin:/go/bin:$PATH
+    RUSTUP_HOME=/usr/local/rustup \
+    CARGO_HOME=/usr/local/cargo \
+    RUSTUP_DIST_SERVER=${RUSTUP_DIST_SERVER} \
+    RUSTUP_UPDATE_ROOT=${RUSTUP_UPDATE_ROOT} \
+    PATH=/usr/local/cargo/bin:/usr/local/go/bin:/go/bin:$PATH
 
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
@@ -101,20 +140,52 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     ln -sf /go/bin/gopls /usr/bin/gopls
 
 # -----------------------------
+# D2) 中频：Rust 工具链（rustup + cargo）
+# -----------------------------
+RUN set -eux; \
+    mkdir -p "$RUSTUP_HOME" "$CARGO_HOME"; \
+    curl -fsSL https://sh.rustup.rs -o /tmp/rustup-init.sh; \
+    sh /tmp/rustup-init.sh -y --no-modify-path --profile minimal --default-toolchain stable; \
+    rm -f /tmp/rustup-init.sh; \
+    rustup --version; \
+    cargo --version; \
+    rustc --version
+
+# -----------------------------
 # E) 低频：Okteto + Syncthing（官网最新）
 # -----------------------------
 RUN set -eux; \
     mkdir -p /root/.okteto; \
-    syncthing_url="$(curl -fsSL https://api.github.com/repos/syncthing/syncthing/releases/latest | jq -r '.assets[] | select(.name | test("^syncthing-linux-amd64-.*\\.tar\\.gz$")) | .browser_download_url' | head -n 1)"; \
-    test -n "$syncthing_url"; \
-    curl -fsSL "$syncthing_url" -o /tmp/syncthing.tar.gz; \
+    CURL_RETRY="--retry 5 --retry-delay 2 --retry-connrefused"; \
+    syncthing_tag="$(curl -fsSL $CURL_RETRY -o /dev/null -w '%{url_effective}' https://github.com/syncthing/syncthing/releases/latest | awk -F/ '{print $NF}')"; \
+    if [ -z "$syncthing_tag" ]; then \
+        syncthing_tag="$(curl -fsSL $CURL_RETRY https://github.com/syncthing/syncthing/releases/latest | grep -Eo 'syncthing-linux-amd64-v[0-9]+\\.[0-9]+\\.[0-9]+\\.tar\\.gz' | head -n 1 | sed 's/^syncthing-linux-amd64-//; s/\\.tar\\.gz$//')"; \
+    fi; \
+    test -n "$syncthing_tag"; \
+    syncthing_url="https://github.com/syncthing/syncthing/releases/download/${syncthing_tag}/syncthing-linux-amd64-${syncthing_tag}.tar.gz"; \
+    curl -fsSL $CURL_RETRY "$syncthing_url" -o /tmp/syncthing.tar.gz; \
     syncthing_dir="$(tar -tf /tmp/syncthing.tar.gz | head -n 1 | cut -d/ -f1)"; \
     tar -xzf /tmp/syncthing.tar.gz -C /tmp; \
     install -m 0755 "/tmp/${syncthing_dir}/syncthing" /root/.okteto/syncthing; \
     ln -sf /root/.okteto/syncthing /usr/local/bin/syncthing; \
     rm -rf /tmp/syncthing.tar.gz "/tmp/${syncthing_dir}"; \
-    curl -fsSL "https://downloads.okteto.com/cli/okteto-Linux-x86_64" -o /root/.okteto/okteto; \
-    chmod +x /root/.okteto/okteto; \
+    okteto_tmp="$(mktemp)"; \
+    okteto_ok=0; \
+    for url in \
+      "https://downloads.okteto.com/cli/okteto-Linux-x86_64" \
+      "https://github.com/okteto/okteto/releases/latest/download/okteto-Linux-x86_64" \
+      "https://github.com/okteto/okteto/releases/latest/download/okteto-linux-amd64"; do \
+        if curl -fsSL $CURL_RETRY "$url" -o "$okteto_tmp"; then \
+            okteto_ok=1; \
+            break; \
+        fi; \
+    done; \
+    if [ "$okteto_ok" != "1" ]; then \
+        echo "[error] failed to download okteto CLI"; \
+        exit 1; \
+    fi; \
+    install -m 0755 "$okteto_tmp" /root/.okteto/okteto; \
+    rm -f "$okteto_tmp"; \
     ln -sf /root/.okteto/okteto /usr/local/bin/okteto
 
 # -----------------------------
@@ -131,22 +202,23 @@ RUN set -eux; \
     rm -f /tmp/vscode-server.tar.gz; \
     touch /root/.vscode-server/bin/${VSCODE_COMMIT_VERSION}/0
 
-COPY devops/INSTALLROOT/root/extensions.txt /root/extensions.txt
+# COPY devops/INSTALLROOT/root/extensions.txt /root/extensions.txt
 
-RUN set -eux; \
-    while read -r extension; do \
-        /root/.vscode-server/bin/*/bin/code-server --install-extension "$extension" || true; \
-    done < /root/extensions.txt
+# RUN set -eux; \
+#     while read -r extension; do \
+#         /root/.vscode-server/bin/*/bin/code-server --install-extension "$extension" || true; \
+#     done < /root/extensions.txt
 
 # -----------------------------
 # G) 中频：pip 依赖（只受 requirements.txt 影响，单独层）
 # -----------------------------
-COPY devops/INSTALLROOT/root/requirements.txt /root/requirements.txt
+COPY python/requirements.txt /root/requirements.txt
 
 RUN --mount=type=cache,target=/root/.cache/pip \
     set -eux; \
-    pip3 install -i https://mirrors.aliyun.com/pypi/simple -r /root/requirements.txt --break-system-packages; \
-    rm -f /root/requirements.txt
+    sed '/^mental1104_export_layer /d' /root/requirements.txt > /root/requirements.docker.txt; \
+    pip3 install -i https://mirrors.aliyun.com/pypi/simple -r /root/requirements.docker.txt --break-system-packages; \
+    rm -f /root/requirements.txt /root/requirements.docker.txt
 
 # -----------------------------
 # H) 低频：配置文件（htop/clang-format/时区）
@@ -166,25 +238,12 @@ RUN set -eux; \
 # I) 高频：你的自定义代码（使用 ./dev install）
 # -----------------------------
 COPY . /opt/mental1104/
-RUN --mount=type=cache,target=/root/.cache/pip \
-    set -eux; \
+RUN set -eux; \
     cd /opt/mental1104; \
-    BUILD_SUBMODULES=all ./dev build cpp; \
-    ./dev install cpp; \
-    ./dev build go; \
-    ./dev install go; \
-    ./dev build rust; \
-    ./dev install rust; \
+    DOTNET_CLEAN_ALLOW_FAIL=1 ./dev clean-all; \
+    ./dev setup-dotnet; \
     ./dev build dotnet; \
     ./dev install dotnet; \
-    ./dev install python; \
-    mkdir -p /go/src/github.com/mental1104/common; \
-    ln -sf /opt/mental1104/golang /go/src/github.com/mental1104/common/golang; \
-    mkdir -p /root/.cargo; \
-    printf '%s\n' \
-      '[patch.crates-io]' \
-      'mental1104 = { path = "/opt/mental1104/rust/mental1104" }' \
-      > /root/.cargo/config.toml; \
     mkdir -p /usr/local/share/nuget; \
     dotnet pack dotnet/src/Mental1104/Mental1104.csproj --configuration Release --output /usr/local/share/nuget; \
     mkdir -p /root/.config/NuGet; \
@@ -197,6 +256,33 @@ RUN --mount=type=cache,target=/root/.cache/pip \
       '  </packageSources>' \
       '</configuration>' \
       > /root/.config/NuGet/NuGet.Config
+
+RUN set -eux; \
+    cd /opt/mental1104; \
+    ./dev build rust; \
+    ./dev install rust; \
+    mkdir -p /root/.cargo; \
+    printf '%s\n' \
+      '[patch.crates-io]' \
+      'mental1104 = { path = "/opt/mental1104/rust/mental1104" }' \
+      > /root/.cargo/config.toml
+
+RUN set -eux; \
+    cd /opt/mental1104; \
+    ./dev build go; \
+    ./dev install go; \
+    mkdir -p /go/src/github.com/mental1104/common; \
+    ln -sf /opt/mental1104/golang /go/src/github.com/mental1104/common/golang
+
+RUN set -eux; \
+    cd /opt/mental1104; \
+    BUILD_SUBMODULES=all SKIP_SUBMODULES=cpp/lib/boost ./dev build cpp; \
+    ./dev install cpp
+
+RUN --mount=type=cache,target=/root/.cache/pip \
+    set -eux; \
+    cd /opt/mental1104; \
+    ./dev install python
 
 # -----------------------------
 # J) 高频/变量层：SSH 密码注入与 sshd 配置（必须放到最后，避免打爆缓存）
