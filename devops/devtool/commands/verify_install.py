@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Mapping
 
 from devtool.commands import register
-from devtool.commands.common import ROOT, RUST_DIR, base_env, run
+from devtool.commands.common import GO_DIR, ROOT, RUST_DIR, base_env, run
 
 if TYPE_CHECKING:
     from argparse import ArgumentParser
@@ -25,6 +25,19 @@ def _with_lib_path(env: Mapping[str, str], lib_dir: Path) -> dict[str, str]:
     existing = merged.get(key, "")
     merged[key] = str(lib_dir) if not existing else f"{lib_dir}{os.pathsep}{existing}"
     return merged
+
+
+def _read_go_module_path(go_dir: Path) -> str:
+    go_mod = go_dir / "go.mod"
+    if not go_mod.exists():
+        raise SystemExit(f"[error] missing go.mod at {go_mod}")
+    for raw in go_mod.read_text().splitlines():
+        line = raw.strip()
+        if line.startswith("module "):
+            parts = line.split()
+            if len(parts) >= 2:
+                return parts[1]
+    raise SystemExit(f"[error] failed to parse module path from {go_mod}")
 
 
 def _verify_cpp(env: Mapping[str, str]) -> None:
@@ -53,11 +66,12 @@ def _verify_cpp(env: Mapping[str, str]) -> None:
             "  return fut.get() == 7 ? 0 : 1;\n"
             "}\n"
         )
+        use_system_include = (not sys.platform.startswith("win")) and (prefix.resolve() == Path("/usr/local"))
+        include_args = [] if use_system_include else ["-I", str(include_dir)]
         cmd = [
             *_split_cmd(cxx),
             "-std=c++20",
-            "-I",
-            str(include_dir),
+            *include_args,
             str(src),
             "-L",
             str(lib_dir),
@@ -69,6 +83,7 @@ def _verify_cpp(env: Mapping[str, str]) -> None:
         ]
         run(cmd, env=env, cwd=tmp_path)
         run([str(exe)], env=_with_lib_path(env, lib_dir), cwd=tmp_path)
+    print("cpp-ok")
 
 
 def _verify_python(env: Mapping[str, str]) -> None:
@@ -79,9 +94,13 @@ def _verify_python(env: Mapping[str, str]) -> None:
 
 def _verify_go(env: Mapping[str, str]) -> None:
     go_bin = env.get("GO", "go")
-    gowork = env.get("GOWORK", str(ROOT / "go.work"))
-    if not Path(gowork).exists():
-        raise SystemExit(f"[error] missing go.work at {gowork}")
+    module_path = _read_go_module_path(GO_DIR)
+    if not GO_DIR.exists():
+        raise SystemExit(f"[error] missing Go module directory at {GO_DIR}")
+    env_go = dict(env)
+    env_go["GOWORK"] = "off"
+    env_go["GOPROXY"] = "off"
+    env_go["GOSUMDB"] = "off"
 
     with tempfile.TemporaryDirectory(prefix="m1104-verify-go-") as tmp:
         tmp_path = Path(tmp)
@@ -96,9 +115,8 @@ def _verify_go(env: Mapping[str, str]) -> None:
             "  }\n"
             "}\n"
         )
-        run([go_bin, "mod", "init", "verify-mental1104"], env=env, cwd=tmp_path)
-        env_go = dict(env)
-        env_go["GOWORK"] = gowork
+        run([go_bin, "mod", "init", "verify-mental1104"], env=env_go, cwd=tmp_path)
+        run([go_bin, "mod", "edit", f"-replace={module_path}={GO_DIR}"], env=env_go, cwd=tmp_path)
         run([go_bin, "mod", "tidy"], env=env_go, cwd=tmp_path)
         run([go_bin, "build", "."], env=env_go, cwd=tmp_path)
 
@@ -106,6 +124,8 @@ def _verify_go(env: Mapping[str, str]) -> None:
 def _verify_rust(env: Mapping[str, str]) -> None:
     if not shutil.which("cargo"):
         raise SystemExit("[error] missing cargo")
+    env_rust = dict(env)
+    env_rust["CARGO_NET_OFFLINE"] = "true"
 
     with tempfile.TemporaryDirectory(prefix="m1104-verify-rust-") as tmp:
         tmp_path = Path(tmp)
@@ -127,8 +147,9 @@ def _verify_rust(env: Mapping[str, str]) -> None:
             "  assert!(contains(v.as_slice(), &2));\n"
             "}\n"
         )
-        run(["cargo", "build", "--release"], env=env, cwd=tmp_path)
-        run([str(tmp_path / "target" / "release" / "verify_mental1104")], env=env, cwd=tmp_path)
+        run(["cargo", "build", "--release", "--offline"], env=env_rust, cwd=tmp_path)
+        run([str(tmp_path / "target" / "release" / "verify_mental1104")], env=env_rust, cwd=tmp_path)
+    print("rust-ok")
 
 
 def _verify_dotnet(env: Mapping[str, str]) -> None:
@@ -164,6 +185,7 @@ def _verify_dotnet(env: Mapping[str, str]) -> None:
             ");\n"
         )
         run([dotnet, "build", "--configuration", env.get("DOTNET_CONFIGURATION", "Release")], env=env, cwd=tmp_path)
+    print("dotnet-ok")
 
 
 @register("verify-install")

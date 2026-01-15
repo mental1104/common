@@ -100,8 +100,8 @@ def run_docker(env: Mapping[str, str]) -> None:
         run([*cmd_base, "down"], env=env)
     else:
         print("[skip] compose 未在运行，跳过 down")
-    print(">> UP (root compose)")
-    run([*cmd_base, "up", "-d"], env=env)
+    print(">> UP (root compose, build + force-recreate)")
+    run([*cmd_base, "up", "-d", "--build", "--force-recreate"], env=env)
 
 
 def _env_files() -> tuple[Path, Path]:

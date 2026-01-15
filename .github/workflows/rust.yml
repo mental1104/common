@@ -132,6 +132,8 @@ jobs:
           path: _cov
           retention-days: 7
           if-no-files-found: warn
+      - name: verify-install-rust
+        run: ./dev verify-install rust
 
   macos:
     name: macOS / Rust stable
@@ -212,6 +214,8 @@ jobs:
           path: _cov
           retention-days: 7
           if-no-files-found: warn
+      - name: verify-install-rust
+        run: ./dev verify-install rust
 
   windows:
     name: Windows / Rust stable
@@ -283,3 +287,5 @@ jobs:
           path: _cov
           retention-days: 7
           if-no-files-found: warn
+      - name: verify-install-rust
+        run: python -m devtool.cli verify-install rust

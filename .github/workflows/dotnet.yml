@@ -98,6 +98,8 @@ jobs:
           path: _cov
           retention-days: 7
           if-no-files-found: warn
+      - name: verify-install-dotnet
+        run: ./dev verify-install dotnet
 
   macos:
     name: macOS / .NET ${{ matrix.dotnet }}
@@ -167,6 +169,8 @@ jobs:
           path: _cov
           retention-days: 7
           if-no-files-found: warn
+      - name: verify-install-dotnet
+        run: ./dev verify-install dotnet
 
   windows:
     name: Windows / .NET ${{ matrix.dotnet }}
@@ -230,3 +234,5 @@ jobs:
           path: _cov
           retention-days: 7
           if-no-files-found: warn
+      - name: verify-install-dotnet
+        run: python -m devtool.cli verify-install dotnet
