@@ -127,6 +127,8 @@ jobs:
           path: _cov
           retention-days: 7
           if-no-files-found: warn
+      - name: verify-install-go
+        run: ./dev verify-install go
 
   macos:
     name: macOS / Go ${{ matrix.go }}
@@ -203,6 +205,8 @@ jobs:
           path: _cov
           retention-days: 7
           if-no-files-found: warn
+      - name: verify-install-go
+        run: ./dev verify-install go
 
   windows:
     name: Windows / Go ${{ matrix.go }}
@@ -268,3 +272,5 @@ jobs:
           path: _cov
           retention-days: 7
           if-no-files-found: warn
+      - name: verify-install-go
+        run: python -m devtool.cli verify-install go

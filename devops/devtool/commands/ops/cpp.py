@@ -670,6 +670,9 @@ def bench(env: Mapping[str, str], *, file_pattern: str | None, filter_expr: str 
 
 def install(env: Mapping[str, str]) -> None:
     cmd = [env.get("SUDO", ""), env["CMAKE"], "--install", str(CPP_BUILD_DIR), "--prefix", env["PREFIX"]]
+    cache = CPP_BUILD_DIR / "CMakeCache.txt"
+    if cache.exists() and "CMAKE_CONFIGURATION_TYPES:STRING=" in cache.read_text():
+        cmd += ["--config", env["CPP_BUILD_TYPE"]]
     run([arg for arg in cmd if arg], env=env)
 
 
