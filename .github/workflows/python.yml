@@ -172,6 +172,14 @@ jobs:
           retention-days: 7
           if-no-files-found: warn
 
+      - name: install-python
+        if: ${{ steps.gate.outputs.enable == 'true' }}
+        run: ./dev install-python
+
+      - name: verify-install-python
+        if: ${{ steps.gate.outputs.enable == 'true' }}
+        run: ./dev verify-install python
+
       - name: Mark job failed if core steps failed
         if: ${{ steps.gate.outputs.enable == 'true' && (steps.setup_env.outcome == 'failure' || steps.build_env.outcome == 'failure' || steps.cov_env.outcome == 'failure') }}
         run: exit 1
@@ -319,6 +327,12 @@ jobs:
           retention-days: 7
           if-no-files-found: warn
 
+      - name: install-python
+        run: ./dev install-python
+
+      - name: verify-install-python
+        run: ./dev verify-install python
+
   macos:
     name: macOS / Python ${{ matrix.python }}
     runs-on: macos-latest
@@ -449,6 +463,14 @@ jobs:
           path: _cov
           retention-days: 7
           if-no-files-found: warn
+
+      - name: install-python
+        if: ${{ steps.gate.outputs.enable == 'true' }}
+        run: ./dev install-python
+
+      - name: verify-install-python
+        if: ${{ steps.gate.outputs.enable == 'true' }}
+        run: ./dev verify-install python
 
       - name: Mark job failed if core steps failed
         if: ${{ steps.gate.outputs.enable == 'true' && (steps.setup_env.outcome == 'failure' || steps.build_env.outcome == 'failure' || steps.cov_env.outcome == 'failure') }}
@@ -586,6 +608,14 @@ jobs:
           path: _cov
           retention-days: 7
           if-no-files-found: warn
+
+      - name: install-python
+        if: ${{ steps.gate.outputs.enable == 'true' }}
+        run: python -m devtool.cli install-python
+
+      - name: verify-install-python
+        if: ${{ steps.gate.outputs.enable == 'true' }}
+        run: python -m devtool.cli verify-install python
 
       - name: Mark job failed if core steps failed
         if: ${{ steps.gate.outputs.enable == 'true' && (steps.setup_env.outcome == 'failure' || steps.build_env.outcome == 'failure' || steps.cov_env.outcome == 'failure') }}

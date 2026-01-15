@@ -190,17 +190,50 @@ RUN set -eux; \
 
 # -----------------------------
 # F) 中频：VSCode Server + Extensions（只受 commit/version 与 extensions.txt 影响）
+# 参考：https://www.cnblogs.com/michaelcjl/p/18262833
 # -----------------------------
-ENV VSCODE_COMMIT_VERSION=f1a4fb101478ce6ec82fe9627c43efbf9e98c813
+# VSCode Server 版本信息（离线预装，修改 VSCODE_COMMIT 会触发此层重建）
+# - VSCODE_COMMIT: 585eba7c0c34fd6b30faac7c62a42050bfbc0086（VSCode 1.108.1, `code --version` 第 2 行）
+ARG VSCODE_COMMIT=585eba7c0c34fd6b30faac7c62a42050bfbc0086
+ARG TARGETARCH=amd64
 
 RUN set -eux; \
-    mkdir -p /root/.vscode-server/bin/${VSCODE_COMMIT_VERSION}; \
-    curl -fsSL "https://update.code.visualstudio.com/commit:${VSCODE_COMMIT_VERSION}/server-linux-x64/stable" \
-      -o /tmp/vscode-server.tar.gz; \
-    tar -xzf /tmp/vscode-server.tar.gz \
-      -C /root/.vscode-server/bin/${VSCODE_COMMIT_VERSION} --strip 1; \
-    rm -f /tmp/vscode-server.tar.gz; \
-    touch /root/.vscode-server/bin/${VSCODE_COMMIT_VERSION}/0
+    if ! command -v curl >/dev/null 2>&1 || ! command -v tar >/dev/null 2>&1; then \
+        APT_ENV="env -u HTTP_PROXY -u HTTPS_PROXY -u NO_PROXY -u ALL_PROXY -u http_proxy -u https_proxy -u no_proxy -u all_proxy"; \
+        $APT_ENV apt-get update; \
+        $APT_ENV apt-get install -y --no-install-recommends curl tar ca-certificates; \
+        rm -rf /var/lib/apt/lists/*; \
+    fi; \
+    mkdir -p /root/.vscode-server/cli/servers /root/.vscode-server/data /root/.vscode-server/extensions; \
+    rm -rf "/root/.vscode-server/cli/servers/Stable-${VSCODE_COMMIT}"; \
+    rm -f "/root/.vscode-server/code-${VSCODE_COMMIT}"; \
+    case "${TARGETARCH}" in \
+      amd64|x86_64) \
+        server_url="https://vscode.download.prss.microsoft.com/dbazure/download/stable/${VSCODE_COMMIT}/vscode-server-linux-x64.tar.gz"; \
+        cli_url="https://vscode.download.prss.microsoft.com/dbazure/download/stable/${VSCODE_COMMIT}/vscode_cli_alpine_x64_cli.tar.gz"; \
+        ;; \
+      arm64) \
+        server_url="https://vscode.download.prss.microsoft.com/dbazure/download/stable/${VSCODE_COMMIT}/vscode-server-linux-arm64.tar.gz"; \
+        cli_url="https://vscode.download.prss.microsoft.com/dbazure/download/stable/${VSCODE_COMMIT}/vscode_cli_alpine_arm64_cli.tar.gz"; \
+        ;; \
+      *) \
+        echo "[error] unsupported TARGETARCH: ${TARGETARCH}"; \
+        exit 1; \
+        ;; \
+    esac; \
+    tmp_dir="$(mktemp -d /tmp/vscode.XXXXXX)"; \
+    curl -fsSL "$server_url" -o "$tmp_dir/vscode-server.tar.gz"; \
+    curl -fsSL "$cli_url" -o "$tmp_dir/vscode-cli.tar.gz"; \
+    tar -xzf "$tmp_dir/vscode-server.tar.gz" -C "$tmp_dir"; \
+    server_dir="$(find "$tmp_dir" -maxdepth 1 -type d -name 'vscode-server-linux-*' | head -n 1)"; \
+    test -n "$server_dir"; \
+    mkdir -p "/root/.vscode-server/cli/servers/Stable-${VSCODE_COMMIT}"; \
+    mv "$server_dir" "/root/.vscode-server/cli/servers/Stable-${VSCODE_COMMIT}/server"; \
+    tar -xzf "$tmp_dir/vscode-cli.tar.gz" -C "$tmp_dir"; \
+    cli_bin="$(find "$tmp_dir" -maxdepth 2 -type f -name code | head -n 1)"; \
+    test -n "$cli_bin"; \
+    install -m 0755 "$cli_bin" "/root/.vscode-server/code-${VSCODE_COMMIT}"; \
+    rm -rf "$tmp_dir"
 
 # COPY devops/INSTALLROOT/root/extensions.txt /root/extensions.txt
 

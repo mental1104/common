@@ -32,14 +32,27 @@ This file captures recent work plus portability guidance, grouped by language.
 - Dev tool: add `verify-install`/`install-verify` command to smoke-test C++/Python/Go/Rust/.NET install outputs from a temp project.
 - Dev tool: `verify-install` now resolves dotnet path via repo root instead of missing common constant.
 - Dev tool: `verify-install` registers `install-verify` via argparse aliases to avoid duplicate subparser conflicts.
+- Dev tool: `verify-install` Go check uses a local module replace to avoid network module lookups.
+- Dev tool: `verify-install` Go check now imports `GO_DIR` for the local replace.
+- Dev tool: `verify-install` Go check forces offline env (GOWORK/GOPROXY/GOSUMDB) to avoid proxy lookups.
 - Dev tool: export C++ build now drops stale CMakeCache from another path before configuring.
 - Dev tool: `clean-python` now also removes `export/cpp/build` to keep Python export artifacts in sync.
 - Dev tool: add `run-docker` to restart root compose stack with `docker compose` preferred (fallback to docker-compose) and idempotent down.
+- Dev tool: `run-docker` now runs `docker compose up -d --build --force-recreate`.
+- Dev tool: `verify-install` runs Rust check in offline mode to avoid crates.io lookups in isolated containers.
+- Dev tool: `verify-install` now prints cpp/rust/dotnet success markers.
+- CI: add per-language `verify-install` steps at the end of matrix jobs (cpp/python install before verify).
+- Dev tool: C++ install now passes `--config` for multi-config build dirs.
+- Dev tool: C++ verify skips explicit include path when PREFIX is `/usr/local` to validate system default include search.
+- Compose: bind SSH to localhost 31104 and force sshd as the container command while keeping internal network.
+- Compose: switch offline network to bridge with IP masquerade disabled to allow port publishing while blocking egress.
 - Dockerfile: drop the `# syntax=docker/dockerfile:1.7` header to avoid network pulls for the frontend image.
 - Dockerfile/devtool: allow overriding the base image via `BASE_IMAGE` build arg (`DOCKER_BUILD_BASE_IMAGE`/`DOCKER_BASE_IMAGE`).
 - Dockerfile: install pip deps from `python/requirements.txt` and strip the local `mental1104_export_layer` line for image builds.
 - Dockerfile: set rustup mirrors via `RUSTUP_DIST_SERVER`/`RUSTUP_UPDATE_ROOT` to avoid rust-lang TLS failures.
 - Dockerfile: split language build/install into separate layers (dotnet, rust, go, cpp, python) to improve caching.
+- Dockerfile: install VSCode server/cli offline using `ARG VSCODE_COMMIT` + `TARGETARCH` into `/root/.vscode-server/cli/servers/Stable-*` and `code-*` paths (documented via `code --version`).
+- Dockerfile: fix VSCode server commit hash typo (remove leading 9) to avoid 400 download errors.
 - Dockerfile: replace apt sources heredoc with printf to avoid BuildKit heredoc parsing errors.
 - Dockerfile: install ca-certificates before adding clickhouse repo; switch to libncursesw6 and make MongoDB client install optional with mongosh fallback.
 - Dockerfile: add ClickHouse key URL fallback (packages.clickhouse.com -> mirror) and install clickhouse-client only if repo setup succeeds.

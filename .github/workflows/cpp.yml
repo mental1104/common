@@ -171,6 +171,16 @@ jobs:
         continue-on-error: true
         run: ./dev guard-cpp
 
+      - name: install-cpp
+        env:
+          PREFIX: ${{ github.workspace }}/artifacts/cpp
+        run: ./dev install-cpp
+
+      - name: verify-install-cpp
+        env:
+          PREFIX: ${{ github.workspace }}/artifacts/cpp
+        run: ./dev verify-install cpp
+
       - name: Mark job failed if core steps failed
         if: ${{ steps.setup_cpp.outcome == 'failure' || steps.build_cpp.outcome == 'failure' || steps.coverage_cpp.outcome == 'failure' }}
         run: exit 1
@@ -348,6 +358,16 @@ jobs:
           retention-days: 7
           if-no-files-found: warn
 
+      - name: install-cpp
+        env:
+          PREFIX: ${{ github.workspace }}/artifacts/cpp
+        run: ./dev install-cpp
+
+      - name: verify-install-cpp
+        env:
+          PREFIX: ${{ github.workspace }}/artifacts/cpp
+        run: ./dev verify-install cpp
+
       - name: Mark job failed if core steps failed
         if: ${{ steps.setup_cpp.outcome == 'failure' || steps.build_cpp.outcome == 'failure' || steps.coverage_cpp.outcome == 'failure' || steps.wait_services.outcome == 'failure' }}
         run: exit 1
@@ -472,6 +492,16 @@ jobs:
           retention-days: 7
           if-no-files-found: warn
 
+      - name: install-cpp
+        env:
+          PREFIX: ${{ github.workspace }}/artifacts/cpp
+        run: ./dev install-cpp
+
+      - name: verify-install-cpp
+        env:
+          PREFIX: ${{ github.workspace }}/artifacts/cpp
+        run: ./dev verify-install cpp
+
       - name: Mark job failed if core steps failed
         if: ${{ steps.setup_cpp.outcome == 'failure' || steps.build_cpp.outcome == 'failure' || steps.coverage_cpp.outcome == 'failure' }}
         run: exit 1
@@ -558,6 +588,17 @@ jobs:
           path: _cov
           retention-days: 7
           if-no-files-found: warn
+
+      - name: install-cpp
+        env:
+          PREFIX: ${{ github.workspace }}/artifacts/cpp
+          CMAKE_INSTALL_CONFIG_NAME: Debug
+        run: python -m devtool.cli install-cpp
+
+      - name: verify-install-cpp
+        env:
+          PREFIX: ${{ github.workspace }}/artifacts/cpp
+        run: python -m devtool.cli verify-install cpp
 
       - name: Mark job failed if core steps failed
         if: ${{ steps.setup_cpp.outcome == 'failure' || steps.build_cpp.outcome == 'failure' || steps.coverage_cpp.outcome == 'failure' }}
