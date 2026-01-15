@@ -6,17 +6,13 @@ services:
     container_name: mental1104_dev
     security_opt:
       - seccomp=unconfined
-    environment:
-      - DISPLAY=${DISPLAY}
     ports:
       - "31104:22"
       - "8080:8080"
     volumes:
-      - /tmp/.X11-unix:/tmp/.X11-unix # 和宿主机共享剪贴板套接字
       - /home/espeon/:/data
       - ~/.ssh:/root/.ssh:rw  # 将宿主机的 .ssh 目录挂载到容器中
       - ~/.kube:/root/.kube # k8s配置映射到容器中
-      - /home/espeon/code/common/devops/INSTALLROOT/root/.mental1104:/root/.mental1104
       - /home/espeon/code/common/.env:/root/.env
     # env_file:
     #   - .env
