@@ -12,7 +12,17 @@ from devtool.commands.common import base_env, run
 DEFAULT_LOCAL_IMAGE = "mental1104_dev:latest"
 DEFAULT_REMOTE_IMAGE = "mental1104/dev:latest"
 DEFAULT_REGISTRY = "docker.io"
-_PROXY_BUILD_ARGS = ("HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY", "ALL_PROXY", "http_proxy", "https_proxy", "no_proxy", "all_proxy")
+_PROXY_BUILD_ARGS = (
+    "HTTP_PROXY",
+    "HTTPS_PROXY",
+    "NO_PROXY",
+    "ALL_PROXY",
+    "http_proxy",
+    "https_proxy",
+    "no_proxy",
+    "all_proxy",
+)
+_EXTRA_BUILD_ARGS = ("NUGET_SOURCE",)
 _PROXY_ENV_KEYS = ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy", "https_proxy", "all_proxy")
 
 
@@ -115,6 +125,9 @@ def run_build(_args) -> None:
     for entry in [h.strip() for h in add_hosts_raw.split(",") if h.strip()]:
         cmd += ["--add-host", entry]
     for key in _PROXY_BUILD_ARGS:
+        if env.get(key):
+            cmd += ["--build-arg", key]
+    for key in _EXTRA_BUILD_ARGS:
         if env.get(key):
             cmd += ["--build-arg", key]
     run(cmd, env=env)

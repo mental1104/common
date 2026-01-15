@@ -9,6 +9,7 @@ ARG http_proxy
 ARG https_proxy
 ARG no_proxy
 ARG all_proxy
+ARG NUGET_SOURCE=https://api.nuget.org/v3/index.json
 
 ENV DEBIAN_FRONTEND=noninteractive \
     LANG=C.UTF-8 \
@@ -189,7 +190,7 @@ RUN set -eux; \
     ln -sf /root/.okteto/okteto /usr/local/bin/okteto
 
 # -----------------------------
-# F) 中频：VSCode Server + Extensions（只受 commit/version 与 extensions.txt 影响）
+# F) 中频：VSCode Server（只受 commit/version 影响）
 # 参考：https://www.cnblogs.com/michaelcjl/p/18262833
 # -----------------------------
 # VSCode Server 版本信息（离线预装，修改 VSCODE_COMMIT 会触发此层重建）
@@ -235,15 +236,48 @@ RUN set -eux; \
     install -m 0755 "$cli_bin" "/root/.vscode-server/code-${VSCODE_COMMIT}"; \
     rm -rf "$tmp_dir"
 
-# COPY devops/INSTALLROOT/root/extensions.txt /root/extensions.txt
+# -----------------------------
+# G) 高频：VSCode Extensions（耗时，尽量早于代码层）
+# -----------------------------
+COPY devops/INSTALLROOT/root/extensions.list /root/vscode-extensions.list
 
-# RUN set -eux; \
-#     while read -r extension; do \
-#         /root/.vscode-server/bin/*/bin/code-server --install-extension "$extension" || true; \
-#     done < /root/extensions.txt
+RUN set -eux; \
+    server_dir="/root/.vscode-server/cli/servers/Stable-${VSCODE_COMMIT}/server"; \
+    install_cli="${server_dir}/bin/code-server"; \
+    if [ ! -x "$install_cli" ]; then \
+        install_cli="$(find "$server_dir" -maxdepth 3 -type f \( -name code-server -o -name code \) | head -n 1)"; \
+    fi; \
+    if [ -z "$install_cli" ] || [ ! -x "$install_cli" ]; then \
+        echo "[error] VSCode CLI not found for extension install"; \
+        exit 1; \
+    fi; \
+    if [ -s /root/vscode-extensions.list ]; then \
+        failed=0; \
+        failed_ext=""; \
+        while read -r extension; do \
+            case "$extension" in ""|\#*) continue ;; esac; \
+            if ! "$install_cli" \
+                --user-data-dir /root/.vscode-server/data \
+                --extensions-dir /root/.vscode-server/extensions \
+                --install-extension "$extension"; then \
+                echo "[error] failed to install extension: $extension" >&2; \
+                failed=1; \
+                if [ -z "$failed_ext" ]; then \
+                    failed_ext="$extension"; \
+                else \
+                    failed_ext="${failed_ext},${extension}"; \
+                fi; \
+            fi; \
+        done < /root/vscode-extensions.list; \
+        if [ "$failed" -ne 0 ]; then \
+            echo "[error] extension install failures: ${failed_ext}" >&2; \
+            exit 1; \
+        fi; \
+    fi; \
+    rm -f /root/vscode-extensions.list
 
 # -----------------------------
-# G) 中频：pip 依赖（只受 requirements.txt 影响，单独层）
+# H) 中频：pip 依赖（只受 requirements.txt 影响，单独层）
 # -----------------------------
 COPY python/requirements.txt /root/requirements.txt
 
@@ -254,7 +288,7 @@ RUN --mount=type=cache,target=/root/.cache/pip \
     rm -f /root/requirements.txt /root/requirements.docker.txt
 
 # -----------------------------
-# H) 低频：配置文件（htop/clang-format/时区）
+# I) 低频：配置文件（htop/clang-format/时区）
 # -----------------------------
 COPY devops/INSTALLROOT/root/.config /root/.config
 
@@ -268,27 +302,27 @@ RUN set -eux; \
     ldconfig
 
 # -----------------------------
-# I) 高频：你的自定义代码（使用 ./dev install）
+# J) 高频：你的自定义代码（使用 ./dev install）
 # -----------------------------
 COPY . /opt/mental1104/
 RUN set -eux; \
     cd /opt/mental1104; \
-    DOTNET_CLEAN_ALLOW_FAIL=1 ./dev clean-all; \
-    ./dev setup-dotnet; \
-    ./dev build dotnet; \
-    ./dev install dotnet; \
-    mkdir -p /usr/local/share/nuget; \
-    dotnet pack dotnet/src/Mental1104/Mental1104.csproj --configuration Release --output /usr/local/share/nuget; \
     mkdir -p /root/.config/NuGet; \
     printf '%s\n' \
       '<?xml version="1.0" encoding="utf-8"?>' \
       '<configuration>' \
       '  <packageSources>' \
       '    <add key="local" value="/usr/local/share/nuget" />' \
-      '    <add key="nuget.org" value="https://api.nuget.org/v3/index.json" />' \
+      "    <add key=\"nuget\" value=\"${NUGET_SOURCE}\" />" \
       '  </packageSources>' \
       '</configuration>' \
-      > /root/.config/NuGet/NuGet.Config
+      > /root/.config/NuGet/NuGet.Config; \
+    DOTNET_CLEAN_ALLOW_FAIL=1 ./dev clean-all; \
+    ./dev setup-dotnet; \
+    ./dev build dotnet; \
+    ./dev install dotnet; \
+    mkdir -p /usr/local/share/nuget; \
+    dotnet pack dotnet/src/Mental1104/Mental1104.csproj --configuration Release --output /usr/local/share/nuget
 
 RUN set -eux; \
     cd /opt/mental1104; \
@@ -318,7 +352,17 @@ RUN --mount=type=cache,target=/root/.cache/pip \
     ./dev install python
 
 # -----------------------------
-# J) 高频/变量层：SSH 密码注入与 sshd 配置（必须放到最后，避免打爆缓存）
+# K) 高频：VSCode settings（只受 extensions.json 影响）
+# -----------------------------
+COPY devops/INSTALLROOT/root/extensions.json /root/vscode-extensions.json
+COPY devops/INSTALLROOT/root/vscode_extensions.py /root/vscode-extensions.py
+
+RUN set -eux; \
+    python3 /root/vscode-extensions.py; \
+    rm -f /root/vscode-extensions.py
+
+# -----------------------------
+# L) 高频/变量层：SSH 密码注入与 sshd 配置（必须放到最后，避免打爆缓存）
 # -----------------------------
 ARG SSH_PRIVATE_KEY
 ENV SSH_PRIVATE_KEY=${SSH_PRIVATE_KEY}

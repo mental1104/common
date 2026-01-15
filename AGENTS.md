@@ -4,6 +4,13 @@ This file captures recent work plus portability guidance, grouped by language.
 
 ## General
 - 有关于仓库的公共规范在每次更新完代码后都往AGENTS.md里及时更新。
+- Devops: `devops/INSTALLROOT/root/extensions.json` stores `common` defaults and per-extension settings placeholders for VSCode server settings assembly.
+- Devops: `devops/INSTALLROOT/root/extensions.list` drives VSCode extension installation independently from settings changes.
+- Dockerfile: VSCode extension install runs before app code; settings generation runs after app code to keep installs cached.
+- Devops: VSCode settings generation is maintained in `devops/INSTALLROOT/root/vscode_extensions.py` and invoked by Dockerfile.
+- Dockerfile: extension install now summarizes failed extension ids and skips blank/commented lines in the list.
+- Dockerfile: extension install now uses the VSCode server `code-server` script (with fallback search) and fails the build on install errors.
+- Dockerfile/devtool: add `NUGET_SOURCE` build arg passthrough to allow restoring .NET packages from a custom feed or mirror.
 - Pages: build/deploy is triggered only by the main-branch meta workflow via workflow_call; coverage artifacts come from the same run (no workflow_run/run-id lookup).
 - Pages: deploy retries handle in-progress Pages deployments without relying on the Pages API.
 - Coverage artifacts: stash to `_cov/<lang>/<key>/cov.json` and upload as `<lang>-cov-*`; pages always generates per-language modules with N/A badges to avoid 404s.
