@@ -669,7 +669,8 @@ def bench(env: Mapping[str, str], *, file_pattern: str | None, filter_expr: str 
 
 
 def install(env: Mapping[str, str]) -> None:
-    run([env.get("SUDO", ""), env["CMAKE"], "--install", str(CPP_BUILD_DIR), "--prefix", env["PREFIX"]], env=env)
+    cmd = [env.get("SUDO", ""), env["CMAKE"], "--install", str(CPP_BUILD_DIR), "--prefix", env["PREFIX"]]
+    run([arg for arg in cmd if arg], env=env)
 
 
 def uninstall(_env: Mapping[str, str]) -> None:

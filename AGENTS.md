@@ -21,7 +21,34 @@ This file captures recent work plus portability guidance, grouped by language.
 - Rust coverage: set `RUST_COVER_XML=1` (optional `RUST_COVER_XML_PATH`) to make `./dev coverage-rust` emit Cobertura XML for local cov.json extraction.
 - Rust coverage: Cobertura XML is generated under `rust/mental1104/coverage.xml` to match the crate root.
 - Dockerfile: align INSTALLROOT inputs to current files; fetch Go/VSCode server/okteto/syncthing at build time; use `./dev build/install` for C++/Python installs.
-- Dockerfile: build all C++ submodules; install Go/Rust/.NET artifacts for reuse with Go workspace, Cargo patch config, and local NuGet feed.
+- Dockerfile: run `DOTNET_CLEAN_ALLOW_FAIL=1 ./dev clean-all`, skip boost submodule, and `./dev setup-dotnet` before dotnet build; install Go/Rust/.NET artifacts for reuse with Go workspace, Cargo patch config, and local NuGet feed.
+- Dev tool: dotnet clean now falls back to manual bin/obj cleanup when `DOTNET_CLEAN_ALLOW_FAIL=1` to avoid missing package errors.
+- Dev tool: dotnet clean no longer passes unsupported `--no-restore` to avoid MSBuild switch errors.
+- Dev tool: C++ install now skips empty `SUDO` entries to avoid Docker PermissionError.
+- Dev tool: Rust setup now skips rustup toolchain override when rustup is missing (warns and continues with system toolchain).
+- Dockerfile: install rustup/cargo to `/usr/local` and add `/usr/local/cargo/bin` to `PATH` for rust builds.
+- Dev tool: add `setup-dotnet` command to run dotnet restore via `./dev`.
+- Dev tool: Python install now retries pip/setuptools/wheel upgrade with `--ignore-installed` when Debian-installed wheels lack RECORD.
+- Dev tool: add `verify-install`/`install-verify` command to smoke-test C++/Python/Go/Rust/.NET install outputs from a temp project.
+- Dev tool: `verify-install` now resolves dotnet path via repo root instead of missing common constant.
+- Dev tool: `verify-install` registers `install-verify` via argparse aliases to avoid duplicate subparser conflicts.
+- Dev tool: export C++ build now drops stale CMakeCache from another path before configuring.
+- Dev tool: `clean-python` now also removes `export/cpp/build` to keep Python export artifacts in sync.
+- Dev tool: add `run-docker` to restart root compose stack with `docker compose` preferred (fallback to docker-compose) and idempotent down.
+- Dockerfile: drop the `# syntax=docker/dockerfile:1.7` header to avoid network pulls for the frontend image.
+- Dockerfile/devtool: allow overriding the base image via `BASE_IMAGE` build arg (`DOCKER_BUILD_BASE_IMAGE`/`DOCKER_BASE_IMAGE`).
+- Dockerfile: install pip deps from `python/requirements.txt` and strip the local `mental1104_export_layer` line for image builds.
+- Dockerfile: set rustup mirrors via `RUSTUP_DIST_SERVER`/`RUSTUP_UPDATE_ROOT` to avoid rust-lang TLS failures.
+- Dockerfile: split language build/install into separate layers (dotnet, rust, go, cpp, python) to improve caching.
+- Dockerfile: replace apt sources heredoc with printf to avoid BuildKit heredoc parsing errors.
+- Dockerfile: install ca-certificates before adding clickhouse repo; switch to libncursesw6 and make MongoDB client install optional with mongosh fallback.
+- Dockerfile: add ClickHouse key URL fallback (packages.clickhouse.com -> mirror) and install clickhouse-client only if repo setup succeeds.
+- Dockerfile: disable proxy env for all apt-get update/install runs while leaving curl to use proxies.
+- Dev tool: build-docker auto-uses host network for localhost proxies and auto-adds host.docker.internal mapping when needed.
+- Dockerfile: add curl retries and Okteto download fallbacks to GitHub release assets.
+- Dockerfile: avoid GitHub API for syncthing latest; resolve tag via releases redirect/HTML.
+- Dockerfile/devtool: accept proxy build args and forward HTTP(S)_PROXY/NO_PROXY from `./dev build-docker`.
+- Dockerfile/devtool: also forward ALL_PROXY and allow passing `--network`/`--add-host` via env for local proxy access.
 
 ### Performance: Non-IO Benchmark Protocol (must follow)
 

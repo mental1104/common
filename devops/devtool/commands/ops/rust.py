@@ -232,8 +232,11 @@ def setup(env: Mapping[str, str]) -> None:
     if not shutil.which("cargo"):
         raise SystemExit("[error] 未找到 cargo")
     if (Path(RUST_DIR) / "rust-toolchain.toml").exists():
-        run(["rustup", "toolchain", "install", "stable"], env=env)
-        run(["rustup", "override", "set", "stable"], env=env, cwd=RUST_DIR)
+        if shutil.which("rustup"):
+            run(["rustup", "toolchain", "install", "stable"], env=env)
+            run(["rustup", "override", "set", "stable"], env=env, cwd=RUST_DIR)
+        else:
+            print("[warn] rustup not found; skip toolchain override for rust-toolchain.toml")
     run(["cargo", "fetch"], env=env, cwd=RUST_DIR)
 
 

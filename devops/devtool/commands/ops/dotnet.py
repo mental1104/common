@@ -142,16 +142,37 @@ def bench(env: Mapping[str, str], *, file_pattern: str | None, filter_expr: str 
 
 
 def clean(env: Mapping[str, str]) -> None:
+    def _manual_clean() -> None:
+        for name in ("bin", "obj", "TestResults"):
+            for p in DOTNET_DIR.rglob(name):
+                if p.is_dir():
+                    shutil.rmtree(p, ignore_errors=True)
+
     if DOTNET_SOLUTION.exists():
-        run([
-            _dotnet(env),
-            "clean",
-            DOTNET_SOLUTION.name,
-            "--configuration",
-            _config(env),
-        ], env=env, cwd=DOTNET_DIR)
-    for p in DOTNET_DIR.rglob("TestResults"):
-        shutil.rmtree(p, ignore_errors=True)
+        allow_fail = _is_truthy(env.get("DOTNET_CLEAN_ALLOW_FAIL"))
+        failed = False
+        try:
+            run(
+                [
+                    _dotnet(env),
+                    "clean",
+                    DOTNET_SOLUTION.name,
+                    "--configuration",
+                    _config(env),
+                ],
+                env=env,
+                cwd=DOTNET_DIR,
+            )
+        except (OSError, subprocess.CalledProcessError):
+            if not allow_fail:
+                raise
+            failed = True
+            print("[warn] dotnet clean failed; falling back to manual cleanup")
+        _manual_clean()
+        if failed:
+            return
+    else:
+        _manual_clean()
 
 
 def install(env: Mapping[str, str]) -> None:
