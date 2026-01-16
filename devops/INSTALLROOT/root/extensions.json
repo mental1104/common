@@ -279,28 +279,409 @@
         "java.import.gradle.offline.enabled": true
     },
     "qcz.text-power-tools": {},
-    "jebbs.markdown-extension-pack": {},
-    "davidanson.vscode-markdownlint": {},
-    "pkief.material-icon-theme": {},
-    "vscjava.vscode-maven": {},
-    "zhuangtongfa.material-theme": {},
+    "jebbs.markdown-extension-pack": {
+        // ========== VS Code 内置 Markdown：安全预览（推荐内网保持 strict） ==========
+        // 文档说明：Markdown 预览会限制脚本与不安全资源加载，并可在工作区级调整安全级别
+        //（这里用 settings 固化成 strict，避免每个仓库手点）：
+        // 说明参考：VS Code Markdown preview security  [oai_citation:5‡Visual Studio Code](https://code.visualstudio.com/docs/languages/markdown?utm_source=chatgpt.com)
+        "markdown.preview.security.level": "strict",
+        // ========== Markdown 编辑体验 ==========
+        "[markdown]": {
+            "editor.wordWrap": "on",
+            "editor.quickSuggestions": {
+                "comments": "off",
+                "strings": "off",
+                "other": "on"
+            }
+        },
+        // ========== jebbs.markdown-extended：减少“可嵌入/可执行”风险 ==========
+        // 该扩展可通过 markdownExtended.disabledPlugins 禁用内置插件（文档给了可用列表与示例）
+        // 这里禁用 html5-embed：内网环境下媒体嵌入往往不可用且增加风险面
+        // 参考：Disable Plugins & names 列表  [oai_citation:6‡Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=jebbs.markdown-extended)
+        "markdownExtended.disabledPlugins": "html5-embed",
+        // 注意：markdown-extended 的导出默认放到工作区根目录 out/（无需额外配置）
+        // 参考：export files organized in `out` directory  [oai_citation:7‡Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=jebbs.markdown-extended)
+        // ========== goessner.mdmath：保持 $$ ... $$，并避免误判 $ ==========
+        // mdmath 默认设置与 key 列表见文档：mdmath.delimiters / outerspace / macros 等  [oai_citation:8‡Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=goessner.mdmath)
+        "mdmath.delimiters": "dollars",
+        "mdmath.outerspace": true,
+        "mdmath.macros": {},
+        "mdmath.autosave": false,
+        "mdmath.silent": true,
+        "mdmath.theme": "default",
+        // ========== telesoho.vscode-markdown-paste-image：内网安全 + 固定落盘策略 ==========
+        // 文档给出 Config keys、变量与默认值；并明确 AI 功能可用但默认关闭
+        // 参考：MarkdownPaste.path/nameBase/enableAI 等  [oai_citation:9‡Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=telesoho.vscode-markdown-paste-image)
+        "MarkdownPaste.enableAI": false,
+        "MarkdownPaste.path": "${fileWorkspaceFolder}/.md_assets/${relativeFileDirname}",
+        "MarkdownPaste.nameBase": "${datetime|yyyy-MM-DD_HH-mm-ss}_${uuid}",
+        "MarkdownPaste.encodePath": "encodeSpaceOnly",
+        "MarkdownPaste.enableImgTag": true,
+        "MarkdownPaste.silence": true
+    },
+    "davidanson.vscode-markdownlint": {
+        // 你经常需要长链接/表格/代码块：关闭“硬性 80/120 行限制”
+        "MD013": false,
+        // 你会写 LaTeX（$$...$$）与行内代码：允许内联 HTML（否则数学/排版容易被误伤）
+        "MD033": false,
+        // 允许同一标题重复（笔记里很常见）
+        "MD024": false,
+        // 允许为了排版而“跳级标题”
+        "MD001": false,
+        // 列表缩进：给一点宽容（否则不同人编辑器/格式化容易打架）
+        "MD007": {
+            "indent": 2
+        },
+        // 强制有序列表用 1. 1. 1.（更易维护）
+        "MD029": {
+            "style": "one"
+        },
+        // 代码块风格：统一用 ```（与你的习惯一致即可；不想管就关）
+        "MD046": {
+            "style": "fenced"
+        }
+    },
+    "pkief.material-icon-theme": {
+        "workbench.iconTheme": "material-icon-theme",
+        "material-icon-theme.folders.color": "#42a5f5",
+        "material-icon-theme.folders.theme": "classic"
+    },
+    "vscjava.vscode-maven": {
+        // ===== 遥测：内网默认关闭（VS Code 全局 + 扩展）=====
+        "telemetry.telemetryLevel": "off",
+        // ===== Maven 可执行：优先用 mvnw（项目自带更可复现）；没有则用系统 mvn =====
+        "maven.executable.preferMavenWrapper": true,
+        // 如果你们内网机器 PATH 不干净，直接指定 mvn 的绝对路径（含 mvn 文件名）
+        // 例：/opt/apache-maven-3.9.6/bin/mvn
+        "maven.executable.path": "PATH_TO_MVN",
+        // ===== 内网关键：默认给所有扩展发起的 mvn 命令加参数 =====
+        // -o：离线；-s：指定 settings.xml（走内网镜像/凭证/本地仓库路径）
+        "maven.executable.options": [
+            "-o",
+            "-s",
+            "PATH_TO_SETTINGS_XML"
+        ],
+        // 也可以用这个键单独指定 settings.xml（推荐与 executable.options 保持一致）
+        "maven.settingsFile": "PATH_TO_SETTINGS_XML",
+        // ===== Maven 扫描性能：大仓库/mono repo 必开 =====
+        "maven.excludedFolders": [
+            "**/.*",
+            "**/node_modules",
+            "**/target",
+            "**/bin"
+        ],
+        // ===== Java 版本一致性：让扩展启动的终端里 JAVA_HOME 固定到同一套 JDK =====
+        "maven.terminal.customEnv": [
+            {
+                "environmentVariable": "JAVA_HOME",
+                "value": "PATH_TO_JDK_21"
+            }
+        ],
+        // 视图：更适合多模块工程
+        "maven.view": "hierarchical"
+    },
+    "zhuangtongfa.material-theme": {
+        "workbench.colorTheme": "One Dark Pro"
+    },
     "ms-ceintl.vscode-language-pack-zh-hans": {},
-    "ms-vscode.powershell": {},
-    "vscjava.vscode-java-dependency": {},
-    "ms-python.python": {},
+    "ms-vscode.powershell": {
+        // 全局关遥测（公司内网默认建议）
+        "telemetry.telemetryLevel": "off",
+        // 固定默认使用的 PowerShell 版本：值必须等于“Session Menu 里显示的名字”
+        // （你也可以先用 PowerShell: Show Session Menu 看看具体名字）
+        "powershell.powerShellDefaultVersion": "PowerShell (x64)",
+        // 如需同时注册多个 pwsh / powershell.exe，写在这里（键=显示名，值=exe 绝对路径）
+        "powershell.powerShellAdditionalExePaths": {
+            "PowerShell (x64)": "C:/Program Files/PowerShell/7/pwsh.exe",
+            "Windows PowerShell (x64)": "C:/Windows/System32/WindowsPowerShell/v1.0/powershell.exe"
+        },
+        // 内网/团队协作：建议默认不加载 profile（避免个人环境差异、启动变慢、隐式依赖外部模块源）
+        "powershell.enableProfileLoading": false,
+        // 更像 ISE：启动时不自动把“PowerShell Integrated Console”终端弹出来；执行时也不抢焦点
+        "powershell.integratedConsole.showOnStartup": false,
+        "powershell.integratedConsole.focusConsoleOnExecute": false,
+        // 保持静态检查（PSScriptAnalyzer）默认开启；如你觉得太吵再关
+        // "powershell.scriptAnalysis.enable": false
+    },
+    "vscjava.vscode-java-dependency": {
+        // 内网：减少外联与噪音（该扩展说明遥测遵从 VS Code 全局 telemetry 开关）
+        "telemetry.telemetryLevel": "off",
+        // Explorer 体验：按需（大仓库建议关 members，省性能）
+        "java.dependency.showMembers": false,
+        "java.dependency.packagePresentation": "hierarchical",
+        // 自动刷新：内网大仓库/远端盘常卡顿，建议延迟拉大或直接关
+        "java.dependency.autoRefresh": true,
+        "java.dependency.refreshDelay": 5000,
+        // 视图联动：你若嫌“跳来跳去”，就关
+        "java.dependency.syncWithFolderExplorer": true,
+        // 导出 Jar：固定输出位置（避免每次弹窗选路径）
+        "java.project.exportJar.targetPath": "${workspaceFolder}/out/${workspaceFolderBasename}.jar",
+        // 资源树：按需（只看 Java 就关，少噪音）
+        "java.project.explorer.showNonJavaResources": false
+    },
+    "ms-python.python": {
+        // ===== 1) Python：只做 IDE 语言服务（跳转/补全/基础诊断）=====
+        "python.languageServer": "Pylance",
+        // 基本问题检查：只做基础类型/导入/名称等检查，不做“风格规则”
+        // basic 比 off 更有“问题页”价值，但不会像 strict 那样把老代码炸满屏
+        "python.analysis.typeCheckingMode": "basic",
+        // 降噪：只检查当前打开的文件（你要“基本问题”而不是全仓库审计）
+        "python.analysis.diagnosticMode": "openFilesOnly",
+        // ===== 2) 让问题集中到“问题(Problems)”页：这是 VS Code 默认行为，无需额外开关 =====
+        // Pylance 的诊断会进 Problems；Ruff 的诊断也会进 Problems（互不冲突）
+        // ===== 3) 格式化/修复/风格：全部交给 Ruff（避免与 Python 扩展的任何历史配置打架）=====
+        "[python]": {
+            "editor.defaultFormatter": "charliermarsh.ruff",
+            "editor.formatOnSave": true,
+            "editor.codeActionsOnSave": {
+                // 让 Ruff 承担“修复/整理导入”，不要让其他工具再插一脚
+                "source.fixAll": true,
+                "source.organizeImports": true
+            }
+        }
+    },
     "ms-python.vscode-pylance": {},
     "ms-python.debugpy": {},
-    "ms-python.vscode-python-envs": {},
-    "mechatroner.rainbow-csv": {},
-    "ms-vscode-remote.remote-ssh": {},
+    "ms-python.vscode-python-envs": {
+        // 显式启用（该扩展曾以灰度方式推送；手动置 true 能避免“装了但没启用”的困惑）
+        "python.useEnvironmentsExtension": true,
+        // 内网：你自己已经全局关遥测的话，这里不再重复（可保留）
+        "telemetry.telemetryLevel": "off"
+    },
+    "mechatroner.rainbow-csv": {
+        // 让 CSV/TSV 默认由 Rainbow CSV 接管高亮（不依赖外网）
+        "files.associations": {
+            "*.csv": "csv (rainbow)",
+            "*.tsv": "tsv (rainbow)"
+        }
+    },
+    "ms-vscode-remote.remote-ssh": {
+        // 1) 让 VS Code 读你指定的 SSH 配置（多机/多跳板最稳）
+        "remote.SSH.configFile": "~/.ssh/config",
+        // 2) 内网/慢认证：加长连接超时
+        "remote.SSH.connectTimeout": 60,
+        // 3) 超时/卡住时的“兜底开关”（尤其是 shell/代理/复杂登录链路）
+        "remote.SSH.useLocalServer": true,
+        // 4) 提前声明远端平台（避免误判导致装错 server 包）
+        "remote.SSH.remotePlatform": {
+            "your-host-alias-1": "linux",
+            "your-host-alias-2": "linux"
+        }
+        // 5) 可选：把 VS Code Server 固定装到“绝对路径”（便于你做预置/复用）
+        // 注意：这里不要用 "~" 或 "${HOME}" 之类，存在不展开导致装到奇怪目录的坑，务必写绝对路径
+        // "remote.SSH.serverInstallPath": {
+        //   "your-host-alias-1": "/home/youruser/.vscode-server"
+        // }
+    },
     "ms-vscode-remote.remote-ssh-edit": {},
     "ms-vscode.remote-explorer": {},
-    "rust-lang.rust-analyzer": {},
+    "rust-lang.rust-analyzer": {
+        // 内网：统一关遥测（若你全局已关，可不重复）
+        "telemetry.telemetryLevel": "off",
+        // 如果你们是“离线/内网下发 rust-analyzer”，把它钉死到绝对路径
+        // （解决 PATH 不同步、Remote-SSH 环境不一致）
+        // "rust-analyzer.server.path": "/ABS/PATH/TO/rust-analyzer",
+        // 保存时做诊断：默认就是 cargo check（稳、快）
+        "rust-analyzer.checkOnSave": true,
+        "rust-analyzer.check.command": "check",
+        // 大仓库降噪：少做不必要的检查目标（需要更全再调）
+        "rust-analyzer.cargo.allTargets": true,
+        "rust-analyzer.check.allTargets": null
+    },
     "natizyskunk.sftp": {},
-    "vscjava.vscode-java-test": {},
-    "cjl.todo-tree-enhanced": {},
-    "tomoki1207.pdf": {},
-    "vue.volar": {},
-    "streetsidesoftware.code-spell-checker": {},
-    "eriklynd.json-tools": {}
+    "vscjava.vscode-java-test": {
+        // 内网：关遥测（两套开关都给上，避免版本差异）
+        "telemetry.telemetryLevel": "off",
+        "telemetry.enableTelemetry": false,
+        // 关键：为测试统一运行配置
+        "java.test.config": [
+            {
+                "name": "default",
+                "workingDirectory": "${workspaceFolder}",
+                // JVM 参数：建议至少加 -ea（启用断言），其余按你们项目约定加
+                "vmArgs": [
+                    "-ea",
+                    "-Dfile.encoding=UTF-8",
+                    "-Duser.timezone=Asia/Shanghai"
+                ],
+                // 可选：需要的话再开（避免把个人环境塞进项目）
+                "env": {
+                    "TZ": "Asia/Shanghai"
+                }
+                // 其他可用项（你需要时再加）：args/envFile/preLaunchTask/postDebugTask/testKind/coverage/when 等
+            }
+        ],
+        // 有自定义配置时避免每次弹选择框
+        "java.test.defaultConfig": "default"
+    },
+    "cjl.todo-tree-enhanced": {
+        // 1) 识别哪些“待办标签”
+        "todo-tree.general.tags": [
+            "TODO",
+            "FIXME",
+            "BUG",
+            "NOTE",
+            "HACK",
+            "XXX",
+            "[ ]",
+            "[x]"
+        ],
+        // 2) 同义词归并（避免树上分裂成一堆）
+        "todo-tree.general.tagGroups": {
+            "FIXME": [
+                "FIXME",
+                "FIXIT",
+                "FIX"
+            ],
+            "TODO": [
+                "TODO",
+                "[ ]",
+                "[x]"
+            ]
+        },
+        // 3) 扫描排除（强烈建议：把构建产物、依赖目录排掉）
+        // 注意：globs 是“绝对路径语义”，不是相对 workspace 的写法。 [oai_citation:1‡GitHub](https://github.com/Gruntfuggly/todo-tree)
+        "todo-tree.filtering.excludeGlobs": [
+            "**/.git/**",
+            "**/node_modules/**",
+            "**/.venv/**",
+            "**/venv/**",
+            "**/__pycache__/**",
+            "**/dist/**",
+            "**/build/**",
+            "**/out/**",
+            "**/target/**"
+        ],
+        // 4) 让它尊重 VS Code 自带的 excludes（你在 Files/Search: Exclude 配过的也会生效）
+        "todo-tree.filtering.useBuiltInExcludes": "file and search excludes",
+        // 5) 高亮：用内置配色方案，省掉每个 tag 手动配色
+        "todo-tree.highlights.useColourScheme": true,
+        // 6) 状态栏：只显示总数；点击直接定位到树
+        "todo-tree.general.statusBar": "total",
+        "todo-tree.general.statusBarClickBehaviour": "reveal",
+        // 7) 降噪：不在 Activity Bar 上挂数字徽标（大仓库会很吵）
+        "todo-tree.general.showActivityBarBadge": false,
+        // 8) ripgrep：通常插件会自己找到；如果你们环境特殊，可手动指定 rg 路径  [oai_citation:2‡GitHub](https://github.com/Gruntfuggly/todo-tree)
+        // "todo-tree.ripgrep.ripgrep": "/usr/bin/rg"
+        "todo-tree.ripgrep.ripgrepArgs": "--max-columns=1000"
+    },
+    "tomoki1207.pdf": {
+        "pdf-viewer.invert": false
+    },
+    "vue.volar": {
+        // 固定使用仓库内的 TypeScript SDK（内网多机最稳）
+        "typescript.tsdk": "node_modules/typescript/lib",
+        // Volar 2.x/官方 Vue 扩展的共存模式开关：需要时再开（见下文“什么时候开”）
+        "vue.server.hybridMode": true
+    },
+    "streetsidesoftware.code-spell-checker": {
+        // 安静：只在 Problems 里提示，且降级为 Hint
+        "cSpell.diagnosticLevel": "Hint",
+        // 你常写中英混合注释/文档就用 en,zh；只写英文就改成 en
+        "cSpell.language": "en,zh",
+        // 对变量名/驼峰/缩写友好，减少误报
+        "cSpell.allowCompoundWords": true,
+        // 全局排除：通用的依赖/产物/缓存目录（几乎所有仓库都适用）
+        "cSpell.ignorePaths": [
+            "**/.git/**",
+            "**/.vscode/**",
+            "**/node_modules/**",
+            "**/.venv/**",
+            "**/venv/**",
+            "**/__pycache__/**",
+            "**/.pytest_cache/**",
+            "**/.mypy_cache/**",
+            "**/.ruff_cache/**",
+            "**/dist/**",
+            "**/build/**",
+            "**/out/**",
+            "**/target/**"
+        ]
+    },
+    "eriklynd.json-tools": {},
+    "alefragnani.Bookmarks": {},
+    "alefragnani.project-manager": {},
+    "mhutchie.git-graph": {},
+    "redhat.vscode-yaml": {
+        // 1) 内网：关 schema 自动拉取（避免卡顿/失败）
+        "yaml.schemaStore.enable": false,
+        // 2) 手工绑定 schema（按文件名/路径 glob）
+        // Kubernetes：用保留关键字 kubernetes（扩展内置提供 schema，不需要 URL）
+        "yaml.schemas": {
+            "kubernetes": [
+                "**/*.k8s.yaml",
+                "**/*.k8s.yml",
+                "**/k8s/**/*.yaml",
+                "**/k8s/**/*.yml"
+            ]
+        },
+        // 3) 降噪：如果你不希望它强行按键名排序（不少团队反感），保持默认 false 即可
+        "yaml.keyOrdering": false
+    },
+    "timonwong.shellcheck": {
+        // 启用
+        "shellcheck.enable": true,
+        // 内网/大仓库更建议：保存时再跑，避免 onType 频繁触发
+        "shellcheck.run": "onSave", // 也可用 "onType"
+        // 很关键：让 shellcheck 的工作目录固定到工作区根
+        // 解决 source 相对路径、include 等“离开根目录就找不到文件”的问题
+        "shellcheck.useWorkspaceRootAsCwd": true,
+        // 排除产物与依赖目录，避免无意义告警 + 提升性能
+        "shellcheck.ignorePatterns": {
+            "**/.git/**": true,
+            "**/node_modules/**": true,
+            "**/dist/**": true,
+            "**/build/**": true,
+            "**/out/**": true,
+            "**/target/**": true,
+            "**/vendor/**": true
+        }
+    },
+    "humao.rest-client": {
+        // 内网：关遥测
+        "rest-client.enableTelemetry": false,
+        // 习惯：响应在独立标签页展示（避免覆盖）
+        "rest-client.showResponseInDifferentTab": true,
+        // 需要时才开：把响应预览到“无标题文本”里（方便搜索/复制/二次编辑）
+        "rest-client.previewResponseInUntitledDocument": true,
+        // 默认请求头（缺省时自动补齐）
+        "rest-client.defaultHeaders": {
+            "User-Agent": "vscode-restclient",
+            "Accept-Encoding": "gzip"
+        },
+        // 超时（0=无限；内网卡住时建议给个上限）
+        "rest-client.timeoutinmilliseconds": 30000,
+        // 如你们走公司代理：这里通常配“哪些 host 不走代理”
+        "rest-client.excludeHostsForProxy": [
+            "localhost",
+            "127.0.0.1",
+            "*.corp",
+            "*.internal"
+        ]
+        // 若需要客户端证书（mTLS），按 host 配：
+        // "rest-client.certificates": {
+        //   "example.corp:443": {
+        //     "pfx": "${workspaceFolder}/.certs/client.p12",
+        //     "passphrase": "******"
+        //   }
+        // }
+    },
+    "EditorConfig.EditorConfig": {},
+    "johnpapa.vscode-peacock": {},
+    "dbaeumer.vscode-eslint": {
+        // 只在保存时跑（更安静、更稳）
+        "eslint.run": "onSave",
+        // 明确哪些语言交给 ESLint（按需增减）
+        "eslint.validate": [
+            "javascript",
+            "javascriptreact",
+            "typescript",
+            "typescriptreact",
+            "vue"
+        ],
+        // 保存自动修复（ESLint 的 fix）
+        "editor.codeActionsOnSave": {
+            "source.fixAll.eslint": true
+        }
+    }
 }
