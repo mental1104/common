@@ -6,6 +6,7 @@ This file captures recent work plus portability guidance, grouped by language.
 - 有关于仓库的公共规范在每次更新完代码后都往AGENTS.md里及时更新。
 - Devops: `devops/INSTALLROOT/root/extensions.json` stores `common` defaults and per-extension settings placeholders for VSCode server settings assembly.
 - Devops: `devops/INSTALLROOT/root/extensions.list` drives VSCode extension installation independently from settings changes.
+- Devops: `devops/INSTALLROOT/root/vscode_extensions.py` accepts JSONC and preserves comments when rendering settings.json.
 - Dockerfile: VSCode extension install runs before app code; settings generation runs after app code to keep installs cached.
 - Devops: VSCode settings generation is maintained in `devops/INSTALLROOT/root/vscode_extensions.py` and invoked by Dockerfile.
 - Dockerfile: extension install now summarizes failed extension ids and skips blank/commented lines in the list.
@@ -18,6 +19,8 @@ This file captures recent work plus portability guidance, grouped by language.
 - README: Rust/.NET/Go coverage sections show per-OS, per-version badge matrices.
 - CI: language workflows ignore push-to-main; main branch runs only via `ci-main.yml` to prevent duplicate executions.
 - Coverage extractors: add Rust/Go/.NET cov.json extract scripts and wire workflows to parse real reports instead of placeholders.
+- DataStructure: add per-OS/C++-standard coverage artifacts, pages badges/dashboard, and README coverage matrix.
+- DataStructure: make coverage emits coverage.xml for artifact extraction and ignore coverage artifacts via subrepo .gitignore.
 - Dev tool: add dotnet setup/build/test/coverage/fmt/bench/clean/install/uninstall/vet/guard commands; dotnet workflow now runs via `./dev` (linux/mac) or `python -m devtool.cli` (windows).
 - Dev tool: add build-docker/push-docker commands (Linux-only) with SSH_PRIVATE_KEY env requirement and docker.io login via DOCKER_USERNAME/DOCKER_PASSWORD.
 - Dev tool: go build now emits main-package binaries (if any) and logs when only library packages are compiled.

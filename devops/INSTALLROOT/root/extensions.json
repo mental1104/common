@@ -1,61 +1,306 @@
 {
-  "common": {
-    "editor.detectIndentation": false,
-    "editor.insertSpaces": true,
-    "editor.tabSize": 4,
-    "files.eol": "\n",
-    "files.insertFinalNewline": true,
-    "files.trimTrailingWhitespace": true
-  },
-  "golang.go": {},
-  "phplasma.csv-to-table": {},
-  "vgbire.letter-transform": {},
-  "mechatroner.rainbow-csv": {},
-  "ms-azuretools.vscode-docker": {},
-  "oderwat.indent-rainbow": {},
-  "sourcery.sourcery": {},
-  "demystifying-javascript.python-extensions-pack": {},
-  "dongli.python-preview": {},
-  "ms-vscode.cmake-tools": {},
-  "donjayamanne.git-extension-pack": {},
-  "ms-python.vscode-pylance": {},
-  "ms-vscode.test-adapter-converter": {},
-  "trabpukcip.wolf": {},
-  "leetcode.vscode-leetcode": {},
-  "natizyskunk.sftp": {},
-  "mongodb.mongodb-vscode": {},
-  "ms-vscode.cpptools-themes": {},
-  "gruntfuggly.todo-tree": {},
-  "codezombiech.gitignore": {},
-  "donjayamanne.githistory": {},
-  "ms-ceintl.vscode-language-pack-zh-hans": {},
-  "njpwerner.autodocstring": {},
-  "ms-python.python": {},
-  "hbenl.vscode-test-explorer": {},
-  "kevinrose.vsc-python-indent": {},
-  "cstrap.python-snippets": {},
-  "njqdev.vscode-python-typehint": {},
-  "kaih2o.python-resource-monitor": {},
-  "batisteo.vscode-django": {},
-  "eamodio.gitlens": {},
-  "mintlify.document": {},
-  "ms-dotnettools.csharp": {},
-  "waderyan.gitblame": {},
-  "amiralizadeh9480.cpp-helper": {},
-  "xirider.livecode": {},
-  "ms-vscode.cpptools": {},
-  "ms-dotnettools.csdevkit": {},
-  "streetsidesoftware.code-spell-checker": {},
-  "ms-python.debugpy": {},
-  "almenon.arepl": {},
-  "ziyasal.vscode-open-in-github": {},
-  "alefragnani.project-manager": {},
-  "littlefoxteam.vscode-python-test-adapter": {},
-  "deerawan.vscode-dash": {},
-  "ms-vscode.cpptools-extension-pack": {},
-  "twxs.cmake": {},
-  "ms-dotnettools.vscode-dotnet-runtime": {},
-  "thebarkman.vscode-djaneiro": {},
-  "ms-dotnettools.vscodeintellicode-csharp": {},
-  "gaogaotiantian.viztracer-vscode": {}
+    "common": {
+        "workbench.colorTheme": "One Dark Pro",
+        "workbench.iconTheme": "material-icon-theme",
+        "workbench.startupEditor": "none",
+        "window.zoomLevel": 0,
+        "window.titleBarStyle": "custom",
+        "files.autoSave": "afterDelay",
+        "files.autoGuessEncoding": true,
+        "files.trimTrailingWhitespace": true,
+        "files.insertFinalNewline": true,
+        "files.eol": "\n",
+        "files.maxMemoryForLargeFilesMB": 8192,
+        "editor.fontSize": 16,
+        "editor.fontVariations": false,
+        "editor.tabSize": 4,
+        "editor.insertSpaces": true,
+        "editor.detectIndentation": false,
+        "editor.renderWhitespace": "boundary",
+        "editor.renderControlCharacters": false,
+        "editor.wordWrap": "off",
+        "editor.minimap.enabled": false,
+        "editor.formatOnSave": false,
+        "editor.suggestSelection": "first",
+        "editor.copyWithSyntaxHighlighting": false,
+        "workbench.editor.untitled.hint": "hidden",
+        "explorer.confirmDelete": false,
+        "explorer.confirmDragAndDrop": false,
+        "terminal.integrated.defaultProfile.linux": "bash",
+        "terminal.integrated.scrollback": 5000
+    },
+    "ms-dotnettools.vscode-dotnet-runtime": {
+        "dotnetAcquisitionExtension.sharedExistingDotnetPath": "/usr/share/dotnet/dotnet",
+        "dotnetAcquisitionExtension.installTimeoutValue": 900
+    },
+    "njpwerner.autodocstring": {
+        "autoDocstring.docstringFormat": "google",
+        "autoDocstring.generateDocstringOnEnter": true,
+        "autoDocstring.guessTypes": true,
+        "autoDocstring.startOnNewLine": true,
+        "autoDocstring.includeName": false,
+        "autoDocstring.includeExtendedSummary": false
+    },
+    "jeff-hykin.better-cpp-syntax": {
+        "editor.semanticHighlighting.enabled": true
+    },
+    "ms-vscode.cpptools": {
+        // ===== 1) IntelliSense 以 compile_commands.json 为准（最关键） =====
+        "C_Cpp.default.compileCommands": "${workspaceFolder}/build/compile_commands.json",
+        // ===== 2) 兜底：没有 compile_commands 时也别太离谱 =====
+        "C_Cpp.default.cppStandard": "c++20",
+        "C_Cpp.default.cStandard": "c17",
+        "C_Cpp.intelliSenseEngine": "default",
+        // ===== 3) 格式化：用 clang-format（推荐项目内 .clang-format 统一风格） =====
+        "editor.defaultFormatter": "ms-vscode.cpptools",
+        "editor.formatOnSave": true,
+        "C_Cpp.clang_format_style": "file",
+        "C_Cpp.clang_format_fallbackStyle": "none",
+        // ===== 4) 代码分析：启用 clang-tidy 自动跑（开文件/保存后触发） =====
+        "C_Cpp.codeAnalysis.clangTidy.enabled": true,
+        "C_Cpp.codeAnalysis.runAutomatically": true
+    },
+    "ms-dotnettools.csharp": {
+        // 保存即格式化（用 C# 扩展自带格式化器）
+        "[csharp]": {
+            "editor.defaultFormatter": "ms-dotnettools.csharp",
+            "editor.formatOnSave": true
+        },
+        // 明确使用新版 LSP（默认就是它，这里写死是为了可读与可控）
+        "dotnet.server.useOmnisharp": false,
+        // 日常保持关闭；排障时再临时改成 "Trace"
+        "dotnet.server.trace": "Off"
+    },
+    "ms-dotnettools.csdevkit": {
+        // ===== C# Dev Kit 必须依赖 LSP（不要切回 OmniSharp）=====
+        "dotnet.server.useOmnisharp": false,
+        // ===== 保存即格式化（统一体验）=====
+        "[csharp]": {
+            "editor.defaultFormatter": "ms-dotnettools.csharp",
+            "editor.formatOnSave": true
+        },
+        // ===== 日常关闭；排障时临时改为 Trace =====
+        "dotnet.server.trace": "Off"
+    },
+    "ms-vscode.cmake-tools": {
+        // 让 CMake Tools 成为 C/C++ IntelliSense 的“唯一真源”
+        "C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools",
+        // 打开工作区就自动 Configure（让状态栏/目标/测试即时可用）
+        "cmake.configureOnOpen": true,
+        // 统一把构建产物放到一个固定位置（即使 build 不在 workspace 里也行）
+        "cmake.buildDirectory": "/data/cmake-build/${workspaceFolderBasename}/${buildType}",
+        // 强制导出 compile_commands.json（cpptools/clangd/clang-tidy 都吃这个）
+        "cmake.configureSettings": {
+            "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
+        }
+    },
+    "openai.chatgpt": {
+        // 常用：打开侧边栏但不抢焦点（默认更不打扰）
+        "chatgpt.openOnStartup": false,
+        // 常用：在 TODO 上显示 CodeLens，方便“一键让 Codex 帮你补/完成”
+        "chatgpt.commentCodeLensEnabled": true,
+        // 一般留空：自动检测语言；只有你发现它总是误判语言时再填
+        "chatgpt.localeOverride": "",
+        // Windows 才需要：强烈建议在 WSL 里跑（安全与体验更好）
+        "chatgpt.runCodexInWindowsSubsystemForLinux": true
+    },
+    "ms-azuretools.vscode-containers": {
+        "dev.containers.dockerPath": "docker",
+        "dev.containers.dockerComposePath": "docker-compose"
+    },
+    "janisdd.vscode-edit-csv": {
+        "csv-edit.retainQuoteInformation": true,
+        "csv-edit.dragToAutoFill": "excelLike",
+        "csv-edit.hideOpenCsvEditorUiActions": false
+    },
+    "vscjava.vscode-java-debug": {
+        // 1) 交互输入：让需要 stdin 的程序可用（默认 Debug Console 不支持输入）
+        "java.debug.settings.console": "integratedTerminal",
+        // 2) 每次启动调试前先构建：避免调试到旧字节码
+        "java.debug.settings.forceBuildBeforeLaunch": true,
+        // 3) 构建失败是否继续：建议不继续（否则你会在错误 classpath/旧产物上浪费时间）
+        "java.debug.settings.onBuildFailureProceed": false,
+        // 4) 热替换：建议 manual（更可控）；你追求速度才改 auto
+        "java.debug.settings.hotCodeReplace": "manual",
+        // 5) main 方法上显示 Run/Debug CodeLens：开启后“点一下就跑/调”
+        "java.debug.settings.enableRunDebugCodeLens": true
+    },
+    "ms-vscode-remote.remote-containers": {
+        "dev.containers.dockerPath": "docker",
+        "dev.containers.dockerComposePath": "docker",
+        "dev.containers.dockerComposeCommand": "compose"
+    },
+    "docker.docker": {
+        "telemetry.telemetryLevel": "off"
+    },
+    "cschlosser.doxdocgen": {
+        // ===== 通用：作者信息 =====
+        "doxdocgen.generic.authorName": "Steven Ye",
+        "doxdocgen.generic.authorEmail": "",
+        // ===== 触发：输入 /** 然后回车生成 =====
+        "doxdocgen.generic.triggerSequence": "/**",
+        // ===== 函数注释模板（Doxygen 风格）=====
+        "doxdocgen.generic.briefTemplate": "@brief {text}",
+        "doxdocgen.generic.paramTemplate": "@param {param} {description}",
+        "doxdocgen.generic.returnTemplate": "@return {description}",
+        // ===== 文件头注释模板 =====
+        "doxdocgen.file.fileTemplate": "@file {name}",
+        "doxdocgen.file.briefTemplate": "@brief {text}",
+        "doxdocgen.generic.authorTag": "@author {author} ({email})",
+        "doxdocgen.file.copyrightTag": [
+            "@copyright Copyright (c) {year}"
+        ],
+        "doxdocgen.file.fileOrder": [
+            "file",
+            "empty",
+            "brief",
+            "empty",
+            "author",
+            "empty",
+            "copyright"
+        ]
+    },
+    "waderyan.gitblame": {
+        "gitblame.inlineMessageEnabled": true,
+        "gitblame.inlineMessageFormat": "${author.name} (${time.ago}) · ${commit.summary}",
+        "gitblame.statusBarMessageFormat": "${author.name} (${time.ago}) · ${commit.summary}",
+        "gitblame.currentUserAlias": "me",
+        "gitblame.ignoreWhitespace": true,
+        "gitblame.delayBlame": 150,
+        "gitblame.parallelBlames": 1,
+        "gitblame.extendedHoverInformation": "inline-status"
+    },
+    "codezombiech.gitignore": {},
+    "eamodio.gitlens": {
+        // ===== 内网硬约束：禁止扩展自己上报/联网能力 =====
+        "gitlens.telemetry.enabled": false,
+        // 隐藏/关闭 GitLens+（避免订阅/云功能入口在内网反复提示）
+        "gitlens.plusFeatures.enabled": false,
+        // 关闭 GitLens 的 AI 能力（内网/敏感代码场景默认关）
+        "gitlens.ai.enabled": false,
+        // ===== 本地核心体验：保留 blame / CodeLens / 状态栏 =====
+        "gitlens.currentLine.enabled": true,
+        "gitlens.statusBar.enabled": true,
+        "gitlens.codeLens.enabled": true,
+        "gitlens.codeLens.recentChange.enabled": true,
+        "gitlens.codeLens.authors.enabled": true,
+        // blame 口径：忽略空白（更贴近你排查“谁改了语义”的需求）
+        "gitlens.blame.ignoreWhitespace": true,
+        // ===== 一律禁用“需要远端服务”的 PR/增强链接/头像查询 =====
+        "gitlens.currentLine.pullRequests.enabled": false,
+        "gitlens.statusBar.pullRequests.enabled": false,
+        "gitlens.hovers.pullRequests.enabled": false,
+        "gitlens.hovers.autolinks.enhanced": false,
+        // 头像通常需要外部资源（或远端服务）；内网默认关闭，避免挂起
+        "gitlens.hovers.avatars": false,
+        "gitlens.views.commits.avatars": false,
+        // Commits 视图里 PR 关联查询也关闭（同样依赖远端服务）
+        "gitlens.views.commits.pullRequests.enabled": false,
+        "gitlens.views.commits.pullRequests.showForBranches": false,
+        "gitlens.views.commits.pullRequests.showForCommits": false
+    },
+    "golang.go": {
+        // ===== 工具安装位置：固定到一个地方，跨项目复用 =====
+        // 说明：Go 扩展默认把工具装到 GOPATH/bin；你可以用 go.toolsGopath 指定专用目录
+        "go.toolsGopath": "${userHome}/.cache/vscode-go-tools",
+        // ===== 内网：关掉自动更新与在线版本检查 =====
+        "go.toolsManagement.autoUpdate": false,
+        "go.toolsManagement.checkForUpdates": "local",
+        // ===== 语言服务器：保持默认启用（核心能力依赖 gopls） =====
+        "go.useLanguageServer": true,
+        // ===== 格式化：默认走 gopls（不额外依赖外部工具） =====
+        "go.formatTool": "default",
+        "[go]": {
+            "editor.defaultFormatter": "golang.go",
+            "editor.formatOnSave": true
+        },
+        // ===== 内网模块/工具安装环境：只走内网，不尝试外网 =====
+        // GOPROXY：只指向内网代理；末尾 off 表示不要再回退 direct（避免去外网）
+        // GOSUMDB：很多内网访问不到 sum.golang.org，直接 off 避免卡死（代价是少了公共校验）
+        // GOPRIVATE/GONOSUMDB：把公司私有模块域名后缀写进去
+        "go.toolsEnvVars": {
+            "GOPROXY": "https://YOUR_GOPROXY_INTERNAL,off",
+            "GOSUMDB": "off",
+            "GOPRIVATE": "*.YOUR_CORP_DOMAIN",
+            "GONOSUMDB": "*.YOUR_CORP_DOMAIN"
+        },
+        // ===== 可选：减少工作区扫描压力（大仓库/mono repo 常见）=====
+        "gopls": {
+            "ui.semanticTokens": true
+        }
+    },
+    "mateuszchudyk.hexinspector": {
+        "hexinspector.inputDataTypes": [
+            "hexadecimal",
+            "binary"
+        ],
+        "hexinspector.hoverContent": [
+            "decimal",
+            "hexadecimal",
+            "ascii",
+            "bits set"
+        ],
+        "hexinspector.endianness": "little"
+    },
+    "ms-toolsai.jupyter": {
+        // ===== 内网：降噪（避免实验/遥测导致的外联与弹窗）=====
+        "jupyter.experiments.enabled": false,
+        // ===== 默认只用本地 Jupyter Server（不自动引导你去连外部）=====
+        "jupyter.jupyterServerType": "local",
+        // ===== 相对路径行为：让 notebook 的工作目录固定（避免“跑到莫名其妙目录”）=====
+        "jupyter.notebookFileRoot": "${workspaceFolder}",
+        // ===== 体验：执行时用交互窗口/Notebook（按你习惯二选一；我默认 notebook 原生体验）=====
+        "jupyter.interactiveWindowMode": "perFile"
+    },
+    "ms-toolsai.jupyter-keymap": {},
+    "ms-toolsai.jupyter-renderers": {},
+    "redhat.java": {
+        // 全局关遥测（公司内网默认建议）
+        "telemetry.telemetryLevel": "off",
+        "redhat.telemetry.enabled": false,
+        // 启动 Java Language Server 的 tooling JDK（最低 Java 21）
+        "java.jdt.ls.java.home": "/ABS/PATH/TO/jdk-21",
+        // 项目编译/运行可选多版本（按项目需要）
+        "java.configuration.runtimes": [
+            {
+                "name": "JavaSE-21",
+                "path": "/ABS/PATH/TO/jdk-21",
+                "default": true
+            },
+            {
+                "name": "JavaSE-17",
+                "path": "/ABS/PATH/TO/jdk-17"
+            }
+        ],
+        // Maven：指定公司内网 settings.xml + 离线（避免去外网卡住）
+        "java.configuration.maven.userSettings": "/ABS/PATH/TO/settings.xml",
+        "java.import.maven.offline.enabled": true,
+        // Gradle：离线（同理）
+        "java.import.gradle.offline.enabled": true
+    },
+    "qcz.text-power-tools": {},
+    "jebbs.markdown-extension-pack": {},
+    "davidanson.vscode-markdownlint": {},
+    "pkief.material-icon-theme": {},
+    "vscjava.vscode-maven": {},
+    "zhuangtongfa.material-theme": {},
+    "ms-ceintl.vscode-language-pack-zh-hans": {},
+    "ms-vscode.powershell": {},
+    "vscjava.vscode-java-dependency": {},
+    "ms-python.python": {},
+    "ms-python.vscode-pylance": {},
+    "ms-python.debugpy": {},
+    "ms-python.vscode-python-envs": {},
+    "mechatroner.rainbow-csv": {},
+    "ms-vscode-remote.remote-ssh": {},
+    "ms-vscode-remote.remote-ssh-edit": {},
+    "ms-vscode.remote-explorer": {},
+    "rust-lang.rust-analyzer": {},
+    "natizyskunk.sftp": {},
+    "vscjava.vscode-java-test": {},
+    "cjl.todo-tree-enhanced": {},
+    "tomoki1207.pdf": {},
+    "vue.volar": {},
+    "streetsidesoftware.code-spell-checker": {},
+    "eriklynd.json-tools": {}
 }
