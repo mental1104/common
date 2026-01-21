@@ -122,6 +122,16 @@ This file captures recent work plus portability guidance, grouped by language.
 - C++11 fix in bloom filter: function templates use trailing return types instead of C++14 auto-deduction.
 - CI now runs coverage steps instead of separate test steps in GitHub Actions (tests are included in coverage runs). `test-redispp` remains a standalone test step.
 - Boost sparse checkout includes `mp11` and `variant2` to support the C++11/14 JSON fallback.
+- Stacktrace: add C/C++ crash capture with JSON Lines output, POSIX forked symbolization, Windows DbgHelp path, and C/C++ examples.
+- Stacktrace: fix macOS ucontext build by defining `_XOPEN_SOURCE`, adjust POSIX symbolizer helper signatures to avoid const-pointer warnings.
+- Stacktrace: use `pthread_self` for macOS thread id and avoid deprecated `getcontext` on macOS manual dumps.
+- Stacktrace: add macOS arm64 register extraction for IP/SP/BP and improve atos output parsing for file:line.
+- Stacktrace: move public header under `cpp/include/mental1104/debug` and update include paths/docs.
+- Gitignore: unignore `cpp/include/mental1104/debug` so stacktrace headers are tracked.
+- Stacktrace: add pluggable formatter (JSON/Python-like), new formatting options, and route stack output through formatter hooks.
+- Examples: deepen C function call chain and add class-method stack depth for C++ crash demo.
+- Examples: move stacktrace demos into `cpp/examples/debug/stacktrace` with a Chinese README guide.
+- Docs: convert `cpp/README.md` to Chinese and update stacktrace usage details.
 
 ### Concurrency & Logging APIs (prefer these)
 
