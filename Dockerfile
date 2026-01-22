@@ -107,6 +107,18 @@ RUN set -eux; \
     rm -rf "$tmp_dir"
 
 # -----------------------------
+# A3) 低频：玩具命令（sysvbanner/toilet/figlet/cowsay/aafire）
+# -----------------------------
+RUN --mount=type=cache,target=/var/cache/apt \
+    --mount=type=cache,target=/var/lib/apt \
+    set -eux; \
+    APT_ENV="env -u HTTP_PROXY -u HTTPS_PROXY -u NO_PROXY -u ALL_PROXY -u http_proxy -u https_proxy -u no_proxy -u all_proxy"; \
+    $APT_ENV apt-get update; \
+    $APT_ENV apt-get install -y --no-install-recommends \
+      sysvbanner toilet figlet cowsay libaa-bin; \
+    rm -rf /var/lib/apt/lists/*
+
+# -----------------------------
 # B) 中频：离线资源（INSTALLROOT）先拷贝
 #    说明：仅保留当前目录里已有的配置/清单文件
 # -----------------------------
