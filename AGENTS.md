@@ -133,6 +133,7 @@ This file captures recent work plus portability guidance, grouped by language.
 - Examples: move stacktrace demos into `cpp/examples/debug/stacktrace` with a Chinese README guide.
 - Docs: convert `cpp/README.md` to Chinese and update stacktrace usage details.
 - Dockerfile: add webbench install step with `WEBBENCH_VERSION` build arg and install `exuberant-ctags`.
+- Dockerfile: add a dedicated layer for toy commands (sysvbanner/toilet/figlet/cowsay/aafire).
 
 ### Concurrency & Logging APIs (prefer these)
 
