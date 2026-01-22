@@ -10,6 +10,7 @@ ARG https_proxy
 ARG no_proxy
 ARG all_proxy
 ARG NUGET_SOURCE=https://api.nuget.org/v3/index.json
+ARG WEBBENCH_VERSION=1.5
 
 ENV DEBIAN_FRONTEND=noninteractive \
     LANG=C.UTF-8 \
@@ -71,7 +72,7 @@ RUN --mount=type=cache,target=/var/cache/apt \
       nodejs npm lua5.3 \
       dotnet-sdk-8.0 aspnetcore-runtime-8.0 \
       # 其他
-      ffmpeg pandoc xclip xsel vim \
+      exuberant-ctags ffmpeg pandoc xclip xsel vim \
       # qemu 相关（你后续源码编译仍需要）
       qemu-system-misc gcc-riscv64-linux-gnu binutils-riscv64-linux-gnu bison \
     ; \
@@ -90,6 +91,20 @@ RUN --mount=type=cache,target=/var/cache/apt \
     ln -sf /lib/x86_64-linux-gnu/libtinfo.so.6 /lib/x86_64-linux-gnu/libtinfow.so.6; \
     ldconfig; \
     cd /usr/src/googletest && cmake . && make -j"$(nproc)" && make install
+
+# -----------------------------
+# A2) 低频：webbench（版本可参数化）
+# -----------------------------
+RUN set -eux; \
+    tmp_dir="$(mktemp -d)"; \
+    cd "$tmp_dir"; \
+    curl -fsSL "http://home.tiscali.cz/~cz210552/distfiles/webbench-${WEBBENCH_VERSION}.tar.gz" -o webbench.tar.gz; \
+    tar -xzf webbench.tar.gz; \
+    cd "webbench-${WEBBENCH_VERSION}"; \
+    make; \
+    make install; \
+    cd /; \
+    rm -rf "$tmp_dir"
 
 # -----------------------------
 # B) 中频：离线资源（INSTALLROOT）先拷贝

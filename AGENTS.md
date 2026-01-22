@@ -132,6 +132,7 @@ This file captures recent work plus portability guidance, grouped by language.
 - Examples: deepen C function call chain and add class-method stack depth for C++ crash demo.
 - Examples: move stacktrace demos into `cpp/examples/debug/stacktrace` with a Chinese README guide.
 - Docs: convert `cpp/README.md` to Chinese and update stacktrace usage details.
+- Dockerfile: add webbench install step with `WEBBENCH_VERSION` build arg and install `exuberant-ctags`.
 
 ### Concurrency & Logging APIs (prefer these)
 
