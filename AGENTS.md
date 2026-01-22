@@ -194,6 +194,8 @@ This file captures recent work plus portability guidance, grouped by language.
 - Added scope aliases: `pg_session_scope`, `mysql_session_scope`, `sqlite_session_scope`, `ck_session_scope` and matching `*_tx_scope`.
 - Added `AutoSessionDAO` (auto-injects `db` keyword param) and optional singleton support.
 - Added `register_db_and_create` / `register_db_and_create_async` (register + optional create_all).
+- Utils: add batch_rename helpers for planning/applying renames with suffix/regex/index rules plus tests.
+- Utils: add Chinese usage comments for batch_rename functions.
 
 ### DB Usage (latest)
 - Register once per process: `register_db(DBKind.POSTGRES, dsn=..., db_name="default")`.
