@@ -1,5 +1,8 @@
+import argparse
 import json
+import subprocess
 from pathlib import Path
+from typing import Iterable
 
 
 def _strip_jsonc(text: str) -> str:
@@ -228,12 +231,18 @@ def _format_settings_jsonc(
     return "\n".join(lines) + "\n"
 
 
-def main() -> None:
-    src = Path("/root/vscode-extensions.json")
-    raw = src.read_text(encoding="utf-8")
-    data = _parse_jsonc(raw)
-    comments, header_comments = _extract_key_comments(raw)
+def _collect_extensions(data: dict) -> list[str]:
+    extensions: list[str] = []
+    for key, value in data.items():
+        if key == "common":
+            continue
+        if not isinstance(value, dict):
+            raise SystemExit(f"extension '{key}' must map to a JSON object")
+        extensions.append(key)
+    return extensions
 
+
+def _write_settings(data: dict, comments: dict[str, list[str]], header_comments: list[str]) -> None:
     common = data.get("common", {})
     if common is None:
         common = {}
@@ -254,6 +263,65 @@ def main() -> None:
         _format_settings_jsonc(settings, comments, header_comments),
         encoding="utf-8",
     )
+
+
+def _install_extensions(
+    extensions: Iterable[str], install_cli: str, data_dir: str, extensions_dir: str
+) -> None:
+    failed: list[str] = []
+    for extension in extensions:
+        if not extension:
+            continue
+        try:
+            subprocess.run(
+                [
+                    install_cli,
+                    "--user-data-dir",
+                    data_dir,
+                    "--extensions-dir",
+                    extensions_dir,
+                    "--install-extension",
+                    extension,
+                ],
+                check=True,
+            )
+        except subprocess.CalledProcessError:
+            failed.append(extension)
+    if failed:
+        raise SystemExit(f"extension install failures: {','.join(failed)}")
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--install", action="store_true", help="Install extensions")
+    parser.add_argument("--settings", action="store_true", help="Write settings.json")
+    parser.add_argument("--install-cli", default="", help="VSCode CLI path")
+    parser.add_argument(
+        "--data-dir", default="/root/.vscode-server/data", help="VSCode user data dir"
+    )
+    parser.add_argument(
+        "--extensions-dir",
+        default="/root/.vscode-server/extensions",
+        help="VSCode extensions dir",
+    )
+    args = parser.parse_args()
+
+    src = Path("/root/vscode-extensions.json")
+    raw = src.read_text(encoding="utf-8")
+    data = _parse_jsonc(raw)
+    comments, header_comments = _extract_key_comments(raw)
+
+    if not args.install and not args.settings:
+        args.settings = True
+
+    if args.settings:
+        _write_settings(data, comments, header_comments)
+
+    if args.install:
+        if not args.install_cli:
+            raise SystemExit("missing --install-cli for extension install")
+        extensions = _collect_extensions(data)
+        _install_extensions(extensions, args.install_cli, args.data_dir, args.extensions_dir)
 
 
 if __name__ == "__main__":

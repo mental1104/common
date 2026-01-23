@@ -1,10 +1,14 @@
-#include "stacktrace_internal.h"
-
 #ifndef _WIN32
+
+#if defined(__linux__) && !defined(_GNU_SOURCE)
+#define _GNU_SOURCE
+#endif
 
 #if defined(__APPLE__) && !defined(_XOPEN_SOURCE)
 #define _XOPEN_SOURCE 700
 #endif
+
+#include "stacktrace_internal.h"
 
 #include <dlfcn.h>
 #include <errno.h>
