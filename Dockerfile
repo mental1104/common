@@ -60,7 +60,7 @@ RUN --mount=type=cache,target=/var/cache/apt \
       libpcap-dev libglib2.0-dev libpixman-1-dev \
       libtinfo6 libncurses-dev libncursesw6 openssl \
       libgtest-dev libbenchmark-dev libboost-all-dev lcov \
-      libmpfr-dev libgmp-dev \
+      libmpfr-dev libgmp-dev libtirpc-dev \
       # 网络/运维工具
       curl wget git tree unzip gzip zip jq \
       netcat-openbsd telnet tcpdump iptables iputils-ping \
@@ -98,10 +98,17 @@ RUN --mount=type=cache,target=/var/cache/apt \
 RUN set -eux; \
     tmp_dir="$(mktemp -d)"; \
     cd "$tmp_dir"; \
-    curl -fsSL "http://home.tiscali.cz/~cz210552/distfiles/webbench-${WEBBENCH_VERSION}.tar.gz" -o webbench.tar.gz; \
+    webbench_url_primary="https://codeload.github.com/EZLippi/WebBench/tar.gz/refs/heads/master"; \
+    webbench_url_legacy="http://home.tiscali.cz/~cz210552/distfiles/webbench-${WEBBENCH_VERSION}.tar.gz"; \
+    curl -fsSL "$webbench_url_primary" -o webbench.tar.gz || \
+      curl -fsSL "$webbench_url_legacy" -o webbench.tar.gz; \
     tar -xzf webbench.tar.gz; \
-    cd "webbench-${WEBBENCH_VERSION}"; \
-    make; \
+    if [ -d "WebBench-master" ]; then \
+      cd "WebBench-master"; \
+    else \
+      cd "webbench-${WEBBENCH_VERSION}"; \
+    fi; \
+    make CFLAGS="-I/usr/include/tirpc"; \
     make install; \
     cd /; \
     rm -rf "$tmp_dir"
@@ -266,7 +273,8 @@ RUN set -eux; \
 # -----------------------------
 # G) 高频：VSCode Extensions（耗时，尽量早于代码层）
 # -----------------------------
-COPY devops/INSTALLROOT/root/extensions.list /root/vscode-extensions.list
+COPY devops/INSTALLROOT/root/extensions.json /root/vscode-extensions.json
+COPY devops/INSTALLROOT/root/vscode_extensions.py /root/vscode-extensions.py
 
 RUN set -eux; \
     server_dir="/root/.vscode-server/cli/servers/Stable-${VSCODE_COMMIT}/server"; \
@@ -278,30 +286,12 @@ RUN set -eux; \
         echo "[error] VSCode CLI not found for extension install"; \
         exit 1; \
     fi; \
-    if [ -s /root/vscode-extensions.list ]; then \
-        failed=0; \
-        failed_ext=""; \
-        while read -r extension; do \
-            case "$extension" in ""|\#*) continue ;; esac; \
-            if ! "$install_cli" \
-                --user-data-dir /root/.vscode-server/data \
-                --extensions-dir /root/.vscode-server/extensions \
-                --install-extension "$extension"; then \
-                echo "[error] failed to install extension: $extension" >&2; \
-                failed=1; \
-                if [ -z "$failed_ext" ]; then \
-                    failed_ext="$extension"; \
-                else \
-                    failed_ext="${failed_ext},${extension}"; \
-                fi; \
-            fi; \
-        done < /root/vscode-extensions.list; \
-        if [ "$failed" -ne 0 ]; then \
-            echo "[error] extension install failures: ${failed_ext}" >&2; \
-            exit 1; \
-        fi; \
-    fi; \
-    rm -f /root/vscode-extensions.list
+    python3 /root/vscode-extensions.py \
+        --install \
+        --install-cli "$install_cli" \
+        --data-dir /root/.vscode-server/data \
+        --extensions-dir /root/.vscode-server/extensions; \
+    rm -f /root/vscode-extensions.json /root/vscode-extensions.py
 
 # -----------------------------
 # H) 中频：pip 依赖（只受 requirements.txt 影响，单独层）
@@ -385,7 +375,7 @@ COPY devops/INSTALLROOT/root/extensions.json /root/vscode-extensions.json
 COPY devops/INSTALLROOT/root/vscode_extensions.py /root/vscode-extensions.py
 
 RUN set -eux; \
-    python3 /root/vscode-extensions.py; \
+    python3 /root/vscode-extensions.py --settings; \
     rm -f /root/vscode-extensions.py
 
 # -----------------------------
