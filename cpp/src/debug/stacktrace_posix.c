@@ -4,8 +4,13 @@
 #define _GNU_SOURCE
 #endif
 
-#if defined(__APPLE__) && !defined(_XOPEN_SOURCE)
+#if defined(__APPLE__)
+#if !defined(_DARWIN_C_SOURCE)
+#define _DARWIN_C_SOURCE
+#endif
+#if !defined(_XOPEN_SOURCE)
 #define _XOPEN_SOURCE 700
+#endif
 #endif
 
 #include "stacktrace_internal.h"
