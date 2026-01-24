@@ -129,6 +129,7 @@ This file captures recent work plus portability guidance, grouped by language.
 - Stacktrace: move public header under `cpp/include/mental1104/debug` and update include paths/docs.
 - Gitignore: unignore `cpp/include/mental1104/debug` so stacktrace headers are tracked.
 - Stacktrace: add pluggable formatter (JSON/Python-like), new formatting options, and route stack output through formatter hooks.
+- Stacktrace: undef MSVC `exception_code` macro in Windows implementation to avoid struct field name collision.
 - Examples: deepen C function call chain and add class-method stack depth for C++ crash demo.
 - Examples: move stacktrace demos into `cpp/examples/debug/stacktrace` with a Chinese README guide.
 - Docs: convert `cpp/README.md` to Chinese and update stacktrace usage details.
