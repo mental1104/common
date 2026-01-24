@@ -2,11 +2,14 @@
 
 #ifdef _WIN32
 
-#include <dbghelp.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
 #include <windows.h>
+#include <dbghelp.h>
+#ifdef exception_code
+#undef exception_code
+#endif
 
 static LPTOP_LEVEL_EXCEPTION_FILTER g_prev_filter = NULL;
 static int g_sym_initialized = 0;
