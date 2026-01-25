@@ -872,14 +872,27 @@ def install(env: Mapping[str, str]) -> None:
     run([arg for arg in cmd if arg], env=env)
 
 
-def uninstall(_env: Mapping[str, str]) -> None:
+def uninstall(env: Mapping[str, str]) -> None:
     manifest = CPP_BUILD_DIR / "install_manifest.txt"
     if not manifest.exists():
         raise SystemExit(f"[error] 未找到 {manifest}")
     for line in manifest.read_text().splitlines():
+        if not line.strip():
+            continue
         target = Path(line)
-        if target.exists():
-            target.unlink()
+        if not target.exists():
+            continue
+        try:
+            if target.is_dir() and not target.is_symlink():
+                shutil.rmtree(target)
+            else:
+                target.unlink()
+        except PermissionError:
+            sudo = env.get("SUDO", "").strip()
+            if not sudo:
+                raise
+            rm_args = [sudo, "rm", "-rf" if target.is_dir() and not target.is_symlink() else "-f", str(target)]
+            run([arg for arg in rm_args if arg], env=env)
 
 
 def clean(_env: Mapping[str, str], *, clean_submodules: bool = True) -> None:

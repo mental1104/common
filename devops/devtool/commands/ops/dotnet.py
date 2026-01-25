@@ -126,6 +126,10 @@ def _dotnet_format_available(env: Mapping[str, str]) -> bool:
         return False
 
 
+def _local_feed_dir(env: Mapping[str, str]) -> Path:
+    return Path(env.get("NUGET_LOCAL_FEED") or env.get("DOTNET_LOCAL_FEED") or ROOT / "artifacts" / "nuget")
+
+
 def fmt(env: Mapping[str, str]) -> None:
     _ensure_solution()
     if not _dotnet_format_available(env):
@@ -176,11 +180,34 @@ def clean(env: Mapping[str, str]) -> None:
 
 
 def install(env: Mapping[str, str]) -> None:
-    print("[warn] dotnet install is not configured; skipping")
+    feed_dir = _local_feed_dir(env)
+    feed_dir.mkdir(parents=True, exist_ok=True)
+    run(
+        [
+            _dotnet(env),
+            "pack",
+            str(DOTNET_DIR / "src" / "Mental1104" / "Mental1104.csproj"),
+            "--configuration",
+            _config(env),
+            "--output",
+            str(feed_dir),
+        ],
+        env=env,
+        cwd=DOTNET_DIR,
+    )
 
 
 def uninstall(env: Mapping[str, str]) -> None:
-    print("[warn] dotnet uninstall is not configured; skipping")
+    feed_dir = _local_feed_dir(env)
+    if not feed_dir.exists():
+        return
+    removed = False
+    for pattern in ("Mental1104*.nupkg", "Mental1104*.snupkg"):
+        for pkg in feed_dir.glob(pattern):
+            pkg.unlink()
+            removed = True
+    if not removed:
+        print(f"[warn] dotnet uninstall found no Mental1104 packages under {feed_dir}")
 
 
 def vet(env: Mapping[str, str]) -> None:

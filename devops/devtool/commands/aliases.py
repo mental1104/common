@@ -127,9 +127,12 @@ def _alias_uninstall(name: str, target: str):
     @register(name)
     def configure(subparsers: ArgumentParser):
         parser = subparsers.add_parser(name, help=f"{name} (alias for uninstall {target})")
+        if target == "cpp":
+            parser.add_argument("--prefix", help="Install prefix")
         _add_common(parser, jobs=False, verbose=True)
         parser.set_defaults(_runner=lambda args: uninstall.run(SimpleNamespace(
             target=target,
+            prefix=getattr(args, "prefix", None),
             verbose=getattr(args, "verbose", False),
             jobs=None,
         )))

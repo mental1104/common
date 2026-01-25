@@ -181,6 +181,24 @@ jobs:
           PREFIX: ${{ github.workspace }}/artifacts/cpp
         run: ./dev verify-install cpp
 
+      - name: uninstall-cpp
+        env:
+          PREFIX: ${{ github.workspace }}/artifacts/cpp
+        run: ./dev uninstall-cpp
+
+      - name: verify-uninstall-cpp (expect failure)
+        env:
+          PREFIX: ${{ github.workspace }}/artifacts/cpp
+          VERIFY_REQUIRE_INSTALL: "1"
+        run: |
+          set +e
+          ./dev verify-install cpp
+          status=$?
+          if [ $status -eq 0 ]; then
+            echo "verify-install succeeded after uninstall; expected failure"
+            exit 1
+          fi
+
       - name: Mark job failed if core steps failed
         if: ${{ steps.setup_cpp.outcome == 'failure' || steps.build_cpp.outcome == 'failure' || steps.coverage_cpp.outcome == 'failure' }}
         run: exit 1
@@ -368,6 +386,24 @@ jobs:
           PREFIX: ${{ github.workspace }}/artifacts/cpp
         run: ./dev verify-install cpp
 
+      - name: uninstall-cpp
+        env:
+          PREFIX: ${{ github.workspace }}/artifacts/cpp
+        run: ./dev uninstall-cpp
+
+      - name: verify-uninstall-cpp (expect failure)
+        env:
+          PREFIX: ${{ github.workspace }}/artifacts/cpp
+          VERIFY_REQUIRE_INSTALL: "1"
+        run: |
+          set +e
+          ./dev verify-install cpp
+          status=$?
+          if [ $status -eq 0 ]; then
+            echo "verify-install succeeded after uninstall; expected failure"
+            exit 1
+          fi
+
       - name: Mark job failed if core steps failed
         if: ${{ steps.setup_cpp.outcome == 'failure' || steps.build_cpp.outcome == 'failure' || steps.coverage_cpp.outcome == 'failure' || steps.wait_services.outcome == 'failure' }}
         run: exit 1
@@ -502,6 +538,24 @@ jobs:
           PREFIX: ${{ github.workspace }}/artifacts/cpp
         run: ./dev verify-install cpp
 
+      - name: uninstall-cpp
+        env:
+          PREFIX: ${{ github.workspace }}/artifacts/cpp
+        run: ./dev uninstall-cpp
+
+      - name: verify-uninstall-cpp (expect failure)
+        env:
+          PREFIX: ${{ github.workspace }}/artifacts/cpp
+          VERIFY_REQUIRE_INSTALL: "1"
+        run: |
+          set +e
+          ./dev verify-install cpp
+          status=$?
+          if [ $status -eq 0 ]; then
+            echo "verify-install succeeded after uninstall; expected failure"
+            exit 1
+          fi
+
       - name: Mark job failed if core steps failed
         if: ${{ steps.setup_cpp.outcome == 'failure' || steps.build_cpp.outcome == 'failure' || steps.coverage_cpp.outcome == 'failure' }}
         run: exit 1
@@ -599,6 +653,25 @@ jobs:
         env:
           PREFIX: ${{ github.workspace }}/artifacts/cpp
         run: python -m devtool.cli verify-install cpp
+
+      - name: uninstall-cpp
+        env:
+          PREFIX: ${{ github.workspace }}/artifacts/cpp
+          CMAKE_INSTALL_CONFIG_NAME: Debug
+        run: python -m devtool.cli uninstall-cpp
+
+      - name: verify-uninstall-cpp (expect failure)
+        id: verify_uninstall_cpp
+        continue-on-error: true
+        env:
+          PREFIX: ${{ github.workspace }}/artifacts/cpp
+          VERIFY_REQUIRE_INSTALL: "1"
+        run: python -m devtool.cli verify-install cpp
+
+      - name: assert-verify-uninstall-cpp failed
+        if: ${{ steps.verify_uninstall_cpp.outcome != 'failure' }}
+        run: |
+          throw "verify-install succeeded after uninstall; expected failure"
 
       - name: Mark job failed if core steps failed
         if: ${{ steps.setup_cpp.outcome == 'failure' || steps.build_cpp.outcome == 'failure' || steps.coverage_cpp.outcome == 'failure' }}

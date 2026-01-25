@@ -6,6 +6,7 @@ import shlex
 import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 from typing import Mapping
 
@@ -38,6 +39,38 @@ def _cargo_extra_args(env: Mapping[str, str]) -> list[str]:
         return shlex.split(raw, posix=os.name != "nt")
     except ValueError:
         return raw.split()
+
+
+def _cargo_bin_dir(env: Mapping[str, str]) -> Path:
+    cargo_home = (env.get("CARGO_HOME") or "").strip()
+    base = Path(cargo_home) if cargo_home else Path.home() / ".cargo"
+    return base / "bin"
+
+
+def _install_verify_binary(env: Mapping[str, str]) -> None:
+    env_np = strip_proxies(env)
+    rust_path = RUST_DIR.as_posix() if sys.platform.startswith("win") else str(RUST_DIR)
+    with tempfile.TemporaryDirectory(prefix="m1104-rust-install-") as tmp:
+        tmp_path = Path(tmp)
+        (tmp_path / "src").mkdir(parents=True, exist_ok=True)
+        (tmp_path / "Cargo.toml").write_text(
+            "[package]\n"
+            "name = \"mental1104-verify\"\n"
+            "version = \"0.1.0\"\n"
+            "edition = \"2021\"\n"
+            "\n"
+            "[dependencies]\n"
+            f"mental1104 = {{ path = \"{rust_path}\" }}\n"
+        )
+        (tmp_path / "src" / "main.rs").write_text(
+            "use mental1104::collections::contains;\n"
+            "\n"
+            "fn main() {\n"
+            "  let v = vec![1, 2, 3];\n"
+            "  assert!(contains(v.as_slice(), &2));\n"
+            "}\n"
+        )
+        run(["cargo", "install", "--path", str(tmp_path), "--force"], env=env_np, cwd=tmp_path)
 
 
 def _install_cargo_llvm_cov(env: Mapping[str, str], versions: list[str]) -> None:
@@ -308,14 +341,20 @@ def clean(env: Mapping[str, str]) -> None:
 
 def install(env: Mapping[str, str]) -> None:
     cargo_toml = Path(RUST_DIR) / "Cargo.toml"
-    if cargo_toml.read_text().find("[[bin]]") != -1 or (Path(RUST_DIR) / "src/main.rs").exists():
+    if b"[[bin]]" in cargo_toml.read_bytes() or (Path(RUST_DIR) / "src/main.rs").exists():
         run(["cargo", "install", "--path", ".", "--locked", "--force"], env=strip_proxies(env), cwd=RUST_DIR)
     else:
         build(env)
+    _install_verify_binary(env)
 
 
 def uninstall(env: Mapping[str, str]) -> None:
-    run(["cargo", "uninstall", "mental1104"], env=strip_proxies(env), cwd=RUST_DIR)
+    env_np = strip_proxies(env)
+    for crate in ("mental1104", "mental1104-verify"):
+        try:
+            run(["cargo", "uninstall", crate], env=env_np, cwd=RUST_DIR)
+        except Exception:
+            print(f"[warn] cargo uninstall {crate} failed; skipping")
 
 
 def coverage(env: Mapping[str, str]) -> None:
