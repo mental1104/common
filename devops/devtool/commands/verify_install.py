@@ -19,6 +19,10 @@ def _split_cmd(value: str) -> list[str]:
     return shlex.split(value) if value else []
 
 
+def _require_installed(env: Mapping[str, str]) -> bool:
+    return str(env.get("VERIFY_REQUIRE_INSTALL", "")).strip().lower() in ("1", "true", "yes", "on")
+
+
 def _with_lib_path(env: Mapping[str, str], lib_dir: Path, bin_dir: Path | None = None) -> dict[str, str]:
     merged = dict(env)
     if sys.platform.startswith("win"):
@@ -49,6 +53,26 @@ def _read_go_module_path(go_dir: Path) -> str:
             if len(parts) >= 2:
                 return parts[1]
     raise SystemExit(f"[error] failed to parse module path from {go_mod}")
+
+
+def _go_bin_dir(env: Mapping[str, str]) -> Path | None:
+    go_bin = env.get("GO", "go")
+    bin_dir = env.get("GOBIN", "").strip()
+    if not bin_dir:
+        bin_dir = os.popen(f'{go_bin} env GOBIN').read().strip()
+    if not bin_dir:
+        gopath = os.popen(f'{go_bin} env GOPATH').read().strip()
+        if gopath:
+            bin_dir = os.path.join(gopath.split(os.pathsep)[0], "bin")
+    if not bin_dir:
+        return None
+    return Path(bin_dir)
+
+
+def _cargo_bin_dir(env: Mapping[str, str]) -> Path:
+    cargo_home = (env.get("CARGO_HOME") or "").strip()
+    base = Path(cargo_home) if cargo_home else Path.home() / ".cargo"
+    return base / "bin"
 
 
 def _verify_cpp(env: Mapping[str, str]) -> None:
@@ -145,6 +169,16 @@ def _verify_go(env: Mapping[str, str]) -> None:
     module_path = _read_go_module_path(GO_DIR)
     if not GO_DIR.exists():
         raise SystemExit(f"[error] missing Go module directory at {GO_DIR}")
+    if _require_installed(env):
+        bin_dir = _go_bin_dir(env)
+        if not bin_dir:
+            raise SystemExit("[error] missing GOBIN/GOPATH; cannot verify installed Go binary")
+        exe_name = "mental1104-go-verify.exe" if sys.platform.startswith("win") else "mental1104-go-verify"
+        verify_bin = bin_dir / exe_name
+        if not verify_bin.exists():
+            raise SystemExit(f"[error] missing Go install verify binary at {verify_bin}")
+        run([str(verify_bin)], env=env, cwd=GO_DIR)
+        return
     env_go = dict(env)
     env_go["GOWORK"] = "off"
     env_go["GOPROXY"] = "off"
@@ -174,6 +208,15 @@ def _verify_rust(env: Mapping[str, str]) -> None:
         raise SystemExit("[error] missing cargo")
     env_rust = dict(env)
     env_rust["CARGO_NET_OFFLINE"] = "true"
+    if _require_installed(env):
+        bin_dir = _cargo_bin_dir(env_rust)
+        exe_name = "mental1104-verify.exe" if sys.platform.startswith("win") else "mental1104-verify"
+        verify_bin = bin_dir / exe_name
+        if not verify_bin.exists():
+            raise SystemExit(f"[error] missing Rust install verify binary at {verify_bin}")
+        run([str(verify_bin)], env=env_rust, cwd=RUST_DIR)
+        print("rust-ok")
+        return
     rust_path = RUST_DIR.as_posix() if sys.platform.startswith("win") else str(RUST_DIR)
 
     with tempfile.TemporaryDirectory(prefix="m1104-verify-rust-") as tmp:
@@ -206,7 +249,9 @@ def _verify_dotnet(env: Mapping[str, str]) -> None:
     dotnet_dir = ROOT / "dotnet"
     feed_dir = Path(env.get("NUGET_LOCAL_FEED") or env.get("DOTNET_LOCAL_FEED") or ROOT / "artifacts" / "nuget")
     feed_dir.mkdir(parents=True, exist_ok=True)
-    if not list(feed_dir.glob("Mental1104*.nupkg")):
+    if _require_installed(env) and not list(feed_dir.glob("Mental1104*.nupkg")):
+        raise SystemExit(f"[error] missing Mental1104 packages under {feed_dir}")
+    if not _require_installed(env) and not list(feed_dir.glob("Mental1104*.nupkg")):
         run(
             [
                 dotnet,
