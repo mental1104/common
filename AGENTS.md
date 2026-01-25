@@ -51,6 +51,7 @@ This file captures recent work plus portability guidance, grouped by language.
 - Dev tool: `run-docker` now runs `docker compose up -d --build --force-recreate`.
 - Dev tool: `verify-install` runs Rust check in offline mode to avoid crates.io lookups in isolated containers.
 - Dev tool: `verify-install` now prints cpp/rust/dotnet success markers.
+- Dev tool: `verify-install` C++ check on Windows recognizes MSVC lib naming and uses CMake plus PATH for runtime.
 - CI: add per-language `verify-install` steps at the end of matrix jobs (cpp/python install before verify).
 - Dev tool: C++ install now passes `--config` for multi-config build dirs.
 - Dev tool: C++ verify skips explicit include path when PREFIX is `/usr/local` to validate system default include search.
