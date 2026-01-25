@@ -5,12 +5,12 @@ import re
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Iterable, Sequence
+from typing import Any, Callable, Iterable, Sequence, Union
 
 # 用法: 规则返回新文件名/Path, 返回 None 表示跳过该文件。
-RenameRule = Callable[[Path], str | Path | None]
+RenameRule = Callable[[Path], Union[str, Path, None]]
 # 用法: 带序号的规则, (path, index) -> 新文件名/Path 或 None。
-IndexedRenameRule = Callable[[Path, int], str | Path | None]
+IndexedRenameRule = Callable[[Path, int], Union[str, Path, None]]
 
 
 # 用法: 一个重命名操作, 表示 src -> dst。
