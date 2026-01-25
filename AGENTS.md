@@ -45,6 +45,7 @@ This file captures recent work plus portability guidance, grouped by language.
 - Dev tool: `verify-install` Go check uses a local module replace to avoid network module lookups.
 - Dev tool: `verify-install` Go check now imports `GO_DIR` for the local replace.
 - Dev tool: `verify-install` Go check forces offline env (GOWORK/GOPROXY/GOSUMDB) to avoid proxy lookups.
+- Dev tool: `verify-install` Rust check uses POSIX-style path on Windows to avoid TOML escape errors.
 - Dev tool: export C++ build now drops stale CMakeCache from another path before configuring.
 - Dev tool: `clean-python` now also removes `export/cpp/build` to keep Python export artifacts in sync.
 - Dev tool: add `run-docker` to restart root compose stack with `docker compose` preferred (fallback to docker-compose) and idempotent down.
