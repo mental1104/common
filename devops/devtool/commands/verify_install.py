@@ -174,6 +174,7 @@ def _verify_rust(env: Mapping[str, str]) -> None:
         raise SystemExit("[error] missing cargo")
     env_rust = dict(env)
     env_rust["CARGO_NET_OFFLINE"] = "true"
+    rust_path = RUST_DIR.as_posix() if sys.platform.startswith("win") else str(RUST_DIR)
 
     with tempfile.TemporaryDirectory(prefix="m1104-verify-rust-") as tmp:
         tmp_path = Path(tmp)
@@ -185,7 +186,7 @@ def _verify_rust(env: Mapping[str, str]) -> None:
             "edition = \"2021\"\n"
             "\n"
             "[dependencies]\n"
-            f"mental1104 = {{ path = \"{RUST_DIR}\" }}\n"
+            f"mental1104 = {{ path = \"{rust_path}\" }}\n"
         )
         (tmp_path / "src" / "main.rs").write_text(
             "use mental1104::collections::contains;\n"
