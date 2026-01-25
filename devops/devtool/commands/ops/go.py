@@ -2,10 +2,71 @@ from __future__ import annotations
 
 import os
 import shutil
+import tempfile
 from pathlib import Path
 from typing import Mapping
 
 from devtool.commands.common import GO_DIR, ensure_dir, run, strip_proxies
+
+
+def _read_go_module_path(go_dir: Path) -> str:
+    go_mod = go_dir / "go.mod"
+    if not go_mod.exists():
+        raise SystemExit(f"[error] missing go.mod at {go_mod}")
+    for raw in go_mod.read_text().splitlines():
+        line = raw.strip()
+        if line.startswith("module "):
+            parts = line.split()
+            if len(parts) >= 2:
+                return parts[1]
+    raise SystemExit(f"[error] failed to parse module path from {go_mod}")
+
+
+def _go_bin_dir(env: Mapping[str, str]) -> Path | None:
+    env_np = strip_proxies(env)
+    go_bin = env_np.get("GO", "go")
+    bin_dir = env_np.get("GOBIN", "").strip()
+    if not bin_dir:
+        bin_dir = os.popen(f'{go_bin} env GOBIN').read().strip()
+    if not bin_dir:
+        gopath = os.popen(f'{go_bin} env GOPATH').read().strip()
+        if gopath:
+            bin_dir = os.path.join(gopath.split(os.pathsep)[0], "bin")
+    if not bin_dir:
+        return None
+    return Path(bin_dir)
+
+
+def _install_verify_binary(env: Mapping[str, str]) -> None:
+    env_np = strip_proxies(env)
+    bin_dir = _go_bin_dir(env_np)
+    if not bin_dir:
+        print("[warn] go install skipped verify binary; GOBIN/GOPATH not available")
+        return
+    ensure_dir(bin_dir)
+    module_path = _read_go_module_path(GO_DIR)
+    env_go = dict(env_np)
+    env_go["GOWORK"] = "off"
+    env_go["GOPROXY"] = "off"
+    env_go["GOSUMDB"] = "off"
+    with tempfile.TemporaryDirectory(prefix="m1104-go-install-") as tmp:
+        tmp_path = Path(tmp)
+        (tmp_path / "main.go").write_text(
+            "package main\n"
+            "\n"
+            f"import \"{module_path}/mental1104\"\n"
+            "\n"
+            "func main() {\n"
+            "  if !mental1104.Contains(\"abc\", \"a\") {\n"
+            "    panic(\"verify failed\")\n"
+            "  }\n"
+            "}\n"
+        )
+        run([env_go["GO"], "mod", "init", "verify-mental1104-install"], env=env_go, cwd=tmp_path)
+        run([env_go["GO"], "mod", "edit", f"-replace={module_path}={GO_DIR}"], env=env_go, cwd=tmp_path)
+        run([env_go["GO"], "mod", "tidy"], env=env_go, cwd=tmp_path)
+        bin_name = "mental1104-go-verify.exe" if os.name == "nt" else "mental1104-go-verify"
+        run([env_go["GO"], "build", "-o", str(bin_dir / bin_name)], env=env_go, cwd=tmp_path)
 
 
 def setup(env: Mapping[str, str]) -> None:
@@ -117,11 +178,12 @@ def bench(env: Mapping[str, str], *, file_pattern: str | None, filter_expr: str 
 
 def install(env: Mapping[str, str]) -> None:
     run([env["GO"], "install", "./..."], env=strip_proxies(env), cwd=GO_DIR)
+    _install_verify_binary(env)
 
 
 def uninstall(env: Mapping[str, str]) -> None:
     env_np = strip_proxies(env)
-    bin_dir = Path(env_np.get("GOBIN") or os.popen(f'{env_np["GO"]} env GOBIN').read().strip() or os.path.join(os.popen(f'{env_np["GO"]} env GOPATH').read().strip(), "bin"))
+    bin_dir = _go_bin_dir(env_np)
     if not bin_dir:
         return
     for line in os.popen(f'cd "{GO_DIR}" && {env_np["GO"]} list -f "{{{{if eq .Name \\"main\\"}}}}{{{{.Dir}}}}{{{{end}}}}" ./...').read().splitlines():
@@ -130,6 +192,10 @@ def uninstall(env: Mapping[str, str]) -> None:
         target = bin_dir / Path(line).name
         if target.exists():
             target.unlink()
+    verify_name = "mental1104-go-verify.exe" if os.name == "nt" else "mental1104-go-verify"
+    verify_bin = bin_dir / verify_name
+    if verify_bin.exists():
+        verify_bin.unlink()
 
 
 def clean(env: Mapping[str, str]) -> None:

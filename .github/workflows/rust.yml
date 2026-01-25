@@ -132,8 +132,23 @@ jobs:
           path: _cov
           retention-days: 7
           if-no-files-found: warn
+      - name: install-rust
+        run: ./dev install-rust
       - name: verify-install-rust
         run: ./dev verify-install rust
+      - name: uninstall-rust
+        run: ./dev uninstall-rust
+      - name: verify-uninstall-rust (expect failure)
+        env:
+          VERIFY_REQUIRE_INSTALL: "1"
+        run: |
+          set +e
+          ./dev verify-install rust
+          status=$?
+          if [ $status -eq 0 ]; then
+            echo "verify-install succeeded after uninstall; expected failure"
+            exit 1
+          fi
 
   macos:
     name: macOS / Rust stable
@@ -214,8 +229,23 @@ jobs:
           path: _cov
           retention-days: 7
           if-no-files-found: warn
+      - name: install-rust
+        run: ./dev install-rust
       - name: verify-install-rust
         run: ./dev verify-install rust
+      - name: uninstall-rust
+        run: ./dev uninstall-rust
+      - name: verify-uninstall-rust (expect failure)
+        env:
+          VERIFY_REQUIRE_INSTALL: "1"
+        run: |
+          set +e
+          ./dev verify-install rust
+          status=$?
+          if [ $status -eq 0 ]; then
+            echo "verify-install succeeded after uninstall; expected failure"
+            exit 1
+          fi
 
   windows:
     name: Windows / Rust stable
@@ -287,5 +317,20 @@ jobs:
           path: _cov
           retention-days: 7
           if-no-files-found: warn
+      - name: install-rust
+        run: python -m devtool.cli install-rust
       - name: verify-install-rust
         run: python -m devtool.cli verify-install rust
+      - name: uninstall-rust
+        run: python -m devtool.cli uninstall-rust
+      - name: verify-uninstall-rust (expect failure)
+        id: verify_uninstall_rust
+        continue-on-error: true
+        env:
+          VERIFY_REQUIRE_INSTALL: "1"
+        run: python -m devtool.cli verify-install rust
+
+      - name: assert-verify-uninstall-rust failed
+        if: ${{ steps.verify_uninstall_rust.outcome != 'failure' }}
+        run: |
+          throw "verify-install succeeded after uninstall; expected failure"

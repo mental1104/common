@@ -127,8 +127,23 @@ jobs:
           path: _cov
           retention-days: 7
           if-no-files-found: warn
+      - name: install-go
+        run: ./dev install-go
       - name: verify-install-go
         run: ./dev verify-install go
+      - name: uninstall-go
+        run: ./dev uninstall-go
+      - name: verify-uninstall-go (expect failure)
+        env:
+          VERIFY_REQUIRE_INSTALL: "1"
+        run: |
+          set +e
+          ./dev verify-install go
+          status=$?
+          if [ $status -eq 0 ]; then
+            echo "verify-install succeeded after uninstall; expected failure"
+            exit 1
+          fi
 
   macos:
     name: macOS / Go ${{ matrix.go }}
@@ -205,8 +220,23 @@ jobs:
           path: _cov
           retention-days: 7
           if-no-files-found: warn
+      - name: install-go
+        run: ./dev install-go
       - name: verify-install-go
         run: ./dev verify-install go
+      - name: uninstall-go
+        run: ./dev uninstall-go
+      - name: verify-uninstall-go (expect failure)
+        env:
+          VERIFY_REQUIRE_INSTALL: "1"
+        run: |
+          set +e
+          ./dev verify-install go
+          status=$?
+          if [ $status -eq 0 ]; then
+            echo "verify-install succeeded after uninstall; expected failure"
+            exit 1
+          fi
 
   windows:
     name: Windows / Go ${{ matrix.go }}
@@ -272,5 +302,19 @@ jobs:
           path: _cov
           retention-days: 7
           if-no-files-found: warn
+      - name: install-go
+        run: python -m devtool.cli install-go
       - name: verify-install-go
         run: python -m devtool.cli verify-install go
+      - name: uninstall-go
+        run: python -m devtool.cli uninstall-go
+      - name: verify-uninstall-go (expect failure)
+        id: verify_uninstall_go
+        continue-on-error: true
+        env:
+          VERIFY_REQUIRE_INSTALL: "1"
+        run: python -m devtool.cli verify-install go
+      - name: assert-verify-uninstall-go failed
+        if: ${{ steps.verify_uninstall_go.outcome != 'failure' }}
+        run: |
+          throw "verify-install succeeded after uninstall; expected failure"

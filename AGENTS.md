@@ -4,6 +4,14 @@ This file captures recent work plus portability guidance, grouped by language.
 
 ## General
 - 有关于仓库的公共规范在每次更新完代码后都往AGENTS.md里及时更新。
+- Devops: `devops/INSTALLROOT/root/extensions.json` stores `common` defaults and per-extension settings placeholders for VSCode server settings assembly.
+- Devops: `devops/INSTALLROOT/root/extensions.list` drives VSCode extension installation independently from settings changes.
+- Devops: `devops/INSTALLROOT/root/vscode_extensions.py` accepts JSONC and preserves comments when rendering settings.json.
+- Dockerfile: VSCode extension install runs before app code; settings generation runs after app code to keep installs cached.
+- Devops: VSCode settings generation is maintained in `devops/INSTALLROOT/root/vscode_extensions.py` and invoked by Dockerfile.
+- Dockerfile: extension install now summarizes failed extension ids and skips blank/commented lines in the list.
+- Dockerfile: extension install now uses the VSCode server `code-server` script (with fallback search) and fails the build on install errors.
+- Dockerfile/devtool: add `NUGET_SOURCE` build arg passthrough to allow restoring .NET packages from a custom feed or mirror.
 - Pages: build/deploy is triggered only by the main-branch meta workflow via workflow_call; coverage artifacts come from the same run (no workflow_run/run-id lookup).
 - Pages: deploy retries handle in-progress Pages deployments without relying on the Pages API.
 - Coverage artifacts: stash to `_cov/<lang>/<key>/cov.json` and upload as `<lang>-cov-*`; pages always generates per-language modules with N/A badges to avoid 404s.
@@ -11,6 +19,8 @@ This file captures recent work plus portability guidance, grouped by language.
 - README: Rust/.NET/Go coverage sections show per-OS, per-version badge matrices.
 - CI: language workflows ignore push-to-main; main branch runs only via `ci-main.yml` to prevent duplicate executions.
 - Coverage extractors: add Rust/Go/.NET cov.json extract scripts and wire workflows to parse real reports instead of placeholders.
+- DataStructure: add per-OS/C++-standard coverage artifacts, pages badges/dashboard, and README coverage matrix.
+- DataStructure: make coverage emits coverage.xml for artifact extraction and ignore coverage artifacts via subrepo .gitignore.
 - Dev tool: add dotnet setup/build/test/coverage/fmt/bench/clean/install/uninstall/vet/guard commands; dotnet workflow now runs via `./dev` (linux/mac) or `python -m devtool.cli` (windows).
 - Dev tool: add build-docker/push-docker commands (Linux-only) with SSH_PRIVATE_KEY env requirement and docker.io login via DOCKER_USERNAME/DOCKER_PASSWORD.
 - Dev tool: go build now emits main-package binaries (if any) and logs when only library packages are compiled.
@@ -29,18 +39,21 @@ This file captures recent work plus portability guidance, grouped by language.
 - Dockerfile: install rustup/cargo to `/usr/local` and add `/usr/local/cargo/bin` to `PATH` for rust builds.
 - Dev tool: add `setup-dotnet` command to run dotnet restore via `./dev`.
 - Dev tool: Python install now retries pip/setuptools/wheel upgrade with `--ignore-installed` when Debian-installed wheels lack RECORD.
+- Dev tool: Python install now installs dependencies from requirements by default; set `PY_INSTALL_NO_DEPS=1` to skip, and wheel installs stay `--no-deps` to avoid file URL metadata errors.
 - Dev tool: add `verify-install`/`install-verify` command to smoke-test C++/Python/Go/Rust/.NET install outputs from a temp project.
 - Dev tool: `verify-install` now resolves dotnet path via repo root instead of missing common constant.
 - Dev tool: `verify-install` registers `install-verify` via argparse aliases to avoid duplicate subparser conflicts.
 - Dev tool: `verify-install` Go check uses a local module replace to avoid network module lookups.
 - Dev tool: `verify-install` Go check now imports `GO_DIR` for the local replace.
 - Dev tool: `verify-install` Go check forces offline env (GOWORK/GOPROXY/GOSUMDB) to avoid proxy lookups.
+- Dev tool: `verify-install` Rust check uses POSIX-style path on Windows to avoid TOML escape errors.
 - Dev tool: export C++ build now drops stale CMakeCache from another path before configuring.
 - Dev tool: `clean-python` now also removes `export/cpp/build` to keep Python export artifacts in sync.
 - Dev tool: add `run-docker` to restart root compose stack with `docker compose` preferred (fallback to docker-compose) and idempotent down.
 - Dev tool: `run-docker` now runs `docker compose up -d --build --force-recreate`.
 - Dev tool: `verify-install` runs Rust check in offline mode to avoid crates.io lookups in isolated containers.
 - Dev tool: `verify-install` now prints cpp/rust/dotnet success markers.
+- Dev tool: `verify-install` C++ check on Windows recognizes MSVC lib naming and uses CMake plus PATH for runtime.
 - CI: add per-language `verify-install` steps at the end of matrix jobs (cpp/python install before verify).
 - Dev tool: C++ install now passes `--config` for multi-config build dirs.
 - Dev tool: C++ verify skips explicit include path when PREFIX is `/usr/local` to validate system default include search.
@@ -112,6 +125,19 @@ This file captures recent work plus portability guidance, grouped by language.
 - C++11 fix in bloom filter: function templates use trailing return types instead of C++14 auto-deduction.
 - CI now runs coverage steps instead of separate test steps in GitHub Actions (tests are included in coverage runs). `test-redispp` remains a standalone test step.
 - Boost sparse checkout includes `mp11` and `variant2` to support the C++11/14 JSON fallback.
+- Stacktrace: add C/C++ crash capture with JSON Lines output, POSIX forked symbolization, Windows DbgHelp path, and C/C++ examples.
+- Stacktrace: fix macOS ucontext build by defining `_XOPEN_SOURCE`, adjust POSIX symbolizer helper signatures to avoid const-pointer warnings.
+- Stacktrace: use `pthread_self` for macOS thread id and avoid deprecated `getcontext` on macOS manual dumps.
+- Stacktrace: add macOS arm64 register extraction for IP/SP/BP and improve atos output parsing for file:line.
+- Stacktrace: move public header under `cpp/include/mental1104/debug` and update include paths/docs.
+- Gitignore: unignore `cpp/include/mental1104/debug` so stacktrace headers are tracked.
+- Stacktrace: add pluggable formatter (JSON/Python-like), new formatting options, and route stack output through formatter hooks.
+- Stacktrace: undef MSVC `exception_code` macro in Windows implementation to avoid struct field name collision.
+- Examples: deepen C function call chain and add class-method stack depth for C++ crash demo.
+- Examples: move stacktrace demos into `cpp/examples/debug/stacktrace` with a Chinese README guide.
+- Docs: convert `cpp/README.md` to Chinese and update stacktrace usage details.
+- Dockerfile: add webbench install step with `WEBBENCH_VERSION` build arg and install `exuberant-ctags`.
+- Dockerfile: add a dedicated layer for toy commands (sysvbanner/toilet/figlet/cowsay/aafire).
 
 ### Concurrency & Logging APIs (prefer these)
 
@@ -173,6 +199,14 @@ This file captures recent work plus portability guidance, grouped by language.
 - Added scope aliases: `pg_session_scope`, `mysql_session_scope`, `sqlite_session_scope`, `ck_session_scope` and matching `*_tx_scope`.
 - Added `AutoSessionDAO` (auto-injects `db` keyword param) and optional singleton support.
 - Added `register_db_and_create` / `register_db_and_create_async` (register + optional create_all).
+- Utils: add batch_rename helpers for planning/applying renames with suffix/regex/index rules plus tests.
+- Utils: add Chinese usage comments for batch_rename functions.
+- Utils: use typing.Union for batch_rename type aliases to keep Python 3.8/3.9 compatible.
+- Dev tool: Python coverage now installs requirements if coverage isn't in the venv (keeps CI from failing on missing coverage).
+- Dev tool: uninstall now mirrors install (supports `--prefix`), and verify-install can require installed artifacts via `VERIFY_REQUIRE_INSTALL=1`.
+- Dev tool: Go/Rust install now emits verify binaries and dotnet install packs into the local feed so uninstall/verify-uninstall can validate removal.
+- CI: Windows verify-uninstall steps now use continue-on-error plus an assert step to enforce expected failure.
+- Dev tool: C++ uninstall now falls back to sudo rm when install files are root-owned (e.g., sudo installs in CI).
 
 ### DB Usage (latest)
 - Register once per process: `register_db(DBKind.POSTGRES, dsn=..., db_name="default")`.

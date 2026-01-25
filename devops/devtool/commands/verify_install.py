@@ -19,11 +19,26 @@ def _split_cmd(value: str) -> list[str]:
     return shlex.split(value) if value else []
 
 
-def _with_lib_path(env: Mapping[str, str], lib_dir: Path) -> dict[str, str]:
+def _require_installed(env: Mapping[str, str]) -> bool:
+    return str(env.get("VERIFY_REQUIRE_INSTALL", "")).strip().lower() in ("1", "true", "yes", "on")
+
+
+def _with_lib_path(env: Mapping[str, str], lib_dir: Path, bin_dir: Path | None = None) -> dict[str, str]:
     merged = dict(env)
+    if sys.platform.startswith("win"):
+        key = "PATH"
+        existing = merged.get(key, "")
+        paths = []
+        for candidate in (bin_dir, lib_dir):
+            if candidate and candidate.exists():
+                paths.append(str(candidate))
+        if paths:
+            merged[key] = os.pathsep.join(paths + ([existing] if existing else []))
+        return merged
     key = "LD_LIBRARY_PATH" if sys.platform.startswith("linux") else "DYLD_LIBRARY_PATH"
     existing = merged.get(key, "")
-    merged[key] = str(lib_dir) if not existing else f"{lib_dir}{os.pathsep}{existing}"
+    if lib_dir.exists():
+        merged[key] = str(lib_dir) if not existing else f"{lib_dir}{os.pathsep}{existing}"
     return merged
 
 
@@ -40,23 +55,48 @@ def _read_go_module_path(go_dir: Path) -> str:
     raise SystemExit(f"[error] failed to parse module path from {go_mod}")
 
 
+def _go_bin_dir(env: Mapping[str, str]) -> Path | None:
+    go_bin = env.get("GO", "go")
+    bin_dir = env.get("GOBIN", "").strip()
+    if not bin_dir:
+        bin_dir = os.popen(f'{go_bin} env GOBIN').read().strip()
+    if not bin_dir:
+        gopath = os.popen(f'{go_bin} env GOPATH').read().strip()
+        if gopath:
+            bin_dir = os.path.join(gopath.split(os.pathsep)[0], "bin")
+    if not bin_dir:
+        return None
+    return Path(bin_dir)
+
+
+def _cargo_bin_dir(env: Mapping[str, str]) -> Path:
+    cargo_home = (env.get("CARGO_HOME") or "").strip()
+    base = Path(cargo_home) if cargo_home else Path.home() / ".cargo"
+    return base / "bin"
+
+
 def _verify_cpp(env: Mapping[str, str]) -> None:
     prefix = Path(env.get("PREFIX", "/usr/local"))
     include_dir = prefix / "include"
     lib_dir = prefix / "lib"
+    bin_dir = prefix / "bin"
     if not (include_dir / "mental1104").exists():
         raise SystemExit(f"[error] missing C++ headers under {include_dir}")
-    if not any(lib_dir.glob("libmental1104*")):
-        raise SystemExit(f"[error] missing libmental1104 under {lib_dir}")
-
-    cxx = env.get("CXX", "c++")
-    if not shutil.which(cxx.split()[0]):
-        raise SystemExit(f"[error] missing C++ compiler: {cxx}")
+    if sys.platform.startswith("win"):
+        if not any(lib_dir.glob("mental1104*.lib")):
+            raise SystemExit(f"[error] missing mental1104.lib under {lib_dir}")
+        if not any(bin_dir.glob("mental1104*.dll")):
+            raise SystemExit(f"[error] missing mental1104.dll under {bin_dir}")
+    else:
+        if not any(lib_dir.glob("libmental1104*")):
+            raise SystemExit(f"[error] missing libmental1104 under {lib_dir}")
+        cxx = env.get("CXX", "c++")
+        if not shutil.which(cxx.split()[0]):
+            raise SystemExit(f"[error] missing C++ compiler: {cxx}")
 
     with tempfile.TemporaryDirectory(prefix="m1104-verify-cpp-") as tmp:
         tmp_path = Path(tmp)
         src = tmp_path / "verify.cpp"
-        exe = tmp_path / "verify_cpp"
         src.write_text(
             "#include <mental1104/concurrency/thread/thread_util.h>\n"
             "\n"
@@ -66,23 +106,55 @@ def _verify_cpp(env: Mapping[str, str]) -> None:
             "  return fut.get() == 7 ? 0 : 1;\n"
             "}\n"
         )
-        use_system_include = (not sys.platform.startswith("win")) and (prefix.resolve() == Path("/usr/local"))
-        include_args = [] if use_system_include else ["-I", str(include_dir)]
-        cmd = [
-            *_split_cmd(cxx),
-            "-std=c++20",
-            *include_args,
-            str(src),
-            "-L",
-            str(lib_dir),
-            "-lmental1104",
-            "-pthread",
-            f"-Wl,-rpath,{lib_dir}",
-            "-o",
-            str(exe),
-        ]
-        run(cmd, env=env, cwd=tmp_path)
-        run([str(exe)], env=_with_lib_path(env, lib_dir), cwd=tmp_path)
+        if sys.platform.startswith("win"):
+            cmake = env.get("CMAKE", "cmake")
+            build_dir = tmp_path / "build"
+            config = env.get("CMAKE_INSTALL_CONFIG_NAME") or env.get("CPP_BUILD_TYPE") or "Debug"
+            cmake_lists = tmp_path / "CMakeLists.txt"
+            cmake_lists.write_text(
+                "cmake_minimum_required(VERSION 3.20)\n"
+                "project(verify_mental1104 LANGUAGES CXX)\n"
+                "set(CMAKE_CXX_STANDARD 20)\n"
+                "set(CMAKE_CXX_STANDARD_REQUIRED ON)\n"
+                "add_executable(verify_cpp verify.cpp)\n"
+                f"target_include_directories(verify_cpp PRIVATE \"{include_dir.as_posix()}\")\n"
+                f"find_library(M1104_LIB NAMES mental1104 PATHS \"{lib_dir.as_posix()}\" NO_DEFAULT_PATH)\n"
+                "if(NOT M1104_LIB)\n"
+                f"  message(FATAL_ERROR \"missing mental1104.lib under {lib_dir.as_posix()}\")\n"
+                "endif()\n"
+                "target_link_libraries(verify_cpp PRIVATE \"${M1104_LIB}\")\n"
+            )
+            cmake_args = [cmake, "-S", str(tmp_path), "-B", str(build_dir)]
+            generator = env.get("CMAKE_GENERATOR")
+            if generator:
+                cmake_args += ["-G", generator]
+            run(cmake_args, env=env, cwd=tmp_path)
+            run([cmake, "--build", str(build_dir), "--config", config], env=env, cwd=tmp_path)
+            exe = build_dir / config / "verify_cpp.exe"
+            if not exe.exists():
+                exe = build_dir / "verify_cpp.exe"
+            if not exe.exists():
+                raise SystemExit(f"[error] missing verify_cpp binary at {exe}")
+            run([str(exe)], env=_with_lib_path(env, lib_dir, bin_dir=bin_dir), cwd=tmp_path)
+        else:
+            exe = tmp_path / "verify_cpp"
+            use_system_include = (prefix.resolve() == Path("/usr/local"))
+            include_args = [] if use_system_include else ["-I", str(include_dir)]
+            cmd = [
+                *_split_cmd(cxx),
+                "-std=c++20",
+                *include_args,
+                str(src),
+                "-L",
+                str(lib_dir),
+                "-lmental1104",
+                "-pthread",
+                f"-Wl,-rpath,{lib_dir}",
+                "-o",
+                str(exe),
+            ]
+            run(cmd, env=env, cwd=tmp_path)
+            run([str(exe)], env=_with_lib_path(env, lib_dir), cwd=tmp_path)
     print("cpp-ok")
 
 
@@ -97,6 +169,16 @@ def _verify_go(env: Mapping[str, str]) -> None:
     module_path = _read_go_module_path(GO_DIR)
     if not GO_DIR.exists():
         raise SystemExit(f"[error] missing Go module directory at {GO_DIR}")
+    if _require_installed(env):
+        bin_dir = _go_bin_dir(env)
+        if not bin_dir:
+            raise SystemExit("[error] missing GOBIN/GOPATH; cannot verify installed Go binary")
+        exe_name = "mental1104-go-verify.exe" if sys.platform.startswith("win") else "mental1104-go-verify"
+        verify_bin = bin_dir / exe_name
+        if not verify_bin.exists():
+            raise SystemExit(f"[error] missing Go install verify binary at {verify_bin}")
+        run([str(verify_bin)], env=env, cwd=GO_DIR)
+        return
     env_go = dict(env)
     env_go["GOWORK"] = "off"
     env_go["GOPROXY"] = "off"
@@ -126,6 +208,16 @@ def _verify_rust(env: Mapping[str, str]) -> None:
         raise SystemExit("[error] missing cargo")
     env_rust = dict(env)
     env_rust["CARGO_NET_OFFLINE"] = "true"
+    if _require_installed(env):
+        bin_dir = _cargo_bin_dir(env_rust)
+        exe_name = "mental1104-verify.exe" if sys.platform.startswith("win") else "mental1104-verify"
+        verify_bin = bin_dir / exe_name
+        if not verify_bin.exists():
+            raise SystemExit(f"[error] missing Rust install verify binary at {verify_bin}")
+        run([str(verify_bin)], env=env_rust, cwd=RUST_DIR)
+        print("rust-ok")
+        return
+    rust_path = RUST_DIR.as_posix() if sys.platform.startswith("win") else str(RUST_DIR)
 
     with tempfile.TemporaryDirectory(prefix="m1104-verify-rust-") as tmp:
         tmp_path = Path(tmp)
@@ -137,7 +229,7 @@ def _verify_rust(env: Mapping[str, str]) -> None:
             "edition = \"2021\"\n"
             "\n"
             "[dependencies]\n"
-            f"mental1104 = {{ path = \"{RUST_DIR}\" }}\n"
+            f"mental1104 = {{ path = \"{rust_path}\" }}\n"
         )
         (tmp_path / "src" / "main.rs").write_text(
             "use mental1104::collections::contains;\n"
@@ -157,7 +249,9 @@ def _verify_dotnet(env: Mapping[str, str]) -> None:
     dotnet_dir = ROOT / "dotnet"
     feed_dir = Path(env.get("NUGET_LOCAL_FEED") or env.get("DOTNET_LOCAL_FEED") or ROOT / "artifacts" / "nuget")
     feed_dir.mkdir(parents=True, exist_ok=True)
-    if not list(feed_dir.glob("Mental1104*.nupkg")):
+    if _require_installed(env) and not list(feed_dir.glob("Mental1104*.nupkg")):
+        raise SystemExit(f"[error] missing Mental1104 packages under {feed_dir}")
+    if not _require_installed(env) and not list(feed_dir.glob("Mental1104*.nupkg")):
         run(
             [
                 dotnet,

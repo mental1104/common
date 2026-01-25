@@ -20,6 +20,7 @@ if TYPE_CHECKING:
 def configure(subparsers: ArgumentParser):
     parser = subparsers.add_parser("uninstall", help="Uninstall installed artifacts")
     parser.add_argument("target", choices=["python", "go", "cpp", "rust", "dotnet", "all"], nargs="?", default="all", help="Target to uninstall")
+    parser.add_argument("--prefix", help="Install prefix for C++ (and similar)")
     parser.add_argument("-v", "--verbose", action="store_true", help="Verbose output")
     parser.add_argument("--jobs", type=int, help="Parallelism hint")
     parser.set_defaults(_runner=run)
@@ -27,7 +28,7 @@ def configure(subparsers: ArgumentParser):
 
 
 def run(args):
-    env = base_env(verbose=args.verbose, jobs=args.jobs)
+    env = base_env(verbose=args.verbose, jobs=args.jobs, prefix=args.prefix)
     if args.target in ("python", "all"):
         python_ops.uninstall(env)
     if args.target in ("go", "all"):
