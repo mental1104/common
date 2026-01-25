@@ -39,6 +39,7 @@ This file captures recent work plus portability guidance, grouped by language.
 - Dockerfile: install rustup/cargo to `/usr/local` and add `/usr/local/cargo/bin` to `PATH` for rust builds.
 - Dev tool: add `setup-dotnet` command to run dotnet restore via `./dev`.
 - Dev tool: Python install now retries pip/setuptools/wheel upgrade with `--ignore-installed` when Debian-installed wheels lack RECORD.
+- Dev tool: Python install now installs dependencies from requirements by default; set `PY_INSTALL_NO_DEPS=1` to skip, and wheel installs stay `--no-deps` to avoid file URL metadata errors.
 - Dev tool: add `verify-install`/`install-verify` command to smoke-test C++/Python/Go/Rust/.NET install outputs from a temp project.
 - Dev tool: `verify-install` now resolves dotnet path via repo root instead of missing common constant.
 - Dev tool: `verify-install` registers `install-verify` via argparse aliases to avoid duplicate subparser conflicts.
@@ -200,6 +201,8 @@ This file captures recent work plus portability guidance, grouped by language.
 - Added `register_db_and_create` / `register_db_and_create_async` (register + optional create_all).
 - Utils: add batch_rename helpers for planning/applying renames with suffix/regex/index rules plus tests.
 - Utils: add Chinese usage comments for batch_rename functions.
+- Utils: use typing.Union for batch_rename type aliases to keep Python 3.8/3.9 compatible.
+- Dev tool: Python coverage now installs requirements if coverage isn't in the venv (keeps CI from failing on missing coverage).
 
 ### DB Usage (latest)
 - Register once per process: `register_db(DBKind.POSTGRES, dsn=..., db_name="default")`.
