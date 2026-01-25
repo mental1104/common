@@ -123,6 +123,53 @@ def _install_requirements(env: Mapping[str, str]) -> None:
             tmp_req.unlink(missing_ok=True)
 
 
+def _install_requirements_system(env: Mapping[str, str], pip3: str) -> None:
+    req_file = PY_DIR / "requirements.txt"
+    export_dir = Path("export/python")
+    if not req_file.exists():
+        return
+    if not export_dir.exists():
+        raise SystemExit(f"[err] 缺少 export/python 目录：{export_dir}")
+    lines = req_file.read_text().splitlines()
+    filtered = []
+    for line in lines:
+        stripped = line.strip()
+        if stripped.startswith("mental1104_export_layer") or stripped.startswith("mental1104-export-layer"):
+            continue
+        if platform.system().lower() == "windows":
+            if stripped.startswith("pulsar-client"):
+                continue
+            if stripped.startswith("psycopg2-binary"):
+                continue
+            if stripped.startswith("semgrep"):
+                continue
+        filtered.append(line)
+    if not filtered:
+        return
+    content = "\n".join(filtered) + "\n"
+    if "file://../export/python" in content:
+        export_url = export_dir.resolve().as_uri()
+        content = content.replace("file://../export/python", export_url)
+    tmp_req = req_file.with_suffix(req_file.suffix + ".sys.tmp")
+    tmp_req.write_text(content)
+    try:
+        run(
+            [
+                pip3,
+                "install",
+                "--no-build-isolation",
+                *_pip_mirror_args(env),
+                "-r",
+                str(tmp_req),
+                *env.get("BREAK_FLAG", "").split(),
+            ],
+            env=env,
+            cwd=PY_DIR,
+        )
+    finally:
+        tmp_req.unlink(missing_ok=True)
+
+
 def _generate_init(env: Mapping[str, str]) -> None:
     script = PY_DIR / "generate_init.py"
     if script.exists():
@@ -249,6 +296,10 @@ def test(
 
 def coverage(env: Mapping[str, str], *, file_pattern: str | None, filter_expr: str | None) -> None:
     venv_env = _ensure_venv(env)
+    try:
+        run([venv_env["PY_VENV_PYTHON"], "-c", "import coverage"], env=venv_env)
+    except Exception:
+        _install_requirements(venv_env)
     extra_env = strip_proxies(venv_env)
     extra_env["PYTEST_DISABLE_PLUGIN_AUTOLOAD"] = "1"
     extra_env["PYTEST_PLUGINS"] = "pytest_benchmark.plugin,pytest_asyncio.plugin,pytest_mock"
@@ -344,6 +395,7 @@ def install(env: Mapping[str, str]) -> None:
     wheel_candidates = list((PY_DIR / "dist").glob("*.whl"))
     break_flag = env.get("BREAK_FLAG", "")
     pip3 = env.get("PIP3", "pip3")
+    no_deps = env.get("PY_INSTALL_NO_DEPS", "").strip().lower() in ("1", "true", "yes", "on")
     mirror_args = _pip_mirror_args(run_env)
     try:
         run([pip3, "install", "--upgrade", *mirror_args, "pip", "setuptools", "wheel", *break_flag.split()], env=run_env)
@@ -353,6 +405,8 @@ def install(env: Mapping[str, str]) -> None:
             [pip3, "install", "--upgrade", "--ignore-installed", *mirror_args, "pip", "setuptools", "wheel", *break_flag.split()],
             env=run_env,
         )
+    if not no_deps:
+        _install_requirements_system(run_env, pip3)
     export_dir = ROOT / "export" / "python"
     if wheel_candidates:
         wheel = sorted(wheel_candidates)[-1]

@@ -459,6 +459,189 @@ def cmake_build_env(env: Mapping[str, str]) -> dict[str, str]:
     return build_env
 
 
+def _is_multi_config() -> bool:
+    cache = CPP_BUILD_DIR / "CMakeCache.txt"
+    if not cache.exists():
+        return False
+    return "CMAKE_CONFIGURATION_TYPES:STRING=" in cache.read_text()
+
+
+def _core_library_present(build_dir: Path) -> bool:
+    lib_dir = build_dir / "lib"
+    bin_dir = build_dir / "bin"
+    patterns = ["libmental1104.*", "mental1104.dll"]
+    for pat in patterns:
+        if lib_dir.exists() and list(lib_dir.glob(pat)):
+            return True
+        if bin_dir.exists() and list(bin_dir.glob(pat)):
+            return True
+    return False
+
+
+def _ensure_core_library_for_install(env: Mapping[str, str]) -> None:
+    build_dir = CPP_BUILD_DIR
+    if not build_dir.exists():
+        return
+    if _core_library_present(build_dir):
+        return
+    cmd = [env["CMAKE"], "--build", str(build_dir), "--target", "mental1104"]
+    if _is_multi_config():
+        cmd += ["--config", env["CPP_BUILD_TYPE"]]
+    run(cmd, env=cmake_build_env(env))
+
+
+def _redispp_expected_dylibs(build_dir: Path) -> list[str]:
+    install_script = build_dir / "cmake_install.cmake"
+    if not install_script.exists():
+        return []
+    text = install_script.read_text()
+    names = sorted(set(re.findall(r"libredis\\+\\+[^\\\"]*\\.dylib", text)))
+    return names
+
+
+def _find_redispp_dylib(build_dir: Path) -> Path | None:
+    for cand in build_dir.rglob("libredis++.dylib"):
+        if cand.is_file():
+            return cand
+    for cand in build_dir.rglob("libredis++*.dylib"):
+        if cand.is_file():
+            return cand
+    return None
+
+
+def _reconfigure_redispp(env: Mapping[str, str], build_dir: Path, *, shared: bool) -> None:
+    redispp_root = ROOT / "cpp" / "lib" / "redis-plus-plus"
+    ensure_dir(build_dir)
+    extra_link_flags: list[str] = []
+    extra_cxx_flags: list[str] = []
+    if platform.system().lower() == "darwin":
+        cxx = env.get("CXX", "")
+        cxx_lookup = cxx or "clang++"
+        if "clang" in cxx_lookup:
+            extra_cxx_flags.append("-stdlib=libc++")
+            extra_link_flags.append("-stdlib=libc++")
+            cxx_path = shutil.which(cxx_lookup)
+            if cxx_path:
+                llvm_prefix = Path(cxx_path).resolve().parent.parent
+                llvm_lib = llvm_prefix / "lib"
+                libcxx = list(llvm_lib.glob("libc++*.dylib")) if llvm_lib.is_dir() else []
+                if libcxx:
+                    link_path_flag = f"-L{llvm_lib}"
+                    link_rpath_flag = f"-Wl,-rpath,{llvm_lib}"
+                    extra_cxx_flags.append(link_path_flag)
+                    extra_cxx_flags.append(link_rpath_flag)
+                    extra_link_flags.append(link_path_flag)
+                    extra_link_flags.append(link_rpath_flag)
+    cmake_args = [
+        env["CMAKE"],
+        "-S",
+        str(redispp_root),
+        "-B",
+        str(build_dir),
+        f'-DCMAKE_BUILD_TYPE={env["CPP_BUILD_TYPE"]}',
+        f"-DREDIS_PLUS_PLUS_BUILD_SHARED={'ON' if shared else 'OFF'}",
+        "-DREDIS_PLUS_PLUS_BUILD_STATIC=ON",
+        "-DREDIS_PLUS_PLUS_BUILD_TEST=ON",
+    ]
+    if extra_cxx_flags:
+        cxx_flags = " ".join(extra_cxx_flags)
+        cmake_args.append(f"-DCMAKE_CXX_FLAGS={cxx_flags}")
+        build_type = env.get("CPP_BUILD_TYPE")
+        if build_type:
+            cmake_args.append(f"-DCMAKE_CXX_FLAGS_{build_type.upper()}={cxx_flags}")
+    if extra_link_flags:
+        flags = " ".join(extra_link_flags)
+        cmake_args.append(f"-DCMAKE_SHARED_LINKER_FLAGS={flags}")
+        cmake_args.append(f"-DCMAKE_EXE_LINKER_FLAGS={flags}")
+        build_type = env.get("CPP_BUILD_TYPE")
+        if build_type:
+            upper = build_type.upper()
+            cmake_args.append(f"-DCMAKE_SHARED_LINKER_FLAGS_{upper}={flags}")
+            cmake_args.append(f"-DCMAKE_EXE_LINKER_FLAGS_{upper}={flags}")
+    hiredis_install = _hiredis_install_dir()
+    hiredis_root = ROOT / "cpp" / "lib" / "hiredis"
+    hiredis_build = hiredis_root / "build"
+    hiredis_install_lib = hiredis_install / "lib"
+    hiredis_lib = None
+    hiredis_include = hiredis_install / "include"
+    if (hiredis_include / "hiredis" / "hiredis.h").exists():
+        cmake_args.append(f"-DHIREDIS_HEADER={hiredis_include}")
+    for base in (hiredis_install_lib, hiredis_build):
+        if hiredis_lib:
+            break
+        for name in (
+            "libhiredis.so",
+            "libhiredis.a",
+            "libhiredis.dylib",
+            "libhiredisd.so",
+            "libhiredisd.a",
+            "libhiredisd.dylib",
+        ):
+            candidate = base / name
+            if candidate.exists():
+                hiredis_lib = candidate
+                break
+    if hiredis_lib:
+        cmake_args.append(f"-DHIREDIS_LIB={hiredis_lib}")
+    hiredis_config_dir = _hiredis_config_dir(hiredis_install)
+    if (hiredis_config_dir / "hiredis-config.cmake").exists():
+        cmake_args.append(f"-Dhiredis_DIR={hiredis_config_dir}")
+    redispp_std = env.get("REDISPP_CXX_STD") or env.get("CXX_STD") or _project_cxx_standard()
+    if redispp_std:
+        cmake_args.append(f"-DREDIS_PLUS_PLUS_CXX_STANDARD={redispp_std}")
+    run(cmake_args, env=env)
+    run([env["CMAKE"], "--build", str(build_dir), "--parallel", env["JOBS"]], env=cmake_build_env(env))
+
+
+def _rebuild_redispp_shared(env: Mapping[str, str], build_dir: Path) -> None:
+    _reconfigure_redispp(env, build_dir, shared=True)
+
+
+def _rebuild_redispp_static_only(env: Mapping[str, str], build_dir: Path) -> None:
+    _reconfigure_redispp(env, build_dir, shared=False)
+
+
+def _ensure_redispp_macos_install(env: Mapping[str, str]) -> None:
+    if platform.system().lower() != "darwin":
+        return
+    build_dir = _redispp_build_dir()
+    if not build_dir.exists():
+        return
+    expected = _redispp_expected_dylibs(build_dir)
+    dylibs = [p for p in build_dir.rglob("libredis++*.dylib") if p.is_file()]
+    if not dylibs:
+        _rebuild_redispp_shared(env, build_dir)
+        dylibs = [p for p in build_dir.rglob("libredis++*.dylib") if p.is_file()]
+        if not dylibs:
+            _rebuild_redispp_static_only(env, build_dir)
+            return
+    if expected:
+        existing = {p.name for p in dylibs}
+        missing = [name for name in expected if name not in existing]
+        if not missing:
+            return
+    base = _find_redispp_dylib(build_dir)
+    if base is None:
+        _rebuild_redispp_static_only(env, build_dir)
+        return
+    if expected:
+        for name in missing:
+            target = build_dir / name
+            if target.exists():
+                continue
+            try:
+                target.symlink_to(base)
+            except OSError:
+                try:
+                    shutil.copy2(base, target)
+                except OSError:
+                    pass
+        existing = {p.name for p in build_dir.rglob("libredis++*.dylib") if p.is_file()}
+        missing = [name for name in expected if name not in existing]
+        if missing:
+            _rebuild_redispp_static_only(env, build_dir)
+
+
 def build_redispp(env: Mapping[str, str]) -> Path:
     run_env = dict(env)
     run_env.pop("SKIP_SUBMODULES", None)
@@ -669,6 +852,19 @@ def bench(env: Mapping[str, str], *, file_pattern: str | None, filter_expr: str 
 
 
 def install(env: Mapping[str, str]) -> None:
+    _ensure_core_library_for_install(env)
+    platform_name = platform.system().lower()
+    skip_redispp = platform_name in {"darwin", "windows"}
+    if skip_redispp:
+        install_script = CPP_BUILD_DIR / "cmake_install.cmake"
+        if install_script.exists():
+            try:
+                if "redis-plus-plus" in install_script.read_text():
+                    configure(env)
+            except OSError:
+                pass
+    else:
+        _ensure_redispp_macos_install(env)
     cmd = [env.get("SUDO", ""), env["CMAKE"], "--install", str(CPP_BUILD_DIR), "--prefix", env["PREFIX"]]
     cache = CPP_BUILD_DIR / "CMakeCache.txt"
     if cache.exists() and "CMAKE_CONFIGURATION_TYPES:STRING=" in cache.read_text():
@@ -676,14 +872,27 @@ def install(env: Mapping[str, str]) -> None:
     run([arg for arg in cmd if arg], env=env)
 
 
-def uninstall(_env: Mapping[str, str]) -> None:
+def uninstall(env: Mapping[str, str]) -> None:
     manifest = CPP_BUILD_DIR / "install_manifest.txt"
     if not manifest.exists():
         raise SystemExit(f"[error] 未找到 {manifest}")
     for line in manifest.read_text().splitlines():
+        if not line.strip():
+            continue
         target = Path(line)
-        if target.exists():
-            target.unlink()
+        if not target.exists():
+            continue
+        try:
+            if target.is_dir() and not target.is_symlink():
+                shutil.rmtree(target)
+            else:
+                target.unlink()
+        except PermissionError:
+            sudo = env.get("SUDO", "").strip()
+            if not sudo:
+                raise
+            rm_args = [sudo, "rm", "-rf" if target.is_dir() and not target.is_symlink() else "-f", str(target)]
+            run([arg for arg in rm_args if arg], env=env)
 
 
 def clean(_env: Mapping[str, str], *, clean_submodules: bool = True) -> None:

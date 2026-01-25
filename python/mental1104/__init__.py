@@ -63,6 +63,7 @@ from mental1104.plot.bench import BenchTestType, BenchmarkPlotter, BenchmarkReco
 from mental1104.schema.common_schema import JsonSerializable
 from mental1104.string.string_util import insert_newlines, replace_space_with
 from mental1104.timed import async_timed, get_current_time, parse_time, timed
+from mental1104.utils.batch_rename import IndexedRenameRule, RenameOp, RenameRule, apply_rename_plan, build_indexed_rename_plan, build_rename_plan, list_files, plan_directory_rename, plan_directory_rename_indexed, rename_with_index, rename_with_regex_group, rename_with_suffix, validate_rename_plan
 from mental1104.utils.bench_tasks import CpuBoundTask, DatasetFactory, IoBoundTask
 from mental1104.utils.context import RequestCtx, ctx, ctx_diag, reset_ctx, set_ctx
 from mental1104.utils.encryption import decrypt, encrypt, generate_salt
@@ -148,6 +149,7 @@ __all__ = [
     'I18nMiddleware',
     'I18nResourceProvider',
     'ID_FIELD_WIDTH',
+    'IndexedRenameRule',
     'IoBoundTask',
     'JsonParserType',
     'JsonSerializable',
@@ -182,6 +184,8 @@ __all__ = [
     'RedisMode',
     'RedisRegistry',
     'RedisSessionAware',
+    'RenameOp',
+    'RenameRule',
     'RequestCtx',
     'RequestCtxContextVarMiddlewareFactory',
     'RequestCtxMiddlewareFactory',
@@ -210,6 +214,7 @@ __all__ = [
     'ZoneInfo',
     'activate',
     'apply_clickhouse_profile',
+    'apply_rename_plan',
     'async_delay',
     'async_mongo_session_scope',
     'async_mongo_tx_scope',
@@ -217,6 +222,8 @@ __all__ = [
     'async_timed',
     'async_tx_scope',
     'bootstrap',
+    'build_indexed_rename_plan',
+    'build_rename_plan',
     'build_url',
     'check_po_tree',
     'check_required_env_vars',
@@ -287,6 +294,7 @@ __all__ = [
     'iterator_csv',
     'iterator_json',
     'json_to_yaml',
+    'list_files',
     'load_benchmark_suite',
     'load_json',
     'locale_context',
@@ -307,6 +315,8 @@ __all__ = [
     'parse_yaml',
     'pg_session_scope',
     'pg_tx_scope',
+    'plan_directory_rename',
+    'plan_directory_rename_indexed',
     'po_text_to_mo_bytes',
     'random_pick',
     'redis_params_from_env',
@@ -319,6 +329,9 @@ __all__ = [
     'register_mongo',
     'register_redis',
     'register_request_ctx_middleware',
+    'rename_with_index',
+    'rename_with_regex_group',
+    'rename_with_suffix',
     'replace_space_with',
     'request_ctx_from_headers',
     'require_ctx_async_mongo_session',
@@ -351,6 +364,7 @@ __all__ = [
     'timed',
     'trace_if',
     'tx_scope',
+    'validate_rename_plan',
     'write_mo',
     'yaml_to_json',
 ]

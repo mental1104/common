@@ -98,8 +98,23 @@ jobs:
           path: _cov
           retention-days: 7
           if-no-files-found: warn
+      - name: install-dotnet
+        run: ./dev install-dotnet
       - name: verify-install-dotnet
         run: ./dev verify-install dotnet
+      - name: uninstall-dotnet
+        run: ./dev uninstall-dotnet
+      - name: verify-uninstall-dotnet (expect failure)
+        env:
+          VERIFY_REQUIRE_INSTALL: "1"
+        run: |
+          set +e
+          ./dev verify-install dotnet
+          status=$?
+          if [ $status -eq 0 ]; then
+            echo "verify-install succeeded after uninstall; expected failure"
+            exit 1
+          fi
 
   macos:
     name: macOS / .NET ${{ matrix.dotnet }}
@@ -169,8 +184,23 @@ jobs:
           path: _cov
           retention-days: 7
           if-no-files-found: warn
+      - name: install-dotnet
+        run: ./dev install-dotnet
       - name: verify-install-dotnet
         run: ./dev verify-install dotnet
+      - name: uninstall-dotnet
+        run: ./dev uninstall-dotnet
+      - name: verify-uninstall-dotnet (expect failure)
+        env:
+          VERIFY_REQUIRE_INSTALL: "1"
+        run: |
+          set +e
+          ./dev verify-install dotnet
+          status=$?
+          if [ $status -eq 0 ]; then
+            echo "verify-install succeeded after uninstall; expected failure"
+            exit 1
+          fi
 
   windows:
     name: Windows / .NET ${{ matrix.dotnet }}
@@ -234,5 +264,20 @@ jobs:
           path: _cov
           retention-days: 7
           if-no-files-found: warn
+      - name: install-dotnet
+        run: python -m devtool.cli install-dotnet
       - name: verify-install-dotnet
         run: python -m devtool.cli verify-install dotnet
+      - name: uninstall-dotnet
+        run: python -m devtool.cli uninstall-dotnet
+      - name: verify-uninstall-dotnet (expect failure)
+        id: verify_uninstall_dotnet
+        continue-on-error: true
+        env:
+          VERIFY_REQUIRE_INSTALL: "1"
+        run: python -m devtool.cli verify-install dotnet
+
+      - name: assert-verify-uninstall-dotnet failed
+        if: ${{ steps.verify_uninstall_dotnet.outcome != 'failure' }}
+        run: |
+          throw "verify-install succeeded after uninstall; expected failure"

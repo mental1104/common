@@ -4,6 +4,11 @@ file(GLOB_RECURSE M1104_CORE_SOURCES CONFIGURE_DEPENDS
   "${PROJECT_SOURCE_DIR}/src/*.cpp"
   "${PROJECT_SOURCE_DIR}/src/*.c"
 )
+if (WIN32)
+  list(FILTER M1104_CORE_SOURCES EXCLUDE REGEX "stacktrace_posix\\.c$")
+else()
+  list(FILTER M1104_CORE_SOURCES EXCLUDE REGEX "stacktrace_windows\\.c$")
+endif()
 if (M1104_CORE_SOURCES)
   add_library(mental1104 SHARED ${M1104_CORE_SOURCES})
 else()
@@ -25,6 +30,11 @@ endif()
 if (HAVE_ASYNC_SIMPLE AND TARGET ASYNC_SIMPLE::headers)
   target_link_libraries(mental1104 PUBLIC ASYNC_SIMPLE::headers)
   target_compile_definitions(mental1104 PUBLIC M1104_HAS_ASYNC_SIMPLE=1)
+endif()
+if (WIN32)
+  target_link_libraries(mental1104 PRIVATE Dbghelp)
+elseif (UNIX AND NOT APPLE)
+  target_link_libraries(mental1104 PRIVATE dl)
 endif()
 install(TARGETS mental1104
   ARCHIVE DESTINATION lib

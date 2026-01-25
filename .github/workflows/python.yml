@@ -180,6 +180,23 @@ jobs:
         if: ${{ steps.gate.outputs.enable == 'true' }}
         run: ./dev verify-install python
 
+      - name: uninstall-python
+        if: ${{ steps.gate.outputs.enable == 'true' }}
+        run: ./dev uninstall-python
+
+      - name: verify-uninstall-python (expect failure)
+        if: ${{ steps.gate.outputs.enable == 'true' }}
+        env:
+          VERIFY_REQUIRE_INSTALL: "1"
+        run: |
+          set +e
+          ./dev verify-install python
+          status=$?
+          if [ $status -eq 0 ]; then
+            echo "verify-install succeeded after uninstall; expected failure"
+            exit 1
+          fi
+
       - name: Mark job failed if core steps failed
         if: ${{ steps.gate.outputs.enable == 'true' && (steps.setup_env.outcome == 'failure' || steps.build_env.outcome == 'failure' || steps.cov_env.outcome == 'failure') }}
         run: exit 1
@@ -333,6 +350,21 @@ jobs:
       - name: verify-install-python
         run: ./dev verify-install python
 
+      - name: uninstall-python
+        run: ./dev uninstall-python
+
+      - name: verify-uninstall-python (expect failure)
+        env:
+          VERIFY_REQUIRE_INSTALL: "1"
+        run: |
+          set +e
+          ./dev verify-install python
+          status=$?
+          if [ $status -eq 0 ]; then
+            echo "verify-install succeeded after uninstall; expected failure"
+            exit 1
+          fi
+
   macos:
     name: macOS / Python ${{ matrix.python }}
     runs-on: macos-latest
@@ -471,6 +503,23 @@ jobs:
       - name: verify-install-python
         if: ${{ steps.gate.outputs.enable == 'true' }}
         run: ./dev verify-install python
+
+      - name: uninstall-python
+        if: ${{ steps.gate.outputs.enable == 'true' }}
+        run: ./dev uninstall-python
+
+      - name: verify-uninstall-python (expect failure)
+        if: ${{ steps.gate.outputs.enable == 'true' }}
+        env:
+          VERIFY_REQUIRE_INSTALL: "1"
+        run: |
+          set +e
+          ./dev verify-install python
+          status=$?
+          if [ $status -eq 0 ]; then
+            echo "verify-install succeeded after uninstall; expected failure"
+            exit 1
+          fi
 
       - name: Mark job failed if core steps failed
         if: ${{ steps.gate.outputs.enable == 'true' && (steps.setup_env.outcome == 'failure' || steps.build_env.outcome == 'failure' || steps.cov_env.outcome == 'failure') }}
@@ -616,6 +665,23 @@ jobs:
       - name: verify-install-python
         if: ${{ steps.gate.outputs.enable == 'true' }}
         run: python -m devtool.cli verify-install python
+
+      - name: uninstall-python
+        if: ${{ steps.gate.outputs.enable == 'true' }}
+        run: python -m devtool.cli uninstall-python
+
+      - name: verify-uninstall-python (expect failure)
+        if: ${{ steps.gate.outputs.enable == 'true' }}
+        id: verify_uninstall_python
+        continue-on-error: true
+        env:
+          VERIFY_REQUIRE_INSTALL: "1"
+        run: python -m devtool.cli verify-install python
+
+      - name: assert-verify-uninstall-python failed
+        if: ${{ steps.gate.outputs.enable == 'true' && steps.verify_uninstall_python.outcome != 'failure' }}
+        run: |
+          throw "verify-install succeeded after uninstall; expected failure"
 
       - name: Mark job failed if core steps failed
         if: ${{ steps.gate.outputs.enable == 'true' && (steps.setup_env.outcome == 'failure' || steps.build_env.outcome == 'failure' || steps.cov_env.outcome == 'failure') }}
