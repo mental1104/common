@@ -19,11 +19,22 @@ def _split_cmd(value: str) -> list[str]:
     return shlex.split(value) if value else []
 
 
-def _with_lib_path(env: Mapping[str, str], lib_dir: Path) -> dict[str, str]:
+def _with_lib_path(env: Mapping[str, str], lib_dir: Path, bin_dir: Path | None = None) -> dict[str, str]:
     merged = dict(env)
+    if sys.platform.startswith("win"):
+        key = "PATH"
+        existing = merged.get(key, "")
+        paths = []
+        for candidate in (bin_dir, lib_dir):
+            if candidate and candidate.exists():
+                paths.append(str(candidate))
+        if paths:
+            merged[key] = os.pathsep.join(paths + ([existing] if existing else []))
+        return merged
     key = "LD_LIBRARY_PATH" if sys.platform.startswith("linux") else "DYLD_LIBRARY_PATH"
     existing = merged.get(key, "")
-    merged[key] = str(lib_dir) if not existing else f"{lib_dir}{os.pathsep}{existing}"
+    if lib_dir.exists():
+        merged[key] = str(lib_dir) if not existing else f"{lib_dir}{os.pathsep}{existing}"
     return merged
 
 
@@ -44,19 +55,24 @@ def _verify_cpp(env: Mapping[str, str]) -> None:
     prefix = Path(env.get("PREFIX", "/usr/local"))
     include_dir = prefix / "include"
     lib_dir = prefix / "lib"
+    bin_dir = prefix / "bin"
     if not (include_dir / "mental1104").exists():
         raise SystemExit(f"[error] missing C++ headers under {include_dir}")
-    if not any(lib_dir.glob("libmental1104*")):
-        raise SystemExit(f"[error] missing libmental1104 under {lib_dir}")
-
-    cxx = env.get("CXX", "c++")
-    if not shutil.which(cxx.split()[0]):
-        raise SystemExit(f"[error] missing C++ compiler: {cxx}")
+    if sys.platform.startswith("win"):
+        if not any(lib_dir.glob("mental1104*.lib")):
+            raise SystemExit(f"[error] missing mental1104.lib under {lib_dir}")
+        if not any(bin_dir.glob("mental1104*.dll")):
+            raise SystemExit(f"[error] missing mental1104.dll under {bin_dir}")
+    else:
+        if not any(lib_dir.glob("libmental1104*")):
+            raise SystemExit(f"[error] missing libmental1104 under {lib_dir}")
+        cxx = env.get("CXX", "c++")
+        if not shutil.which(cxx.split()[0]):
+            raise SystemExit(f"[error] missing C++ compiler: {cxx}")
 
     with tempfile.TemporaryDirectory(prefix="m1104-verify-cpp-") as tmp:
         tmp_path = Path(tmp)
         src = tmp_path / "verify.cpp"
-        exe = tmp_path / "verify_cpp"
         src.write_text(
             "#include <mental1104/concurrency/thread/thread_util.h>\n"
             "\n"
@@ -66,23 +82,55 @@ def _verify_cpp(env: Mapping[str, str]) -> None:
             "  return fut.get() == 7 ? 0 : 1;\n"
             "}\n"
         )
-        use_system_include = (not sys.platform.startswith("win")) and (prefix.resolve() == Path("/usr/local"))
-        include_args = [] if use_system_include else ["-I", str(include_dir)]
-        cmd = [
-            *_split_cmd(cxx),
-            "-std=c++20",
-            *include_args,
-            str(src),
-            "-L",
-            str(lib_dir),
-            "-lmental1104",
-            "-pthread",
-            f"-Wl,-rpath,{lib_dir}",
-            "-o",
-            str(exe),
-        ]
-        run(cmd, env=env, cwd=tmp_path)
-        run([str(exe)], env=_with_lib_path(env, lib_dir), cwd=tmp_path)
+        if sys.platform.startswith("win"):
+            cmake = env.get("CMAKE", "cmake")
+            build_dir = tmp_path / "build"
+            config = env.get("CMAKE_INSTALL_CONFIG_NAME") or env.get("CPP_BUILD_TYPE") or "Debug"
+            cmake_lists = tmp_path / "CMakeLists.txt"
+            cmake_lists.write_text(
+                "cmake_minimum_required(VERSION 3.20)\n"
+                "project(verify_mental1104 LANGUAGES CXX)\n"
+                "set(CMAKE_CXX_STANDARD 20)\n"
+                "set(CMAKE_CXX_STANDARD_REQUIRED ON)\n"
+                "add_executable(verify_cpp verify.cpp)\n"
+                f"target_include_directories(verify_cpp PRIVATE \"{include_dir.as_posix()}\")\n"
+                f"find_library(M1104_LIB NAMES mental1104 PATHS \"{lib_dir.as_posix()}\" NO_DEFAULT_PATH)\n"
+                "if(NOT M1104_LIB)\n"
+                f"  message(FATAL_ERROR \"missing mental1104.lib under {lib_dir.as_posix()}\")\n"
+                "endif()\n"
+                "target_link_libraries(verify_cpp PRIVATE \"${M1104_LIB}\")\n"
+            )
+            cmake_args = [cmake, "-S", str(tmp_path), "-B", str(build_dir)]
+            generator = env.get("CMAKE_GENERATOR")
+            if generator:
+                cmake_args += ["-G", generator]
+            run(cmake_args, env=env, cwd=tmp_path)
+            run([cmake, "--build", str(build_dir), "--config", config], env=env, cwd=tmp_path)
+            exe = build_dir / config / "verify_cpp.exe"
+            if not exe.exists():
+                exe = build_dir / "verify_cpp.exe"
+            if not exe.exists():
+                raise SystemExit(f"[error] missing verify_cpp binary at {exe}")
+            run([str(exe)], env=_with_lib_path(env, lib_dir, bin_dir=bin_dir), cwd=tmp_path)
+        else:
+            exe = tmp_path / "verify_cpp"
+            use_system_include = (prefix.resolve() == Path("/usr/local"))
+            include_args = [] if use_system_include else ["-I", str(include_dir)]
+            cmd = [
+                *_split_cmd(cxx),
+                "-std=c++20",
+                *include_args,
+                str(src),
+                "-L",
+                str(lib_dir),
+                "-lmental1104",
+                "-pthread",
+                f"-Wl,-rpath,{lib_dir}",
+                "-o",
+                str(exe),
+            ]
+            run(cmd, env=env, cwd=tmp_path)
+            run([str(exe)], env=_with_lib_path(env, lib_dir), cwd=tmp_path)
     print("cpp-ok")
 
 
