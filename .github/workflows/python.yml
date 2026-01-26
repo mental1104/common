@@ -44,6 +44,56 @@ jobs:
   linux:
     name: Linux / Python ${{ matrix.python }}
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: app
+        ports:
+          - "5432:5432"
+        options: >-
+          --health-cmd="pg_isready -U test"
+          --health-interval=5s --health-timeout=5s --health-retries=5
+      redis:
+        image: redis/redis-stack-server:7.2.0-v7
+        ports:
+          - "6379:6379"
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=5s --health-timeout=3s --health-retries=5
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: test
+          MYSQL_DATABASE: app
+          MYSQL_USER: test
+          MYSQL_PASSWORD: test
+        ports:
+          - "3306:3306"
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -u root -ptest"
+          --health-interval=5s --health-timeout=5s --health-retries=10
+      mongo:
+        image: mongo:7.0
+        ports:
+          - "27017:27017"
+        options: >-
+          --health-cmd="mongosh --quiet --eval 'db.runCommand({ ping: 1 })'"
+          --health-interval=5s --health-timeout=5s --health-retries=10
+      clickhouse:
+        image: clickhouse/clickhouse-server:24.3
+        env:
+          CLICKHOUSE_USER: test
+          CLICKHOUSE_PASSWORD: test
+          CLICKHOUSE_DB: default
+        ports:
+          - "8123:8123"
+          - "9000:9000"
+        options: >-
+          --health-cmd="clickhouse-client --host 127.0.0.1 --query 'SELECT 1'"
+          --health-interval=5s --health-timeout=5s --health-retries=10
     strategy:
       fail-fast: false
       matrix:
@@ -58,6 +108,35 @@ jobs:
 
     env:
       PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/devops
+      DATABASE_URL: postgresql://test:test@localhost:5432/app
+      REDIS_URL: redis://localhost:6379/0
+      PGUSER: test
+      PGPASSWORD: test
+      PGDATABASE: app
+      PGHOST: localhost
+      PGPORT: "5432"
+      REDIS_HOST: localhost
+      REDIS_PORT: "6379"
+      PULSAR_HOST: localhost
+      PULSAR_BROKER_PORT: "6650"
+      PULSAR_ADMIN_PORT: "8080"
+      PULSAR_TOKEN: ""
+      PULSAR_SCHEMA_PATH: "/tmp/pulsar/schema"
+      PULSAR_DATA_PATH: "/tmp/pulsar/data"
+      MYSQL_HOST: localhost
+      MYSQL_PORT: "3306"
+      MYSQL_USER: test
+      MYSQL_PASSWORD: test
+      MYSQL_DATABASE: app
+      MONGO_HOST: localhost
+      MONGO_PORT: "27017"
+      MONGO_DATABASE: test
+      CLICKHOUSE_HOST: localhost
+      CLICKHOUSE_HTTP_PORT: "8123"
+      CLICKHOUSE_DATABASE: default
+      CLICKHOUSE_USER: test
+      CLICKHOUSE_PASSWORD: test
+      CLICKHOUSE_SCHEME: clickhouse+http
 
     defaults:
       run:
@@ -104,6 +183,49 @@ jobs:
       - name: Init submodules (sparse Boost)
         continue-on-error: true
         run: python3 -c "import sys;from devtool.commands.common import base_env;from devtool.commands.ops import cpp as cpp_ops;sys.exit(cpp_ops.git_submodules(base_env()) or 0)"
+
+      - name: Start Pulsar (standalone -nss)
+        continue-on-error: true
+        run: |
+          docker rm -f pulsar || true
+          docker run -d --name pulsar \
+            -p ${PULSAR_BROKER_PORT}:${PULSAR_BROKER_PORT} -p ${PULSAR_ADMIN_PORT}:${PULSAR_ADMIN_PORT} \
+            apachepulsar/pulsar:3.2.0 \
+            bin/pulsar standalone -nss
+
+      - name: Wait for postgres/redis/mysql/mongo/clickhouse/pulsar
+        continue-on-error: true
+        run: |
+          ports=(
+            "${PGPORT}"
+            "${REDIS_PORT}"
+            "${MYSQL_PORT}"
+            "${MONGO_PORT}"
+            "${CLICKHOUSE_HTTP_PORT}"
+            "${PULSAR_BROKER_PORT}"
+            "${PULSAR_ADMIN_PORT}"
+          )
+          for i in {1..40}; do
+            ready=true
+            for port in "${ports[@]}"; do
+              if ! (echo > /dev/tcp/127.0.0.1/${port}) >/dev/null 2>&1; then
+                ready=false
+                break
+              fi
+            done
+            if [ "${ready}" = "true" ]; then
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "services not ready" >&2
+          exit 1
+
+      - name: Configure MySQL auth plugin
+        run: |
+          docker exec ${{ job.services.mysql.id }} \
+            mysql -uroot -ptest \
+            -e "ALTER USER 'test'@'%' IDENTIFIED WITH mysql_native_password BY 'test'; FLUSH PRIVILEGES;"
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -216,6 +338,37 @@ jobs:
         options: >-
           --health-cmd="redis-cli ping"
           --health-interval=5s --health-timeout=3s --health-retries=5
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: test
+          MYSQL_DATABASE: app
+          MYSQL_USER: test
+          MYSQL_PASSWORD: test
+        ports:
+          - "3306:3306"
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -u root -ptest"
+          --health-interval=5s --health-timeout=5s --health-retries=10
+      mongo:
+        image: mongo:7.0
+        ports:
+          - "27017:27017"
+        options: >-
+          --health-cmd="mongosh --quiet --eval 'db.runCommand({ ping: 1 })'"
+          --health-interval=5s --health-timeout=5s --health-retries=10
+      clickhouse:
+        image: clickhouse/clickhouse-server:24.3
+        env:
+          CLICKHOUSE_USER: test
+          CLICKHOUSE_PASSWORD: test
+          CLICKHOUSE_DB: default
+        ports:
+          - "8123:8123"
+          - "9000:9000"
+        options: >-
+          --health-cmd="clickhouse-client --host 127.0.0.1 --query 'SELECT 1'"
+          --health-interval=5s --health-timeout=5s --health-retries=10
 
     env:
       PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/devops
@@ -234,6 +387,20 @@ jobs:
       PULSAR_TOKEN: ""
       PULSAR_SCHEMA_PATH: "/tmp/pulsar/schema"
       PULSAR_DATA_PATH: "/tmp/pulsar/data"
+      MYSQL_HOST: localhost
+      MYSQL_PORT: "3306"
+      MYSQL_USER: test
+      MYSQL_PASSWORD: test
+      MYSQL_DATABASE: app
+      MONGO_HOST: localhost
+      MONGO_PORT: "27017"
+      MONGO_DATABASE: test
+      CLICKHOUSE_HOST: localhost
+      CLICKHOUSE_HTTP_PORT: "8123"
+      CLICKHOUSE_DATABASE: default
+      CLICKHOUSE_USER: test
+      CLICKHOUSE_PASSWORD: test
+      CLICKHOUSE_SCHEME: clickhouse+http
 
     defaults:
       run:
@@ -260,15 +427,39 @@ jobs:
             apachepulsar/pulsar:3.2.0 \
             bin/pulsar standalone -nss
 
-      - name: Wait for postgres/redis/pulsar
+      - name: Wait for postgres/redis/mysql/mongo/clickhouse/pulsar
         continue-on-error: true
         run: |
+          ports=(
+            "${PGPORT}"
+            "${REDIS_PORT}"
+            "${MYSQL_PORT}"
+            "${MONGO_PORT}"
+            "${CLICKHOUSE_HTTP_PORT}"
+            "${PULSAR_BROKER_PORT}"
+            "${PULSAR_ADMIN_PORT}"
+          )
           for i in {1..40}; do
-            (echo > /dev/tcp/127.0.0.1/${PGPORT}) && (echo > /dev/tcp/127.0.0.1/${REDIS_PORT}) && (echo > /dev/tcp/127.0.0.1/${PULSAR_ADMIN_PORT}) && exit 0
+            ready=true
+            for port in "${ports[@]}"; do
+              if ! (echo > /dev/tcp/127.0.0.1/${port}) >/dev/null 2>&1; then
+                ready=false
+                break
+              fi
+            done
+            if [ "${ready}" = "true" ]; then
+              exit 0
+            fi
             sleep 2
           done
           echo "services not ready" >&2
           exit 1
+
+      - name: Configure MySQL auth plugin
+        run: |
+          docker exec ${{ job.services.mysql.id }} \
+            mysql -uroot -ptest \
+            -e "ALTER USER 'test'@'%' IDENTIFIED WITH mysql_native_password BY 'test'; FLUSH PRIVILEGES;"
 
       - name: Set up Python
         uses: actions/setup-python@v5
