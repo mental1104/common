@@ -212,6 +212,7 @@ This file captures recent work plus portability guidance, grouped by language.
 - Utils: add batch_rename helpers for planning/applying renames with suffix/regex/index rules plus tests.
 - Utils: add Chinese usage comments for batch_rename functions.
 - Utils: use typing.Union for batch_rename type aliases to keep Python 3.8/3.9 compatible.
+- Pulsar: move AbstractMessageQueue into connector/mq module and keep PulsarMessageQueue using it.
 - Dev tool: Python coverage now installs requirements if coverage isn't in the venv (keeps CI from failing on missing coverage).
 - Dev tool: uninstall now mirrors install (supports `--prefix`), and verify-install can require installed artifacts via `VERIFY_REQUIRE_INSTALL=1`.
 - Dev tool: Go/Rust install now emits verify binaries and dotnet install packs into the local feed so uninstall/verify-uninstall can validate removal.
