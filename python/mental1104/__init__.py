@@ -59,6 +59,7 @@ from mental1104.file.csv_processor import csv_writer, export_csv_from_database
 from mental1104.file.file_processor import file_iterator
 from mental1104.iterator.iterator_csv import iterator_csv
 from mental1104.iterator.iterator_json import iterator_json
+from mental1104.mq.abstract_message_queue import AbstractMessageQueue
 from mental1104.plot.bench import BenchTestType, BenchmarkPlotter, BenchmarkRecord, BenchmarkSuite, GoogleBenchmarkSuite, PytestBenchmarkSuite, load_benchmark_suite
 from mental1104.schema.common_schema import JsonSerializable
 from mental1104.string.string_util import insert_newlines, replace_space_with
@@ -76,18 +77,19 @@ from mental1104.utils.util import async_delay, delay
 # ---- Lazy exports (risky modules; may import mental1104 at top-level) ----
 _EXPORT_MAP = {
     'AsCompletedStrategy': 'mental1104.concurrency.coroutine',
-    'AsyncPulsarAdminHelper': 'mental1104.connector.pulsar',
-    'Consumer': 'mental1104.connector.pulsar',
+    'AsyncPulsarAdminHelper': 'mental1104.mq.pulsar',
+    'Consumer': 'mental1104.mq.pulsar',
     'CoroutinePool': 'mental1104.concurrency.coroutine',
     'FirstSuccessfulStrategy': 'mental1104.concurrency.coroutine',
     'GatherStrategy': 'mental1104.concurrency.coroutine',
     'MiddlewareCallable': 'mental1104.asgi.fastapi.middleware',
     'ProcessExecutorCoroutinePool': 'mental1104.concurrency.coroutine',
     'ProcessWorkerPool': 'mental1104.concurrency.sync_worker',
-    'Producer': 'mental1104.connector.pulsar',
-    'PulsarAdminHelper': 'mental1104.connector.pulsar',
-    'PulsarConnector': 'mental1104.connector.pulsar',
-    'PulsarEnvironment': 'mental1104.connector.pulsar',
+    'Producer': 'mental1104.mq.pulsar',
+    'PulsarAdminHelper': 'mental1104.mq.pulsar',
+    'PulsarConnector': 'mental1104.mq.pulsar',
+    'PulsarEnvironment': 'mental1104.mq.pulsar',
+    'PulsarMessageQueue': 'mental1104.mq.pulsar',
     'RequestCtxContextVarMiddlewareFactory': 'mental1104.asgi.fastapi.middleware',
     'RequestCtxMiddlewareFactory': 'mental1104.asgi.fastapi.middleware',
     'TaskExecutionStrategy': 'mental1104.concurrency.coroutine',
@@ -104,6 +106,7 @@ _EXPORT_MAP = {
 }
 
 __all__ = [
+    'AbstractMessageQueue',
     'AnkiApkgGenerator',
     'AsCompletedStrategy',
     'AsyncMongoConnection',
@@ -174,6 +177,7 @@ __all__ = [
     'PulsarAdminHelper',
     'PulsarConnector',
     'PulsarEnvironment',
+    'PulsarMessageQueue',
     'PytestBenchmarkSuite',
     'QueryResolver',
     'RedisBloom',
