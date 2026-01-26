@@ -49,7 +49,7 @@ jobs:
         cxx_std: ["11", "14", "17", "20", "23"]
     env:
       CMAKE_BUILD_PARALLEL_LEVEL: 4
-      GCOV: ${{ matrix.compiler == 'clang' && 'llvm-cov gcov' || 'gcov' }}
+      GCOV: gcov
       CC: ${{ matrix.compiler == 'clang' && 'clang' || 'gcc' }}
       CXX: ${{ matrix.compiler == 'clang' && 'clang++' || 'g++' }}
       CXX_STD: ${{ matrix.cxx_std }}
@@ -91,6 +91,17 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y build-essential cmake ninja-build clang clang-format clang-tidy gcovr lcov \
             libmpfr-dev libgmp-dev
+
+      - name: Install llvm tools for clang
+        if: ${{ matrix.compiler == 'clang' }}
+        run: |
+          clang_major="$(clang --version | head -n1 | sed -E 's/.*version ([0-9]+).*/\1/')"
+          if [ -z "${clang_major}" ]; then
+            echo "failed to detect clang major version" >&2
+            exit 1
+          fi
+          sudo apt-get install -y "llvm-${clang_major}-tools"
+          echo "GCOV=llvm-cov-${clang_major} gcov" >> "$GITHUB_ENV"
 
       - name: Setup C++
         id: setup_cpp

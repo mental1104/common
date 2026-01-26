@@ -25,6 +25,7 @@ This file captures recent work plus portability guidance, grouped by language.
 - CI: C++ linux matrix now starts Redis service and exports REDIS_* envs so redis_lock tests run per C++ standard.
 - CI: Removed cpp linux-integration job; redis tests run in the main C++ matrix.
 - CI: Restored Linux g++ C++20 in the C++ matrix.
+- CI: C++ clang coverage installs matching llvm-<ver>-tools and sets GCOV to llvm-cov-<ver> gcov.
 - Tests: Redis multiprocessing tests now use module-level workers and per-process connections to support spawn/forkserver (Python 3.14).
 - 测试: Redis 多进程 helper 注释说明 spawn 序列化与子进程连接策略。
 - Coverage extractors: add Rust/Go/.NET cov.json extract scripts and wire workflows to parse real reports instead of placeholders.
