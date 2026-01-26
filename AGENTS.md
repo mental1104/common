@@ -19,9 +19,9 @@ This file captures recent work plus portability guidance, grouped by language.
 - README: Rust/.NET/Go coverage sections show per-OS, per-version badge matrices.
 - CI: language workflows ignore push-to-main; main branch runs only via `ci-main.yml` to prevent duplicate executions.
 - CI: Python workflow now fails immediately on setup/build/coverage errors (removed deferred failure marker).
-- CI: Linux python integration job now starts MySQL/Mongo/ClickHouse services and exports env vars so middleware tests run.
 - CI: Linux python matrix job now starts middleware services and exports env vars for 3.8–3.14 runs.
 - CI: Linux python jobs align ClickHouse auth and switch MySQL test user to mysql_native_password for CI compatibility.
+- CI: Removed redundant linux-integration job since the Linux matrix covers middleware tests.
 - Tests: Redis multiprocessing tests now use module-level workers and per-process connections to support spawn/forkserver (Python 3.14).
 - 测试: Redis 多进程 helper 注释说明 spawn 序列化与子进程连接策略。
 - Coverage extractors: add Rust/Go/.NET cov.json extract scripts and wire workflows to parse real reports instead of placeholders.
