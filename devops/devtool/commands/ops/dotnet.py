@@ -36,6 +36,16 @@ def _maybe_logger(env: Mapping[str, str]) -> list[str]:
         return []
     return ["--logger", logger]
 
+
+def _dotnet_test_verbosity(env: Mapping[str, str]) -> list[str]:
+    raw = (env.get("DOTNET_TEST_VERBOSITY") or "").strip()
+    if raw:
+        return ["--verbosity", raw]
+    if _is_truthy(env.get("TEST_VERBOSE")):
+        return ["--verbosity", "detailed"]
+    return []
+
+
 def _has_runtime(env: Mapping[str, str], major_prefix: str) -> bool:
     try:
         output = subprocess.check_output(
@@ -96,6 +106,7 @@ def test(env: Mapping[str, str], *, file_pattern: str | None, filter_expr: str |
         args.append("--no-build")
     if filter_expr:
         args += ["--filter", filter_expr]
+    args += _dotnet_test_verbosity(env_np)
     args += _maybe_logger(env_np)
     run(args, env=env_np, cwd=DOTNET_DIR)
 
