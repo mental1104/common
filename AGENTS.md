@@ -22,6 +22,8 @@ This file captures recent work plus portability guidance, grouped by language.
 - CI: Linux python integration job now starts MySQL/Mongo/ClickHouse services and exports env vars so middleware tests run.
 - CI: Linux python matrix job now starts middleware services and exports env vars for 3.8–3.14 runs.
 - CI: Linux python jobs align ClickHouse auth and switch MySQL test user to mysql_native_password for CI compatibility.
+- Tests: Redis multiprocessing tests now use module-level workers and per-process connections to support spawn/forkserver (Python 3.14).
+- 测试: Redis 多进程 helper 注释说明 spawn 序列化与子进程连接策略。
 - Coverage extractors: add Rust/Go/.NET cov.json extract scripts and wire workflows to parse real reports instead of placeholders.
 - DataStructure: add per-OS/C++-standard coverage artifacts, pages badges/dashboard, and README coverage matrix.
 - DataStructure: make coverage emits coverage.xml for artifact extraction and ignore coverage artifacts via subrepo .gitignore.
