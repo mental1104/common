@@ -8,12 +8,14 @@ if __spec__ is not None:
 
 _ALIASES = {
     __name__ + ".pulsar": "mental1104.mq.pulsar",
+    __name__ + ".kafka": "mental1104.mq.kafka",
     __name__ + ".redis_client": "mental1104.db.redis",
     __name__ + ".redis_client.redis_bloom_kv": "mental1104.db.redis.redis_bloom_kv",
 }
 
 _OPTIONAL_DEPS = {
     __name__ + ".pulsar": "pulsar",
+    __name__ + ".kafka": "confluent_kafka",
 }
 
 for alias, target in _ALIASES.items():
