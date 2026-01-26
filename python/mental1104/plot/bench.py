@@ -12,7 +12,18 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Iterable, Sequence
 
-import matplotlib.pyplot as plt
+_PY_PLOT = None
+
+
+def _load_pyplot():
+    global _PY_PLOT
+    if _PY_PLOT is None:
+        try:
+            import matplotlib.pyplot as plt
+        except Exception as exc:
+            raise RuntimeError("matplotlib is required for BenchmarkPlotter plotting") from exc
+        _PY_PLOT = plt
+    return _PY_PLOT
 
 
 class BenchTestType(str):
@@ -204,6 +215,7 @@ class BenchmarkPlotter:
         top_n: int | None = None,
         ascending: bool | None = None,
     ) -> Path:
+        plt = _load_pyplot()
         if metric not in self.available_metrics():
             raise ValueError(f"未知的 metric: {metric}")
         rows = [(rec.label, rec.metrics[metric]) for rec in self.records if metric in rec.metrics]
@@ -255,6 +267,7 @@ class BenchmarkPlotter:
         top_n: int | None = None,
         ascending: bool | None = None,
     ) -> Path:
+        plt = _load_pyplot()
         metric_list = list(metrics) if metrics else self._default_metric_list()
         if not metric_list:
             raise ValueError("没有可用指标。")
@@ -332,6 +345,7 @@ class BenchmarkPlotter:
         title: str | None = None,
         output_path: str | Path | None = None,
     ) -> Path:
+        plt = _load_pyplot()
         applicable = []
         for rec in self.records:
             if metric not in rec.metrics:

@@ -3,7 +3,11 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import Any, Callable, Optional, TYPE_CHECKING
 
-from pulsar import ConsumerType
+try:
+    from pulsar import ConsumerType
+except Exception:
+    class ConsumerType:
+        Shared = "Shared"
 
 if TYPE_CHECKING:
     from .pulsar import Consumer, Producer
