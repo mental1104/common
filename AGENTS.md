@@ -19,6 +19,9 @@ This file captures recent work plus portability guidance, grouped by language.
 - README: Rust/.NET/Go coverage sections show per-OS, per-version badge matrices.
 - CI: language workflows ignore push-to-main; main branch runs only via `ci-main.yml` to prevent duplicate executions.
 - CI: Python workflow now fails immediately on setup/build/coverage errors (removed deferred failure marker).
+- CI: Linux python integration job now starts MySQL/Mongo/ClickHouse services and exports env vars so middleware tests run.
+- CI: Linux python matrix job now starts middleware services and exports env vars for 3.8–3.14 runs.
+- CI: Linux python jobs align ClickHouse auth and switch MySQL test user to mysql_native_password for CI compatibility.
 - Coverage extractors: add Rust/Go/.NET cov.json extract scripts and wire workflows to parse real reports instead of placeholders.
 - DataStructure: add per-OS/C++-standard coverage artifacts, pages badges/dashboard, and README coverage matrix.
 - DataStructure: make coverage emits coverage.xml for artifact extraction and ignore coverage artifacts via subrepo .gitignore.
