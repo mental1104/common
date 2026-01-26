@@ -1,3 +1,3 @@
-from .abstract_message_queue import AbstractMessageQueue
+from .abstract_message_queue import AbstractConsumer, AbstractMessageQueue, AbstractProducer
 
-__all__ = ["AbstractMessageQueue"]
+__all__ = ["AbstractConsumer", "AbstractMessageQueue", "AbstractProducer"]

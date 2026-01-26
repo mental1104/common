@@ -12,7 +12,7 @@ from pulsar import ConsumerType
 from pulsar.schema import AvroSchema
 
 from mental1104 import check_required_env_vars
-from .abstract_message_queue import AbstractMessageQueue
+from .abstract_message_queue import AbstractConsumer, AbstractMessageQueue, AbstractProducer
 
 
 class PulsarEnvironment(str, Enum):
@@ -125,7 +125,7 @@ class PulsarMessageQueue(AbstractMessageQueue):
         self.__is_closed = True
 
 
-class Consumer:
+class Consumer(AbstractConsumer):
     def __init__(
         self,
         tenant: str,
@@ -208,7 +208,7 @@ class Consumer:
         except Exception as e:
             logging.exception(f"pulsar unsubscribe failed, exception:{e}")
 
-    def resuscribe(self):
+    def resubscribe(self):
         """
         resuscribe 重新以该订阅名订阅topic, 首先会删除该订阅, 然后再重新订阅, 相当于从当前最新的消息开始消费
         """
@@ -217,8 +217,12 @@ class Consumer:
             self.__consumer.close()
         self.__consumer = self.__subscrifunc()
 
+    def resuscribe(self):
+        # Backward-compatible alias for legacy typo.
+        self.resubscribe()
 
-class Producer:
+
+class Producer(AbstractProducer):
     def __init__(
         self,
         tenant: str,
