@@ -121,17 +121,14 @@ jobs:
 
       - name: Setup Python
         id: setup_env
-        continue-on-error: true
         run: ./dev setup-python
 
       - name: Build Python
         id: build_env
-        continue-on-error: true
         run: ./dev build-python
 
       - name: Coverage Python
         id: cov_env
-        continue-on-error: true
         run: ./dev coverage-python
 
       - name: Export coverage.xml + cov.json (never fail)
@@ -196,10 +193,6 @@ jobs:
             echo "verify-install succeeded after uninstall; expected failure"
             exit 1
           fi
-
-      - name: Mark job failed if core steps failed
-        if: ${{ steps.gate.outputs.enable == 'true' && (steps.setup_env.outcome == 'failure' || steps.build_env.outcome == 'failure' || steps.cov_env.outcome == 'failure') }}
-        run: exit 1
 
   linux-integration:
     name: Linux / Python 3.12
@@ -445,17 +438,14 @@ jobs:
 
       - name: Setup Python
         id: setup_env
-        continue-on-error: true
         run: ./dev setup-python
 
       - name: Build Python
         id: build_env
-        continue-on-error: true
         run: ./dev build-python
 
       - name: Coverage Python
         id: cov_env
-        continue-on-error: true
         run: ./dev coverage-python
 
       - name: Export coverage.xml + cov.json (never fail)
@@ -520,10 +510,6 @@ jobs:
             echo "verify-install succeeded after uninstall; expected failure"
             exit 1
           fi
-
-      - name: Mark job failed if core steps failed
-        if: ${{ steps.gate.outputs.enable == 'true' && (steps.setup_env.outcome == 'failure' || steps.build_env.outcome == 'failure' || steps.cov_env.outcome == 'failure') }}
-        run: exit 1
 
   windows:
     name: Windows / Python ${{ matrix.python }}
@@ -599,17 +585,14 @@ jobs:
 
       - name: Setup Python
         id: setup_env
-        continue-on-error: true
         run: python -m devtool.cli setup-python
 
       - name: Build Python
         id: build_env
-        continue-on-error: true
         run: python -m devtool.cli build-python
 
       - name: Coverage Python
         id: cov_env
-        continue-on-error: true
         run: python -m devtool.cli coverage-python
 
       - name: Export coverage.xml + cov.json (never fail)
@@ -682,7 +665,3 @@ jobs:
         if: ${{ steps.gate.outputs.enable == 'true' && steps.verify_uninstall_python.outcome != 'failure' }}
         run: |
           throw "verify-install succeeded after uninstall; expected failure"
-
-      - name: Mark job failed if core steps failed
-        if: ${{ steps.gate.outputs.enable == 'true' && (steps.setup_env.outcome == 'failure' || steps.build_env.outcome == 'failure' || steps.cov_env.outcome == 'failure') }}
-        run: exit 1
