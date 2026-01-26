@@ -34,14 +34,19 @@ jobs:
   linux:
     name: Linux / ${{ matrix.compiler == 'clang' && 'clang++' || 'g++' }} / C++${{ matrix.cxx_std }}
     runs-on: ubuntu-latest
+    services:
+      redis:
+        image: redis/redis-stack-server:7.2.0-v7
+        ports:
+          - "6379:6379"
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=5s --health-timeout=3s --health-retries=5
     strategy:
       fail-fast: false
       matrix:
         compiler: [gcc, clang]
         cxx_std: ["11", "14", "17", "20", "23"]
-        exclude:
-          - compiler: gcc
-            cxx_std: "20"
     env:
       CMAKE_BUILD_PARALLEL_LEVEL: 4
       GCOV: ${{ matrix.compiler == 'clang' && 'llvm-cov gcov' || 'gcov' }}
@@ -52,6 +57,9 @@ jobs:
       COMPILER_KEY: ${{ matrix.compiler == 'clang' && 'clangpp' || 'gpp' }}
       # 用于 cov.json 里展示
       COMPILER_LABEL: ${{ matrix.compiler == 'clang' && 'clang++' || 'g++' }}
+      REDIS_HOST: localhost
+      REDIS_PORT: "6379"
+      REDIS_URL: redis://localhost:6379/0
     defaults:
       run:
         shell: bash
@@ -67,6 +75,15 @@ jobs:
         continue-on-error: true
         run: |
           python3 -c "import sys;from devtool.commands.common import base_env;from devtool.commands.ops import cpp as cpp_ops;sys.exit(cpp_ops.git_submodules(base_env()) or 0)"
+
+      - name: Wait for redis
+        run: |
+          for i in {1..40}; do
+            (echo > /dev/tcp/127.0.0.1/${REDIS_PORT}) && exit 0
+            sleep 2
+          done
+          echo "redis not ready" >&2
+          exit 1
 
       - name: Install toolchain
         continue-on-error: true
@@ -201,211 +218,6 @@ jobs:
 
       - name: Mark job failed if core steps failed
         if: ${{ steps.setup_cpp.outcome == 'failure' || steps.build_cpp.outcome == 'failure' || steps.coverage_cpp.outcome == 'failure' }}
-        run: exit 1
-
-  linux-integration:
-    name: Linux / g++ / C++20 / coverage
-    runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: postgres:15
-        env:
-          POSTGRES_USER: test
-          POSTGRES_PASSWORD: test
-          POSTGRES_DB: app
-        ports:
-          - "5432:5432"
-        options: >-
-          --health-cmd="pg_isready -U test"
-          --health-interval=5s --health-timeout=5s --health-retries=55
-      redis:
-        image: redis/redis-stack-server:7.2.0-v7
-        ports:
-          - "6379:6379"
-        options: >-
-          --health-cmd="redis-cli ping"
-          --health-interval=5s --health-timeout=3s --health-retries=5
-    env:
-      CMAKE_BUILD_PARALLEL_LEVEL: 4
-      GCOV: gcov
-      CC: gcc
-      CXX: g++
-      CXX_STD: "20"
-      DATABASE_URL: postgresql://test:test@localhost:5432/app
-      REDIS_URL: redis://localhost:6379/0
-      PGUSER: test
-      PGPASSWORD: test
-      PGDATABASE: app
-      PGHOST: localhost
-      PGPORT: "5432"
-      REDIS_HOST: localhost
-      REDIS_PORT: "6379"
-      PULSAR_HOST: localhost
-      PULSAR_BROKER_PORT: "6650"
-      PULSAR_ADMIN_PORT: "8080"
-      PULSAR_TOKEN: ""
-      PULSAR_SCHEMA_PATH: "/tmp/pulsar/schema"
-      PULSAR_DATA_PATH: "/tmp/pulsar/data"
-    defaults:
-      run:
-        shell: bash
-        working-directory: ${{ github.workspace }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          submodules: false
-          fetch-depth: 0
-
-      - name: Init submodules (sparse Boost)
-        continue-on-error: true
-        run: |
-          python3 -c "import sys;from devtool.commands.common import base_env;from devtool.commands.ops import cpp as cpp_ops;sys.exit(cpp_ops.git_submodules(base_env()) or 0)"
-
-      - name: Start Pulsar (standalone -nss)
-        id: pulsar
-        continue-on-error: true
-        run: |
-          docker rm -f pulsar || true
-          docker run -d --name pulsar \
-            -p ${PULSAR_BROKER_PORT}:${PULSAR_BROKER_PORT} -p ${PULSAR_ADMIN_PORT}:${PULSAR_ADMIN_PORT} \
-            apachepulsar/pulsar:3.2.0 \
-            bin/pulsar standalone -nss
-
-      - name: Wait for postgres/redis/pulsar
-        id: wait_services
-        continue-on-error: true
-        run: |
-          for i in {1..40}; do
-            (echo > /dev/tcp/127.0.0.1/${PGPORT}) && (echo > /dev/tcp/127.0.0.1/${REDIS_PORT}) && (echo > /dev/tcp/127.0.0.1/${PULSAR_ADMIN_PORT}) && exit 0
-            sleep 2
-          done
-          echo "services not ready" >&2
-          exit 1
-
-      - name: Install toolchain
-        continue-on-error: true
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y build-essential cmake ninja-build clang clang-format clang-tidy gcovr lcov \
-            libmpfr-dev libgmp-dev
-
-      - name: Setup C++
-        id: setup_cpp
-        continue-on-error: true
-        run: ./dev setup-cpp --config Debug
-
-      - name: Build C++
-        id: build_cpp
-        continue-on-error: true
-        run: ./dev build-cpp --config Debug
-
-      - name: Test redis-plus-plus
-        id: test_redispp
-        continue-on-error: true
-        run: ./dev test-redispp --config Debug
-
-      - name: Coverage C++
-        id: coverage_cpp
-        continue-on-error: true
-        run: ./dev coverage-cpp
-
-      - name: Export coverage.xml (never fail)
-        if: always()
-        continue-on-error: true
-        run: |
-          set +e
-          rm -f coverage.xml
-
-          if [ -d cpp/build ]; then
-            gcovr -r . cpp/build \
-              --object-directory cpp/build \
-              --gcov-executable "$GCOV" \
-              --xml-pretty -o coverage.xml \
-              --filter '^cpp/' \
-              --exclude '^cpp/build/' \
-              --exclude '^cpp/thirdparty/' \
-              --gcov-ignore-errors=no_working_dir_found \
-              --gcov-ignore-parse-errors=negative_hits.warn_once_per_file \
-              --print-summary
-          fi
-
-          if [ ! -f coverage.xml ]; then
-            printf '%s\n' \
-              "<?xml version='1.0' encoding='UTF-8'?>" \
-              "<!DOCTYPE coverage SYSTEM 'http://cobertura.sourceforge.net/xml/coverage-04.dtd'>" \
-              "<coverage line-rate=\"0.0\" branch-rate=\"0.0\" lines-covered=\"0\" lines-valid=\"0\" branches-covered=\"0\" branches-valid=\"0\" complexity=\"0.0\" timestamp=\"0\" version=\"placeholder\">" \
-              "  <sources><source>.</source></sources>" \
-              "  <packages/>" \
-              "</coverage>" \
-              > coverage.xml
-          fi
-
-      - name: Extract cov.json (never fail)
-        if: always()
-        continue-on-error: true
-        run: |
-          set +e
-          python3 tools/ci/extract_coverage_cpp.py \
-            --os linux \
-            --compiler g++ \
-            --cxx-std 20 \
-            --out cov.json || true
-
-          if [ ! -f cov.json ]; then
-            python3 -c "import json,os;obj={'os':'linux','compiler':'g++','cxx_std':20,'line_pct':0.0,'source':'placeholder','sha':os.getenv('GITHUB_SHA',''),'run_id':os.getenv('GITHUB_RUN_ID',''),'status':'placeholder'};json.dump(obj,open('cov.json','w',encoding='utf-8'),ensure_ascii=False,indent=2)"
-          fi
-
-      - name: Stash coverage files (unique path)
-        if: always()
-        continue-on-error: true
-        run: |
-          set +e
-          key="linux-gpp-cxx20-integration"
-          mkdir -p "_cov/cpp/${key}"
-          cp -f cov.json "_cov/cpp/${key}/cov.json" 2>/dev/null || true
-          cp -f coverage.xml "_cov/cpp/${key}/coverage.xml" 2>/dev/null || true
-
-      - name: Upload coverage artifacts (unique)
-        if: always()
-        continue-on-error: true
-        uses: actions/upload-artifact@v4
-        with:
-          name: cpp-cov-linux-gpp-cxx20-integration
-          path: _cov
-          retention-days: 7
-          if-no-files-found: warn
-
-      - name: install-cpp
-        env:
-          PREFIX: ${{ github.workspace }}/artifacts/cpp
-        run: ./dev install-cpp
-
-      - name: verify-install-cpp
-        env:
-          PREFIX: ${{ github.workspace }}/artifacts/cpp
-        run: ./dev verify-install cpp
-
-      - name: uninstall-cpp
-        env:
-          PREFIX: ${{ github.workspace }}/artifacts/cpp
-        run: ./dev uninstall-cpp
-
-      - name: verify-uninstall-cpp (expect failure)
-        env:
-          PREFIX: ${{ github.workspace }}/artifacts/cpp
-          VERIFY_REQUIRE_INSTALL: "1"
-        run: |
-          set +e
-          ./dev verify-install cpp
-          status=$?
-          if [ $status -eq 0 ]; then
-            echo "verify-install succeeded after uninstall; expected failure"
-            exit 1
-          fi
-
-      - name: Mark job failed if core steps failed
-        if: ${{ steps.setup_cpp.outcome == 'failure' || steps.build_cpp.outcome == 'failure' || steps.coverage_cpp.outcome == 'failure' || steps.wait_services.outcome == 'failure' }}
         run: exit 1
 
   macos:
