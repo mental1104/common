@@ -85,6 +85,11 @@ This file captures recent work plus portability guidance, grouped by language.
 - Dockerfile: avoid GitHub API for syncthing latest; resolve tag via releases redirect/HTML.
 - Dockerfile/devtool: accept proxy build args and forward HTTP(S)_PROXY/NO_PROXY from `./dev build-docker`.
 - Dockerfile/devtool: also forward ALL_PROXY and allow passing `--network`/`--add-host` via env for local proxy access.
+- Dockerfile/Compose: install docker.io CLI in image and mount `/var/run/docker.sock` for docker-in-docker usage.
+- Dev tool: build-docker now forces `DOCKER_BUILDKIT=1` in its environment.
+- Compose: mount local `./.env` into `/root/.env` to avoid hardcoded home paths.
+- Dev tool: run-docker now auto-creates `.env` from `.env.example` if missing.
+- Dockerfile: add symlinks for cargo/rustc/rustup into `/usr/local/bin`.
 
 ### Performance: Non-IO Benchmark Protocol (must follow)
 
