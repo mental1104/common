@@ -63,7 +63,7 @@ RUN --mount=type=cache,target=/var/cache/apt \
       libmpfr-dev libgmp-dev libtirpc-dev \
       # 网络/运维工具
       curl wget git tree unzip gzip zip jq \
-      netcat-openbsd telnet tcpdump iptables iputils-ping \
+      netcat-openbsd telnet tcpdump iptables iputils-ping docker.io \
       openssh-server cron logrotate \
       # DB/中间件客户端
       redis-tools postgresql-client \
@@ -184,7 +184,10 @@ RUN set -eux; \
     rm -f /tmp/rustup-init.sh; \
     rustup --version; \
     cargo --version; \
-    rustc --version
+    rustc --version; \
+    ln -sf /usr/local/cargo/bin/cargo /usr/local/bin/cargo; \
+    ln -sf /usr/local/cargo/bin/rustc /usr/local/bin/rustc; \
+    ln -sf /usr/local/cargo/bin/rustup /usr/local/bin/rustup
 
 # -----------------------------
 # E) 低频：Okteto + Syncthing（官网最新）
