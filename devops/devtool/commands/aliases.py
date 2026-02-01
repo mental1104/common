@@ -187,14 +187,14 @@ def _alias_guard(name: str, target: str, *, allow_mode: bool = False, preset_mod
         return parser.set_defaults
 
 
-for lang in ("python", "go", "cpp", "rust", "dotnet"):
+for lang in ("python", "go", "cpp", "rust", "dotnet", "java"):
     _alias_build(f"build-{lang}", lang)
 _alias_build("build-cpp-release", "cpp", default_config="Release")
 _alias_build("build-cpp-debug", "cpp", default_config="Debug")
 
-for lang in ("python", "go", "cpp", "rust", "dotnet"):
+for lang in ("python", "go", "cpp", "rust", "dotnet", "java"):
     _alias_test(f"test-{lang}", lang)
-for lang in ("python", "go", "cpp", "rust", "dotnet"):
+for lang in ("python", "go", "cpp", "rust", "dotnet", "java"):
     _alias_coverage(f"coverage-{lang}", lang)
 for lang in ("python", "go", "cpp", "rust", "dotnet"):
     _alias_fmt(f"fmt-{lang}", lang)

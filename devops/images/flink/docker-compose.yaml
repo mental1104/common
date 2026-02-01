@@ -1,12 +1,12 @@
 services:
   flink-jobmanager:
-    image: flink:latest
+    image: flink:1.17.2-scala_2.12-java11
     container_name: flink-jobmanager
-    networks:
-      - shared_network
     command: jobmanager
     ports:
-      - "${FLINK_WEB_PORT:-8081}:8081"    # Flink Web UI
+      - "8081:8081"    # Flink Web UI
+    volumes:
+      - ../../../java/flink-datastream-demo/target:/opt/flink/usrlib
     environment:
       - |
         FLINK_PROPERTIES=
@@ -14,10 +14,8 @@ services:
     restart: unless-stopped
 
   flink-taskmanager:
-    image: flink:latest
+    image: flink:1.17.2-scala_2.12-java11
     container_name: flink-taskmanager
-    networks:
-      - shared_network
     depends_on:
       - flink-jobmanager
     command: taskmanager
@@ -27,7 +25,3 @@ services:
         jobmanager.rpc.address: flink-jobmanager
         taskmanager.numberOfTaskSlots: 2
     restart: unless-stopped
-
-networks:
-  shared_network:
-    external: true
