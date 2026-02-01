@@ -148,6 +148,7 @@ This file captures recent work plus portability guidance, grouped by language.
 - Gitignore: unignore `cpp/include/mental1104/debug` so stacktrace headers are tracked.
 - Stacktrace: add pluggable formatter (JSON/Python-like), new formatting options, and route stack output through formatter hooks.
 - Stacktrace: undef MSVC `exception_code` macro in Windows implementation to avoid struct field name collision.
+- AsyncSimple scheduler: handle `Executor::schedule` failures by decrementing pending and notifying waiters to avoid hangs.
 - Examples: deepen C function call chain and add class-method stack depth for C++ crash demo.
 - Examples: move stacktrace demos into `cpp/examples/debug/stacktrace` with a Chinese README guide.
 - Docs: convert `cpp/README.md` to Chinese and update stacktrace usage details.
@@ -218,6 +219,7 @@ This file captures recent work plus portability guidance, grouped by language.
 - Utils: add Chinese usage comments for batch_rename functions.
 - Utils: use typing.Union for batch_rename type aliases to keep Python 3.8/3.9 compatible.
 - Pulsar: move AbstractMessageQueue into connector/mq module and keep PulsarMessageQueue using it.
+- Pulsar: add schema selection for Avro/JSON/bytes/Protobuf and cover it in connector tests.
 - Dev tool: Python coverage now installs requirements if coverage isn't in the venv (keeps CI from failing on missing coverage).
 - Dev tool: uninstall now mirrors install (supports `--prefix`), and verify-install can require installed artifacts via `VERIFY_REQUIRE_INSTALL=1`.
 - Dev tool: Go/Rust install now emits verify binaries and dotnet install packs into the local feed so uninstall/verify-uninstall can validate removal.

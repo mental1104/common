@@ -9,7 +9,13 @@ from typing import Any, Callable, Optional
 import pulsar
 import requests
 from pulsar import ConsumerType
-from pulsar.schema import AvroSchema
+from pulsar import schema as pulsar_schema
+from pulsar.schema import AvroSchema, BytesSchema, JsonSchema
+
+try:
+    from pulsar.schema import ProtobufSchema
+except Exception:
+    ProtobufSchema = None
 
 from mental1104 import check_required_env_vars
 from .abstract_message_queue import AbstractConsumer, AbstractMessageQueue, AbstractProducer
@@ -20,6 +26,91 @@ class PulsarEnvironment(str, Enum):
     PULSAR_BROKER_PORT = "PULSAR_BROKER_PORT"
     PULSAR_TOKEN = "PULSAR_TOKEN"
     PULSAR_ADMIN_PORT = "PULSAR_ADMIN_PORT"
+
+
+_SCHEMA_TYPE_ALIASES = {
+    "avro": "avro",
+    "json": "json",
+    "bytes": "bytes",
+    "byte": "bytes",
+    "raw": "bytes",
+    "protobuf": "protobuf",
+    "proto": "protobuf",
+}
+_SCHEMA_TYPE_KEYS = ("schema_type", "schemaType", "type")
+_SCHEMA_PAYLOAD_KEYS = ("schema", "record", "record_class", "message", "message_class", "definition")
+
+
+def _normalize_schema_type(value: str) -> Optional[str]:
+    return _SCHEMA_TYPE_ALIASES.get(value.strip().lower())
+
+
+def _extract_schema_type(schema_dict: dict[str, Any]) -> Optional[str]:
+    for key in _SCHEMA_TYPE_KEYS:
+        value = schema_dict.get(key)
+        if isinstance(value, str):
+            normalized = _normalize_schema_type(value)
+            if normalized:
+                return normalized
+    return None
+
+
+def _extract_schema_payload(schema_dict: dict[str, Any]) -> Any:
+    for key in _SCHEMA_PAYLOAD_KEYS:
+        if key in schema_dict:
+            return schema_dict[key]
+    return None
+
+
+def _is_pulsar_schema_instance(schema: Any) -> bool:
+    if schema is None:
+        return False
+    if hasattr(schema, "schema_type"):
+        return True
+    schema_base = getattr(pulsar_schema, "Schema", None)
+    if schema_base is None:
+        return False
+    try:
+        return isinstance(schema, schema_base)
+    except Exception:
+        return False
+
+
+def _build_pulsar_schema(schema: Any) -> Any:
+    if schema is None:
+        return None
+    if _is_pulsar_schema_instance(schema):
+        return schema
+    if isinstance(schema, str):
+        schema_type = _normalize_schema_type(schema)
+        if schema_type == "bytes":
+            return BytesSchema()
+        raise ValueError(f"Unsupported schema string: {schema}")
+    if isinstance(schema, dict):
+        schema_type = _extract_schema_type(schema)
+        if schema_type:
+            payload = _extract_schema_payload(schema)
+            if schema_type == "bytes":
+                return BytesSchema()
+            if schema_type == "avro":
+                if payload is None:
+                    raise ValueError("Avro schema requires a schema definition.")
+                if isinstance(payload, dict):
+                    return AvroSchema(None, payload)
+                return AvroSchema(payload)
+            if schema_type == "json":
+                if payload is None:
+                    raise ValueError("Json schema requires a record or schema definition.")
+                return JsonSchema(payload)
+            if schema_type == "protobuf":
+                if ProtobufSchema is None:
+                    raise RuntimeError("pulsar ProtobufSchema is unavailable in this client.")
+                if payload is None:
+                    raise ValueError("Protobuf schema requires a message class.")
+                return ProtobufSchema(payload)
+            raise ValueError(f"Unsupported schema_type: {schema_type}")
+        return AvroSchema(None, schema)
+    raise TypeError(f"Unsupported schema type: {type(schema).__name__}")
 
 
 class PulsarConnector:
@@ -78,7 +169,7 @@ class PulsarMessageQueue(AbstractMessageQueue):
         tenant: str,
         namespace: str,
         topic: str,
-        schema: dict,
+        schema: Any,
         batching_enabled: bool = True,
     ) -> "Producer":
         if self.__is_closed:
@@ -98,7 +189,7 @@ class PulsarMessageQueue(AbstractMessageQueue):
         namespace: str,
         topic: str,
         subscription: str,
-        schema: dict,
+        schema: Any,
         subscription_type=ConsumerType.Shared,
         message_listener: Optional[Callable[..., Any]] = None,
         **kwargs: Any,
@@ -132,7 +223,7 @@ class Consumer(AbstractConsumer):
         namespace: str,
         topic: str,
         subscription: str,
-        schema: dict,
+        schema: Any,
         client=None,
         subscription_type=ConsumerType.Shared,
         message_listener=None,
@@ -151,7 +242,7 @@ class Consumer(AbstractConsumer):
             client = self.__client
             self.__is_close = False
 
-        real_schema = AvroSchema(None, schema)
+        real_schema = _build_pulsar_schema(schema)
 
         # 指定租户、命名空间
         self.__subscrifunc = functools.partial(
@@ -228,7 +319,7 @@ class Producer(AbstractProducer):
         tenant: str,
         namespace: str,
         topic: str,
-        schema: dict,
+        schema: Any,
         client=None,
         batching_enabled=True,
     ):
@@ -237,7 +328,7 @@ class Producer(AbstractProducer):
             self.__client = PulsarConnector.make_client()
             client = self.__client
 
-        real_schema = AvroSchema(None, schema)
+        real_schema = _build_pulsar_schema(schema)
 
         # 指定租户、命名空间
         self.__producer = client.create_producer(
