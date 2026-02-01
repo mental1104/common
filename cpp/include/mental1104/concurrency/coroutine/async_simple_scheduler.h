@@ -52,7 +52,7 @@ private:
     // 显式使用 this-> 便于静态检查与区分成员变量
     // 将任务投递到执行器：尝试 resume 一次，若完成则减计数并唤醒等待者；未完成则再次调度继续执行
     // 每次调用都会创建一个新的 lambda 并交给 Executor；是否并发运行取决于 Executor 的实现（线程池可并发，单线程则串行）
-    this->exec_->schedule([this, task = std::move(task)]() mutable {
+    bool scheduled = this->exec_->schedule([this, task = std::move(task)]() mutable {
       task->resume(); // 在执行器线程上推进协程一步
       if (task->done()) { // 若本次推进后已完成
         // 这里不用 relaxed：需要 release 让计数变化对等待方可见；不用 seq_cst：更强但无额外收益；用 acq_rel 是折中且与 wait_all 的 acquire 配对
@@ -63,6 +63,10 @@ private:
         schedule_resume(std::move(task));
       }
     });
+    if (!scheduled) {
+      this->pending_.fetch_sub(1, std::memory_order_acq_rel);
+      this->cv_.notify_all();
+    }
   }
 
 private:

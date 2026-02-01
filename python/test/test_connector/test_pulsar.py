@@ -17,6 +17,151 @@ PulsarConnector = _pulsar_mod.PulsarConnector
 PulsarEnvironment = _pulsar_mod.PulsarEnvironment
 
 
+class _DummyProducer:
+    def send(self, record):
+        _ = record
+
+    def send_async(self, record, callback=None):
+        _ = record
+        if callback is not None:
+            callback(pulsar.Result.Ok, None)
+
+    def close(self):
+        return None
+
+
+class _DummyConsumer:
+    def receive(self, timeout_millis=None):
+        _ = timeout_millis
+        return None
+
+    def acknowledge(self, record):
+        _ = record
+
+    def negative_acknowledge(self, record):
+        _ = record
+
+    def unsubscribe(self):
+        return None
+
+    def close(self):
+        return None
+
+
+class _DummyClient:
+    def __init__(self):
+        self.last_schema = None
+
+    def create_producer(self, topic, **kwargs):
+        _ = topic
+        self.last_schema = kwargs.get("schema")
+        return _DummyProducer()
+
+    def subscribe(self, topic, **kwargs):
+        _ = topic
+        self.last_schema = kwargs.get("schema")
+        return _DummyConsumer()
+
+    def close(self):
+        return None
+
+
+def _build_target(target, client, schema):
+    if target == "producer":
+        return Producer(
+            tenant="test-tenant",
+            namespace="test-namespace",
+            topic="test-topic",
+            schema=schema,
+            client=client,
+        )
+    return Consumer(
+        tenant="test-tenant",
+        namespace="test-namespace",
+        topic="test-topic",
+        subscription="test-subscription",
+        schema=schema,
+        client=client,
+    )
+
+
+def _make_proto_message_class():
+    pytest.importorskip("google.protobuf", reason="protobuf is required for ProtobufSchema tests")
+    from google.protobuf import descriptor_pb2, descriptor_pool, message_factory
+
+    file_proto = descriptor_pb2.FileDescriptorProto()
+    file_proto.name = "test_pulsar.proto"
+    file_proto.package = "test_pulsar"
+    message = file_proto.message_type.add()
+    message.name = "TestMessage"
+    field = message.field.add()
+    field.name = "field1"
+    field.number = 1
+    field.label = field.LABEL_OPTIONAL
+    field.type = field.TYPE_STRING
+
+    pool = descriptor_pool.DescriptorPool()
+    pool.Add(file_proto)
+    descriptor = pool.FindMessageTypeByName("test_pulsar.TestMessage")
+    return message_factory.MessageFactory(pool).GetPrototype(descriptor)
+
+
+class TestPulsarSchemaSelection:
+    @pytest.mark.parametrize("target", ["producer", "consumer"])
+    def test_schema_avro_dict_default(self, target):
+        client = _DummyClient()
+        schema = {
+            "type": "record",
+            "name": "TestRecord",
+            "fields": [{"name": "field1", "type": "string"}],
+        }
+        obj = _build_target(target, client, schema)
+        try:
+            assert isinstance(client.last_schema, pulsar.schema.AvroSchema)
+        finally:
+            obj.close()
+
+    @pytest.mark.parametrize("target", ["producer", "consumer"])
+    def test_schema_bytes(self, target):
+        client = _DummyClient()
+        obj = _build_target(target, client, {"schema_type": "bytes"})
+        try:
+            assert isinstance(client.last_schema, pulsar.schema.BytesSchema)
+        finally:
+            obj.close()
+
+    @pytest.mark.parametrize("target", ["producer", "consumer"])
+    def test_schema_json(self, target):
+        record_cls = getattr(pulsar.schema, "Record", None)
+        string_type = getattr(pulsar.schema, "String", None)
+        if record_cls is None or string_type is None:
+            pytest.skip("pulsar schema Record/String not available")
+
+        class JsonRecord(record_cls):
+            field1 = string_type()
+
+        client = _DummyClient()
+        obj = _build_target(target, client, {"schema_type": "json", "schema": JsonRecord})
+        try:
+            assert isinstance(client.last_schema, pulsar.schema.JsonSchema)
+        finally:
+            obj.close()
+
+    @pytest.mark.parametrize("target", ["producer", "consumer"])
+    def test_schema_protobuf(self, target):
+        protobuf_schema = getattr(_pulsar_mod, "ProtobufSchema", None)
+        if protobuf_schema is None:
+            pytest.skip("pulsar ProtobufSchema not available")
+
+        message_cls = _make_proto_message_class()
+        client = _DummyClient()
+        obj = _build_target(target, client, {"schema_type": "protobuf", "schema": message_cls})
+        try:
+            assert isinstance(client.last_schema, protobuf_schema)
+        finally:
+            obj.close()
+
+
 @pytest.fixture(autouse=True)
 def remove_env_vars():
     # 在测试之前删除环境变量

@@ -68,7 +68,7 @@ class AbstractMessageQueue(ABC):
         tenant: str,
         namespace: str,
         topic: str,
-        schema: dict,
+        schema: Any,
         batching_enabled: bool = True,
     ) -> "AbstractProducer":
         raise NotImplementedError
@@ -80,7 +80,7 @@ class AbstractMessageQueue(ABC):
         namespace: str,
         topic: str,
         subscription: str,
-        schema: dict,
+        schema: Any,
         subscription_type: Any = None,
         message_listener: Optional[Callable[..., Any]] = None,
         **kwargs: Any,
