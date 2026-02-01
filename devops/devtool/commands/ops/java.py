@@ -28,7 +28,14 @@ class JavaCoords:
 
 
 def _mvn(env: Mapping[str, str]) -> str:
-    return env.get("MVN", env.get("MAVEN", "mvn"))
+    val = env.get("MVN") or env.get("MAVEN")
+    if val:
+        return val
+    if os.name == "nt":
+        for cand in ("mvn.cmd", "mvn.bat", "mvn"):
+            if shutil.which(cand):
+                return cand
+    return "mvn"
 
 
 def _find_pom_text(root: ET.Element, path: str) -> str:

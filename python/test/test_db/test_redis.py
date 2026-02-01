@@ -4,8 +4,8 @@ import time
 
 import pytest
 
-from mental1104.connector.redis_client import RedisConnection, RedisLock
-from mental1104.connector.redis_client.redis_bloom_kv import RedisBloom
+from mental1104 import RedisConnection, RedisLock
+from mental1104 import RedisBloom
 
 
 # -------------------------------
