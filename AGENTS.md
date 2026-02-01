@@ -18,6 +18,16 @@ This file captures recent work plus portability guidance, grouped by language.
 - Coverage modules: Rust/.NET/Go now emit per-OS, per-version badges and tables aligned to current CI matrices.
 - README: Rust/.NET/Go coverage sections show per-OS, per-version badge matrices.
 - CI: language workflows ignore push-to-main; main branch runs only via `ci-main.yml` to prevent duplicate executions.
+- CI: Python workflow now fails immediately on setup/build/coverage errors (removed deferred failure marker).
+- CI: Linux python matrix job now starts middleware services and exports env vars for 3.8–3.14 runs.
+- CI: Linux python jobs align ClickHouse auth and switch MySQL test user to mysql_native_password for CI compatibility.
+- CI: Removed redundant linux-integration job since the Linux matrix covers middleware tests.
+- CI: C++ linux matrix now starts Redis service and exports REDIS_* envs so redis_lock tests run per C++ standard.
+- CI: Removed cpp linux-integration job; redis tests run in the main C++ matrix.
+- CI: Restored Linux g++ C++20 in the C++ matrix.
+- CI: C++ clang coverage installs matching llvm-<ver>-tools and sets GCOV to llvm-cov-<ver> gcov.
+- Tests: Redis multiprocessing tests now use module-level workers and per-process connections to support spawn/forkserver (Python 3.14).
+- 测试: Redis 多进程 helper 注释说明 spawn 序列化与子进程连接策略。
 - Coverage extractors: add Rust/Go/.NET cov.json extract scripts and wire workflows to parse real reports instead of placeholders.
 - DataStructure: add per-OS/C++-standard coverage artifacts, pages badges/dashboard, and README coverage matrix.
 - DataStructure: make coverage emits coverage.xml for artifact extraction and ignore coverage artifacts via subrepo .gitignore.
@@ -75,6 +85,11 @@ This file captures recent work plus portability guidance, grouped by language.
 - Dockerfile: avoid GitHub API for syncthing latest; resolve tag via releases redirect/HTML.
 - Dockerfile/devtool: accept proxy build args and forward HTTP(S)_PROXY/NO_PROXY from `./dev build-docker`.
 - Dockerfile/devtool: also forward ALL_PROXY and allow passing `--network`/`--add-host` via env for local proxy access.
+- Dockerfile/Compose: install docker.io CLI in image and mount `/var/run/docker.sock` for docker-in-docker usage.
+- Dev tool: build-docker now forces `DOCKER_BUILDKIT=1` in its environment.
+- Compose: mount local `./.env` into `/root/.env` to avoid hardcoded home paths.
+- Dev tool: run-docker now auto-creates `.env` from `.env.example` if missing.
+- Dockerfile: add symlinks for cargo/rustc/rustup into `/usr/local/bin`.
 
 ### Performance: Non-IO Benchmark Protocol (must follow)
 
@@ -202,11 +217,13 @@ This file captures recent work plus portability guidance, grouped by language.
 - Utils: add batch_rename helpers for planning/applying renames with suffix/regex/index rules plus tests.
 - Utils: add Chinese usage comments for batch_rename functions.
 - Utils: use typing.Union for batch_rename type aliases to keep Python 3.8/3.9 compatible.
+- Pulsar: move AbstractMessageQueue into connector/mq module and keep PulsarMessageQueue using it.
 - Dev tool: Python coverage now installs requirements if coverage isn't in the venv (keeps CI from failing on missing coverage).
 - Dev tool: uninstall now mirrors install (supports `--prefix`), and verify-install can require installed artifacts via `VERIFY_REQUIRE_INSTALL=1`.
 - Dev tool: Go/Rust install now emits verify binaries and dotnet install packs into the local feed so uninstall/verify-uninstall can validate removal.
 - CI: Windows verify-uninstall steps now use continue-on-error plus an assert step to enforce expected failure.
 - Dev tool: C++ uninstall now falls back to sudo rm when install files are root-owned (e.g., sudo installs in CI).
+- Dev tool: Windows system pip upgrades now use `python -m pip` to avoid pip self-update failures in CI.
 
 ### DB Usage (latest)
 - Register once per process: `register_db(DBKind.POSTGRES, dsn=..., db_name="default")`.

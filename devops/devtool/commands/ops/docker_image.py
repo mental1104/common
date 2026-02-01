@@ -104,6 +104,7 @@ def configure_build(subparsers):
 
 def run_build(_args) -> None:
     env = base_env()
+    env["DOCKER_BUILDKIT"] = "1"
     _ensure_linux("build-docker")
     docker_bin = _ensure_docker()
     _require_envs(env, {"SSH_PRIVATE_KEY": "your_ssh_password"}, "build-docker")
