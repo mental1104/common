@@ -3,8 +3,6 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import Any, Callable, Optional, TYPE_CHECKING
 
-from pulsar import ConsumerType
-
 if TYPE_CHECKING:
     from .pulsar import Consumer, Producer
 
@@ -29,7 +27,7 @@ class AbstractMessageQueue(ABC):
         topic: str,
         subscription: str,
         schema: dict,
-        subscription_type=ConsumerType.Shared,
+        subscription_type: Any = None,
         message_listener: Optional[Callable[..., Any]] = None,
         **kwargs: Any,
     ) -> "Consumer":
