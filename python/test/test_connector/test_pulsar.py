@@ -405,6 +405,198 @@ class TestPulsarIntegration:
 @pytest.mark.skipif(
     not all(
         env in os.environ
+        for env in [
+            PulsarEnvironment.PULSAR_HOST.value,
+            PulsarEnvironment.PULSAR_BROKER_PORT.value,
+            PulsarEnvironment.PULSAR_ADMIN_PORT.value,
+        ]
+    ),
+    reason="Environment variables for Pulsar are not set.",
+)
+class TestPulsarSchemaRegistryCompatibility:
+    """
+    针对 schema registry 的兼容性教学用例:
+    - backward: 新 schema 兼容旧数据
+    - forward: 旧 schema 兼容新数据
+    - full: 前后双向兼容
+    """
+
+    tenant = "schema-compat-tenant"
+    namespace = "schema-compat-namespace"
+
+    @classmethod
+    def setup_class(cls):
+        PulsarAdminHelper.create_tenant(cls.tenant)
+        PulsarAdminHelper.create_namespace(f"{cls.tenant}/{cls.namespace}")
+
+    @classmethod
+    def teardown_class(cls):
+        PulsarAdminHelper.cleanup_tenant(cls.tenant)
+
+    def _ensure_topic(self, topic):
+        PulsarAdminHelper.ensure_tenant_namespace_topic(self.tenant, self.namespace, topic)
+
+    def _delete_topic(self, topic):
+        PulsarAdminHelper.delete_topic(f"{self.tenant}/{self.namespace}/{topic}")
+
+    def _set_schema_compatibility(self, topic, strategy):
+        admin_url = PulsarConnector.get_admin_url()
+        headers = PulsarConnector.get_header("text/plain")
+        endpoints = [
+            f"{admin_url}/admin/v2/persistent/{self.tenant}/{self.namespace}/{topic}/schemaCompatibilityStrategy",
+            f"{admin_url}/admin/v2/namespaces/{self.tenant}/{self.namespace}/schemaCompatibilityStrategy",
+        ]
+        methods = (requests.post, requests.put)
+        for url in endpoints:
+            for method in methods:
+                resp = method(url, headers=headers, data=strategy)
+                if resp.status_code in (200, 204):
+                    return
+                if resp.status_code in (404, 405):
+                    continue
+        raise RuntimeError(
+            f"Failed to set schema compatibility {strategy}: {resp.status_code} {resp.text}"
+        )
+
+    def _register_schema(self, topic, schema, record):
+        producer = Producer(
+            tenant=self.tenant,
+            namespace=self.namespace,
+            topic=topic,
+            schema=schema,
+        )
+        try:
+            producer.send(record)
+        finally:
+            producer.close()
+
+    def test_backward_compatibility(self):
+        """
+        backward: 新 schema 能读旧数据。
+        - 可接受: 新增带默认值字段
+        - 不可接受: 修改字段类型
+        """
+        base = {
+            "type": "record",
+            "name": "BackwardRecord",
+            "fields": [{"name": "id", "type": "string"}],
+        }
+        add_optional = {
+            "type": "record",
+            "name": "BackwardRecord",
+            "fields": [
+                {"name": "id", "type": "string"},
+                {"name": "age", "type": ["null", "int"], "default": None},
+            ],
+        }
+        change_type = {
+            "type": "record",
+            "name": "BackwardRecord",
+            "fields": [{"name": "id", "type": "int"}],
+        }
+
+        for topic, schema, record, should_pass in [
+            ("schema-compat-backward-ok", add_optional, {"id": "1", "age": None}, True),
+            ("schema-compat-backward-bad", change_type, {"id": 1}, False),
+        ]:
+            self._ensure_topic(topic)
+            try:
+                self._set_schema_compatibility(topic, "BACKWARD")
+                self._register_schema(topic, base, {"id": "1"})
+                if should_pass:
+                    self._register_schema(topic, schema, record)
+                else:
+                    with pytest.raises(Exception):
+                        self._register_schema(topic, schema, record)
+            finally:
+                self._delete_topic(topic)
+
+    def test_forward_compatibility(self):
+        """
+        forward: 旧 schema 能读新数据。
+        - 可接受: 移除带默认值字段
+        - 不可接受: 移除无默认值字段
+        """
+        base = {
+            "type": "record",
+            "name": "ForwardRecord",
+            "fields": [
+                {"name": "id", "type": "string"},
+                {"name": "nickname", "type": ["null", "string"], "default": None},
+            ],
+        }
+        remove_defaulted = {
+            "type": "record",
+            "name": "ForwardRecord",
+            "fields": [{"name": "id", "type": "string"}],
+        }
+        remove_required = {
+            "type": "record",
+            "name": "ForwardRecord",
+            "fields": [{"name": "nickname", "type": ["null", "string"], "default": None}],
+        }
+
+        for topic, schema, record, should_pass in [
+            ("schema-compat-forward-ok", remove_defaulted, {"id": "1"}, True),
+            ("schema-compat-forward-bad", remove_required, {"nickname": None}, False),
+        ]:
+            self._ensure_topic(topic)
+            try:
+                self._set_schema_compatibility(topic, "FORWARD")
+                self._register_schema(topic, base, {"id": "1", "nickname": None})
+                if should_pass:
+                    self._register_schema(topic, schema, record)
+                else:
+                    with pytest.raises(Exception):
+                        self._register_schema(topic, schema, record)
+            finally:
+                self._delete_topic(topic)
+
+    def test_full_compatibility(self):
+        """
+        full: 新旧双向兼容。
+        - 可接受: 新增带默认值字段
+        - 不可接受: 修改字段类型
+        """
+        base = {
+            "type": "record",
+            "name": "FullRecord",
+            "fields": [{"name": "id", "type": "string"}],
+        }
+        add_optional = {
+            "type": "record",
+            "name": "FullRecord",
+            "fields": [
+                {"name": "id", "type": "string"},
+                {"name": "age", "type": ["null", "int"], "default": None},
+            ],
+        }
+        change_type = {
+            "type": "record",
+            "name": "FullRecord",
+            "fields": [{"name": "id", "type": "int"}],
+        }
+
+        for topic, schema, record, should_pass in [
+            ("schema-compat-full-ok", add_optional, {"id": "1", "age": None}, True),
+            ("schema-compat-full-bad", change_type, {"id": 1}, False),
+        ]:
+            self._ensure_topic(topic)
+            try:
+                self._set_schema_compatibility(topic, "FULL")
+                self._register_schema(topic, base, {"id": "1"})
+                if should_pass:
+                    self._register_schema(topic, schema, record)
+                else:
+                    with pytest.raises(Exception):
+                        self._register_schema(topic, schema, record)
+            finally:
+                self._delete_topic(topic)
+
+
+@pytest.mark.skipif(
+    not all(
+        env in os.environ
         for env in [PulsarEnvironment.PULSAR_HOST.value, PulsarEnvironment.PULSAR_ADMIN_PORT.value]
     ),
     reason="Environment variables for Pulsar are not set.",
