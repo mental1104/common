@@ -4,6 +4,7 @@ This file captures recent work plus portability guidance, grouped by language.
 
 ## General
 - 有关于仓库的公共规范在每次更新完代码后都往AGENTS.md里及时更新。
+- Golang: add lab directory skeleton under `golang/` with cmd/internal/labs/examples/docs/scripts and demo stubs to keep directories tracked.
 - Devops: `devops/INSTALLROOT/root/extensions.json` stores `common` defaults and per-extension settings placeholders for VSCode server settings assembly.
 - Devops: `devops/INSTALLROOT/root/extensions.list` drives VSCode extension installation independently from settings changes.
 - Devops: `devops/INSTALLROOT/root/vscode_extensions.py` accepts JSONC and preserves comments when rendering settings.json.
