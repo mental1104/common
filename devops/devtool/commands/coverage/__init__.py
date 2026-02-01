@@ -9,6 +9,7 @@ from devtool.commands.ops import (
     dotnet as dotnet_ops,
     export as export_ops,
     go as go_ops,
+    java as java_ops,
     python as python_ops,
     rust as rust_ops,
 )
@@ -20,7 +21,7 @@ if TYPE_CHECKING:
 @register("coverage")
 def configure(subparsers: ArgumentParser):
     parser = subparsers.add_parser("coverage", help="Generate coverage reports")
-    parser.add_argument("target", choices=["python", "go", "cpp", "rust", "dotnet", "all"], nargs="?", default="all", help="Target to cover")
+    parser.add_argument("target", choices=["python", "go", "cpp", "rust", "dotnet", "java", "all"], nargs="?", default="all", help="Target to cover")
     parser.add_argument("--filter", help="Filter expression", dest="filter_expr")
     parser.add_argument("--file", help="File pattern")
     parser.add_argument("-v", "--verbose", action="store_true", help="Verbose test output")
@@ -43,3 +44,5 @@ def run(args):
         rust_ops.coverage(env)
     if target in ("dotnet", "all"):
         dotnet_ops.coverage(env)
+    if target in ("java", "all"):
+        java_ops.coverage(env)

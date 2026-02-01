@@ -4,6 +4,8 @@ This file captures recent work plus portability guidance, grouped by language.
 
 ## General
 - 有关于仓库的公共规范在每次更新完代码后都往AGENTS.md里及时更新。
+- Java/Python: add Flink DataStream demo skeleton under `java/flink-datastream-demo` and `python/mental1104/flink_demo`, reusing `devops/images/flink/docker-compose.yaml`; Java demo uses single-module layout with impl/examples/tests packages and devtool `setup-java`/`build-java`/`test-java`/`coverage-java`/`run-java`/`run-java-docker`.
+- Java/Flink: add `java/flink-datastream-demo/.mvn/jvm.config` with `--add-opens=java.base/java.lang=ALL-UNNAMED` so exec runs on JDK 17+ without ClosureCleaner module errors.
 - Golang: add lab directory skeleton under `golang/` with cmd/internal/labs/examples/docs/scripts and demo stubs to keep directories tracked.
 - Devops: `devops/INSTALLROOT/root/extensions.json` stores `common` defaults and per-extension settings placeholders for VSCode server settings assembly.
 - Devops: `devops/INSTALLROOT/root/extensions.list` drives VSCode extension installation independently from settings changes.
