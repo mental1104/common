@@ -3,7 +3,18 @@ import os
 from collections.abc import Iterable
 from datetime import datetime, timezone
 
-import matplotlib.pyplot as plt
+_PY_PLOT = None
+
+
+def _load_pyplot():
+    global _PY_PLOT
+    if _PY_PLOT is None:
+        try:
+            import matplotlib.pyplot as plt
+        except Exception as exc:
+            raise RuntimeError("matplotlib is required for trend plotting") from exc
+        _PY_PLOT = plt
+    return _PY_PLOT
 
 from mental1104.timed import parse_time
 
@@ -103,6 +114,7 @@ class TrendPlotBase:
         elif not os.path.exists(os.path.dirname(output_file_path)):
             os.makedirs(os.path.dirname(output_file_path), exist_ok=True)
 
+        plt = _load_pyplot()
         # 开始绘图
         plt.figure(figsize=(10, 6))
 
@@ -220,6 +232,7 @@ class TimeBasedTrendPlot(TrendPlotBase):
         elif not os.path.exists(os.path.dirname(output_file_path)):
             os.makedirs(os.path.dirname(output_file_path), exist_ok=True)
 
+        plt = _load_pyplot()
         # 开始绘图
         plt.figure(figsize=(10, 6))
 

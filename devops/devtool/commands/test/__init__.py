@@ -28,7 +28,7 @@ def configure(subparsers: ArgumentParser):
 
 
 def run(args):
-    env = base_env(verbose=args.verbose, jobs=args.jobs)
+    env = base_env(verbose=args.verbose, test_verbose=getattr(args, "test_verbose", None), jobs=args.jobs)
     target = args.target
     extra_args = args.extra_args[1:] if args.extra_args and args.extra_args[0] == "--" else args.extra_args
 

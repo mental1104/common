@@ -54,6 +54,7 @@ def _alias_test(name: str, target: str):
             filter_expr=getattr(args, "filter_expr", None),
             file=getattr(args, "file", None),
             verbose=getattr(args, "verbose", False),
+            test_verbose=True,
             jobs=getattr(args, "jobs", None),
             extra_args=getattr(args, "extra_args", []),
         )))

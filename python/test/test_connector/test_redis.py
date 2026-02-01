@@ -19,6 +19,64 @@ def clear_keys(client, prefix):
         client.delete(key)
 
 
+# 模块级 worker 避免 spawn/forkserver 方式下的 pickle 失败。
+def _redis_lock_worker(counter, redis_params, key):
+    with RedisConnection(
+        host=redis_params["host"],
+        port=redis_params["port"],
+        password=redis_params["auth"],
+    ) as client:
+        lock = RedisLock(client, key, lock_expire=5)
+        deadline = time.time() + 10
+        while time.time() < deadline:
+            if lock.try_lock(wait_timeout=1):
+                try:
+                    time.sleep(0.02)
+                    counter.value += 1
+                    return
+                finally:
+                    lock.unlock()
+            time.sleep(0.01)
+        raise RuntimeError("worker failed to acquire redis lock in time")
+
+
+def _redis_resource_worker(redis_params, key):
+    """高并发访问 Redis 共享资源,确保同一时刻只有一个进程操作"""
+    # 子进程内重新建立 Redis 连接，避免跨进程对象不可序列化。
+    with RedisConnection(
+        host=redis_params["host"],
+        port=redis_params["port"],
+        password=redis_params["auth"],
+    ) as client:
+        lock = RedisLock(client, "distributed_lock", lock_expire=3)
+
+        max_retries = 50  # 允许尝试获取锁的最大次数
+        retry_delay = 0.01  # 每次尝试失败后的重试间隔
+        cnt = 0
+
+        while cnt != max_retries:
+            if lock.try_lock():
+                try:
+                    # 进入临界区
+                    current_value = client.get(key)
+                    current_value = int(current_value) if current_value else 0
+                    new_value = current_value + 1
+
+                    print(
+                        f"[进程 {multiprocessing.current_process().pid}] 🔄 访问资源 {key},当前值: {current_value} -> {new_value}"
+                    )
+
+                    client.set(key, new_value)  # 更新 Redis 资源
+                    time.sleep(0.01)  # 模拟业务逻辑(减少阻塞时间)
+                    cnt += 1
+                finally:
+                    lock.unlock()
+                    print(f"[进程 {multiprocessing.current_process().pid}] 🔓 释放锁")
+            else:
+                print(f"[进程 {multiprocessing.current_process().pid}] ⏳ 锁被占用,重试中...")
+                time.sleep(retry_delay)  # 等待一段时间再尝试获取锁
+
+
 # -------------------------------
 # RedisLock 测试类
 # -------------------------------
@@ -98,23 +156,7 @@ class TestRedisLock:
         【步骤输入】并发启动多个子进程,分别执行 try_lock -> 累加计数 -> unlock。
         【期望输出】计数器最终值等于进程数,说明每次只有一个进程能成功进入临界区。
         """
-        def worker(counter, redis_params, key):
-            with RedisConnection(
-                host=redis_params["host"], port=redis_params["port"], password=redis_params["auth"]
-            ) as client:
-                lock = RedisLock(client, key, lock_expire=5)
-                deadline = time.time() + 10
-                while time.time() < deadline:
-                    if lock.try_lock(wait_timeout=1):
-                        try:
-                            time.sleep(0.02)
-                            counter.value += 1
-                            return
-                        finally:
-                            lock.unlock()
-                    time.sleep(0.01)
-                raise RuntimeError("worker failed to acquire redis lock in time")
-
+        # 只传简单参数，避免把客户端对象传入子进程导致 pickle 失败。
         redis_params = {
             "host": os.environ.get("REDIS_HOST", "localhost"),
             "port": int(os.environ.get("REDIS_PORT", 6379)),
@@ -126,7 +168,7 @@ class TestRedisLock:
         redis_client.delete(key)
         processes = []
         for _ in range(process_count):
-            p = multiprocessing.Process(target=worker, args=(counter, redis_params, key))
+            p = multiprocessing.Process(target=_redis_lock_worker, args=(counter, redis_params, key))
             processes.append(p)
             p.start()
         for p in processes:
@@ -142,43 +184,19 @@ class TestRedisLock:
         【期望输出】最终计数等于加锁次数,且日志显示锁竞争与释放过程,证明资源更新有序。
         """
 
-        def access_redis_resource(redis_client, key):
-            """高并发访问 Redis 共享资源,确保同一时刻只有一个进程操作"""
-            lock = RedisLock(redis_client, "distributed_lock", lock_expire=3)
-
-            max_retries = 50  # 允许尝试获取锁的最大次数
-            retry_delay = 0.01  # 每次尝试失败后的重试间隔
-            cnt = 0
-
-            while cnt != max_retries:
-                if lock.try_lock():
-                    try:
-                        # 进入临界区
-                        current_value = redis_client.get(key)
-                        current_value = int(current_value) if current_value else 0
-                        new_value = current_value + 1
-
-                        print(
-                            f"[进程 {multiprocessing.current_process().pid}] 🔄 访问资源 {key},当前值: {current_value} -> {new_value}"
-                        )
-
-                        redis_client.set(key, new_value)  # 更新 Redis 资源
-                        time.sleep(0.01)  # 模拟业务逻辑(减少阻塞时间)
-                        cnt += 1
-                    finally:
-                        lock.unlock()
-                        print(f"[进程 {multiprocessing.current_process().pid}] 🔓 释放锁")
-                else:
-                    print(f"[进程 {multiprocessing.current_process().pid}] ⏳ 锁被占用,重试中...")
-                    time.sleep(retry_delay)  # 等待一段时间再尝试获取锁
-
         key = "shared_counter"
         redis_client.set(key, 0)  # 初始化资源
 
+        # 只传简单参数，避免把客户端对象传入子进程导致 pickle 失败。
+        redis_params = {
+            "host": os.environ.get("REDIS_HOST", "localhost"),
+            "port": int(os.environ.get("REDIS_PORT", 6379)),
+            "auth": os.environ.get("REDISCLI_AUTH", ""),
+        }
         process_count = 5  # 5个进程同时竞争访问 Redis 资源
         processes = []
         for _ in range(process_count):
-            p = multiprocessing.Process(target=access_redis_resource, args=(redis_client, key))
+            p = multiprocessing.Process(target=_redis_resource_worker, args=(redis_params, key))
             processes.append(p)
             p.start()
 

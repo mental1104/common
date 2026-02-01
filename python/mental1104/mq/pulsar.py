@@ -4,7 +4,7 @@ import functools
 import logging
 import os
 from enum import Enum
-from typing import Optional
+from typing import Any, Callable, Optional
 
 import pulsar
 import requests
@@ -12,6 +12,7 @@ from pulsar import ConsumerType
 from pulsar.schema import AvroSchema
 
 from mental1104 import check_required_env_vars
+from .abstract_message_queue import AbstractConsumer, AbstractMessageQueue, AbstractProducer
 
 
 class PulsarEnvironment(str, Enum):
@@ -66,7 +67,65 @@ class PulsarConnector:
         return headers if len(headers) else None
 
 
-class Consumer:
+class PulsarMessageQueue(AbstractMessageQueue):
+    def __init__(self, client=None):
+        self.__client = client if client is not None else PulsarConnector.make_client()
+        self.__owns_client = client is None
+        self.__is_closed = False
+
+    def create_producer(
+        self,
+        tenant: str,
+        namespace: str,
+        topic: str,
+        schema: dict,
+        batching_enabled: bool = True,
+    ) -> "Producer":
+        if self.__is_closed:
+            raise RuntimeError("PulsarMessageQueue is closed.")
+        return Producer(
+            tenant=tenant,
+            namespace=namespace,
+            topic=topic,
+            schema=schema,
+            client=self.__client,
+            batching_enabled=batching_enabled,
+        )
+
+    def create_consumer(
+        self,
+        tenant: str,
+        namespace: str,
+        topic: str,
+        subscription: str,
+        schema: dict,
+        subscription_type=ConsumerType.Shared,
+        message_listener: Optional[Callable[..., Any]] = None,
+        **kwargs: Any,
+    ) -> "Consumer":
+        if self.__is_closed:
+            raise RuntimeError("PulsarMessageQueue is closed.")
+        return Consumer(
+            tenant=tenant,
+            namespace=namespace,
+            topic=topic,
+            subscription=subscription,
+            schema=schema,
+            client=self.__client,
+            subscription_type=subscription_type,
+            message_listener=message_listener,
+            **kwargs,
+        )
+
+    def close(self) -> None:
+        if self.__is_closed:
+            return
+        if self.__owns_client and self.__client:
+            self.__client.close()
+        self.__is_closed = True
+
+
+class Consumer(AbstractConsumer):
     def __init__(
         self,
         tenant: str,
@@ -149,7 +208,7 @@ class Consumer:
         except Exception as e:
             logging.exception(f"pulsar unsubscribe failed, exception:{e}")
 
-    def resuscribe(self):
+    def resubscribe(self):
         """
         resuscribe 重新以该订阅名订阅topic, 首先会删除该订阅, 然后再重新订阅, 相当于从当前最新的消息开始消费
         """
@@ -158,8 +217,12 @@ class Consumer:
             self.__consumer.close()
         self.__consumer = self.__subscrifunc()
 
+    def resuscribe(self):
+        # Backward-compatible alias for legacy typo.
+        self.resubscribe()
 
-class Producer:
+
+class Producer(AbstractProducer):
     def __init__(
         self,
         tenant: str,
