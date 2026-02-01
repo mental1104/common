@@ -218,6 +218,7 @@ This file captures recent work plus portability guidance, grouped by language.
 - Dev tool: Go/Rust install now emits verify binaries and dotnet install packs into the local feed so uninstall/verify-uninstall can validate removal.
 - CI: Windows verify-uninstall steps now use continue-on-error plus an assert step to enforce expected failure.
 - Dev tool: C++ uninstall now falls back to sudo rm when install files are root-owned (e.g., sudo installs in CI).
+- Dev tool: Windows system pip upgrades now use `python -m pip` to avoid pip self-update failures in CI.
 
 ### DB Usage (latest)
 - Register once per process: `register_db(DBKind.POSTGRES, dsn=..., db_name="default")`.

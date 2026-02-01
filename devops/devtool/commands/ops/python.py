@@ -34,6 +34,13 @@ def _pip_mirror_args(env: Mapping[str, str]) -> list[str]:
     return shlex.split(opts) if opts else []
 
 
+def _system_pip_cmd(env: Mapping[str, str]) -> list[str]:
+    if platform.system().lower() == "windows":
+        py = env.get("PYTHON", "python")
+        return [py, "-m", "pip"]
+    return [env.get("PIP3", "pip3")]
+
+
 def _ensure_venv(env: Mapping[str, str]) -> Mapping[str, str]:
     py = env.get("PYTHON", "python3")
     venv_py = Path(env["PY_VENV_PYTHON"])
@@ -123,7 +130,7 @@ def _install_requirements(env: Mapping[str, str]) -> None:
             tmp_req.unlink(missing_ok=True)
 
 
-def _install_requirements_system(env: Mapping[str, str], pip3: str) -> None:
+def _install_requirements_system(env: Mapping[str, str], pip_cmd: Iterable[str]) -> None:
     req_file = PY_DIR / "requirements.txt"
     export_dir = Path("export/python")
     if not req_file.exists():
@@ -155,7 +162,7 @@ def _install_requirements_system(env: Mapping[str, str], pip3: str) -> None:
     try:
         run(
             [
-                pip3,
+                *pip_cmd,
                 "install",
                 "--no-build-isolation",
                 *_pip_mirror_args(env),
@@ -394,36 +401,74 @@ def install(env: Mapping[str, str]) -> None:
     run_env = dict(env)
     wheel_candidates = list((PY_DIR / "dist").glob("*.whl"))
     break_flag = env.get("BREAK_FLAG", "")
-    pip3 = env.get("PIP3", "pip3")
+    pip_cmd = _system_pip_cmd(run_env)
     no_deps = env.get("PY_INSTALL_NO_DEPS", "").strip().lower() in ("1", "true", "yes", "on")
     mirror_args = _pip_mirror_args(run_env)
     try:
-        run([pip3, "install", "--upgrade", *mirror_args, "pip", "setuptools", "wheel", *break_flag.split()], env=run_env)
+        run(
+            [*pip_cmd, "install", "--upgrade", *mirror_args, "pip", "setuptools", "wheel", *break_flag.split()],
+            env=run_env,
+        )
     except Exception:
         print("[warn] pip upgrade failed; retrying with --ignore-installed")
         run(
-            [pip3, "install", "--upgrade", "--ignore-installed", *mirror_args, "pip", "setuptools", "wheel", *break_flag.split()],
+            [
+                *pip_cmd,
+                "install",
+                "--upgrade",
+                "--ignore-installed",
+                *mirror_args,
+                "pip",
+                "setuptools",
+                "wheel",
+                *break_flag.split(),
+            ],
             env=run_env,
         )
     if not no_deps:
-        _install_requirements_system(run_env, pip3)
+        _install_requirements_system(run_env, pip_cmd)
     export_dir = ROOT / "export" / "python"
     if wheel_candidates:
         wheel = sorted(wheel_candidates)[-1]
         if export_dir.exists():
             run(
-                [pip3, "install", *mirror_args, str(export_dir), "--no-build-isolation", "--no-deps", *break_flag.split()],
+                [
+                    *pip_cmd,
+                    "install",
+                    *mirror_args,
+                    str(export_dir),
+                    "--no-build-isolation",
+                    "--no-deps",
+                    *break_flag.split(),
+                ],
                 env=run_env,
             )
-        run([pip3, "install", *mirror_args, str(wheel), "--no-deps", *break_flag.split()], env=run_env)
+        run([*pip_cmd, "install", *mirror_args, str(wheel), "--no-deps", *break_flag.split()], env=run_env)
     else:
         if export_dir.exists():
             run(
-                [pip3, "install", *mirror_args, str(export_dir), "--no-build-isolation", "--no-deps", *break_flag.split()],
+                [
+                    *pip_cmd,
+                    "install",
+                    *mirror_args,
+                    str(export_dir),
+                    "--no-build-isolation",
+                    "--no-deps",
+                    *break_flag.split(),
+                ],
                 env=run_env,
             )
         run(
-            [pip3, "install", *mirror_args, str(PY_DIR), "--upgrade", "--no-build-isolation", "--no-deps", *break_flag.split()],
+            [
+                *pip_cmd,
+                "install",
+                *mirror_args,
+                str(PY_DIR),
+                "--upgrade",
+                "--no-build-isolation",
+                "--no-deps",
+                *break_flag.split(),
+            ],
             env=run_env,
         )
 
