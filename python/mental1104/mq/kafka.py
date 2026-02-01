@@ -81,7 +81,7 @@ class KafkaMessageQueue(AbstractMessageQueue):
         tenant: str,
         namespace: str,
         topic: str,
-        schema: dict,
+        schema: Any,
         batching_enabled: bool = True,
     ) -> "Producer":
         _ = schema
@@ -99,7 +99,7 @@ class KafkaMessageQueue(AbstractMessageQueue):
         namespace: str,
         topic: str,
         subscription: str,
-        schema: dict,
+        schema: Any,
         subscription_type=None,
         message_listener: Optional[Callable[..., Any]] = None,
         **kwargs: Any,

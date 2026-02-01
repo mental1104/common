@@ -1,0 +1,305 @@
+name: Java
+
+on:
+  workflow_call:
+    inputs:
+      verbose_logs:
+        description: "Enable verbose test output"
+        type: boolean
+        default: true
+  push:
+    branches-ignore:
+      - main
+    paths:
+      - "java/**"
+      - "devops/**"
+      - "tools/ci/**"
+      - ".github/workflows/java.yml"
+  pull_request:
+    paths:
+      - "java/**"
+      - "devops/**"
+      - "tools/ci/**"
+      - ".github/workflows/java.yml"
+  workflow_dispatch:
+    inputs:
+      verbose_logs:
+        description: "Enable verbose test output"
+        type: boolean
+        default: true
+
+env:
+  JAVA_COVER_LINES: "none"
+
+jobs:
+  linux:
+    name: Linux / JDK ${{ matrix.java }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        java: ["11", "17", "21"]
+    env:
+      PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/devops
+    defaults:
+      run:
+        shell: bash
+        working-directory: ${{ github.workspace }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: false
+          fetch-depth: 0
+      - name: Init submodules (sparse Boost)
+        continue-on-error: true
+        run: |
+          python3 - <<'PY'
+          import sys
+          from devtool.commands.common import base_env
+          from devtool.commands.ops import cpp as cpp_ops
+          sys.exit(cpp_ops.git_submodules(base_env()) or 0)
+          PY
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: "temurin"
+          java-version: ${{ matrix.java }}
+          cache: "maven"
+      - name: Setup Java
+        continue-on-error: true
+        run: ./dev setup-java
+      - name: Build Java
+        continue-on-error: true
+        run: ./dev build-java
+      - name: Coverage Java
+        continue-on-error: true
+        run: ./dev coverage-java
+      - name: Extract cov.json (never fail)
+        if: always()
+        continue-on-error: true
+        run: |
+          set +e
+          python3 tools/ci/extract_coverage_java.py \
+            --os linux \
+            --java "${{ matrix.java }}" \
+            --xml java/flink-datastream-demo/target/site/jacoco/jacoco.xml \
+            --out cov.json || true
+
+          if [ ! -f cov.json ]; then
+            python3 -c "import json,os;obj={'lang':'java','os':'linux','java':'${{ matrix.java }}','line_pct':0.0,'status':'placeholder','sha':os.getenv('GITHUB_SHA',''),'run_id':os.getenv('GITHUB_RUN_ID',''),'source':'placeholder'};json.dump(obj,open('cov.json','w',encoding='utf-8'),ensure_ascii=False,indent=2)"
+          fi
+      - name: Stash coverage files (unique path)
+        id: stash
+        if: always()
+        continue-on-error: true
+        run: |
+          set +e
+          artifact_key="linux-jdk${{ matrix.java }}"
+          echo "artifact_key=${artifact_key}" >> "$GITHUB_OUTPUT"
+          mkdir -p "_cov/java/${artifact_key}"
+          cp -f cov.json "_cov/java/${artifact_key}/cov.json" 2>/dev/null || true
+      - name: Upload coverage artifacts (unique)
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: java-cov-${{ steps.stash.outputs.artifact_key }}
+          path: _cov
+          retention-days: 7
+          if-no-files-found: warn
+      - name: install-java
+        run: ./dev install-java
+      - name: verify-install-java
+        run: ./dev verify-install java
+      - name: uninstall-java
+        run: ./dev uninstall-java
+      - name: verify-uninstall-java (expect failure)
+        env:
+          VERIFY_REQUIRE_INSTALL: "1"
+        run: |
+          set +e
+          ./dev verify-install java
+          status=$?
+          if [ $status -eq 0 ]; then
+            echo "verify-install succeeded after uninstall; expected failure"
+            exit 1
+          fi
+
+  macos:
+    name: macOS / JDK ${{ matrix.java }}
+    runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        java: ["11", "17", "21"]
+    env:
+      PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/devops
+    defaults:
+      run:
+        shell: bash
+        working-directory: ${{ github.workspace }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: false
+          fetch-depth: 0
+      - name: Init submodules (sparse Boost)
+        continue-on-error: true
+        run: |
+          python3 - <<'PY'
+          import sys
+          from devtool.commands.common import base_env
+          from devtool.commands.ops import cpp as cpp_ops
+          sys.exit(cpp_ops.git_submodules(base_env()) or 0)
+          PY
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: "temurin"
+          java-version: ${{ matrix.java }}
+          cache: "maven"
+      - name: Setup Java
+        continue-on-error: true
+        run: ./dev setup-java
+      - name: Build Java
+        continue-on-error: true
+        run: ./dev build-java
+      - name: Coverage Java
+        continue-on-error: true
+        run: ./dev coverage-java
+      - name: Extract cov.json (never fail)
+        if: always()
+        continue-on-error: true
+        run: |
+          set +e
+          python3 tools/ci/extract_coverage_java.py \
+            --os macos \
+            --java "${{ matrix.java }}" \
+            --xml java/flink-datastream-demo/target/site/jacoco/jacoco.xml \
+            --out cov.json || true
+
+          if [ ! -f cov.json ]; then
+            python3 -c "import json,os;obj={'lang':'java','os':'macos','java':'${{ matrix.java }}','line_pct':0.0,'status':'placeholder','sha':os.getenv('GITHUB_SHA',''),'run_id':os.getenv('GITHUB_RUN_ID',''),'source':'placeholder'};json.dump(obj,open('cov.json','w',encoding='utf-8'),ensure_ascii=False,indent=2)"
+          fi
+      - name: Stash coverage files (unique path)
+        id: stash
+        if: always()
+        continue-on-error: true
+        run: |
+          set +e
+          artifact_key="macos-jdk${{ matrix.java }}"
+          echo "artifact_key=${artifact_key}" >> "$GITHUB_OUTPUT"
+          mkdir -p "_cov/java/${artifact_key}"
+          cp -f cov.json "_cov/java/${artifact_key}/cov.json" 2>/dev/null || true
+      - name: Upload coverage artifacts (unique)
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: java-cov-${{ steps.stash.outputs.artifact_key }}
+          path: _cov
+          retention-days: 7
+          if-no-files-found: warn
+      - name: install-java
+        run: ./dev install-java
+      - name: verify-install-java
+        run: ./dev verify-install java
+      - name: uninstall-java
+        run: ./dev uninstall-java
+      - name: verify-uninstall-java (expect failure)
+        env:
+          VERIFY_REQUIRE_INSTALL: "1"
+        run: |
+          set +e
+          ./dev verify-install java
+          status=$?
+          if [ $status -eq 0 ]; then
+            echo "verify-install succeeded after uninstall; expected failure"
+            exit 1
+          fi
+
+  windows:
+    name: Windows / JDK ${{ matrix.java }}
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        java: ["11", "17", "21"]
+    env:
+      PYTHON: python
+      PYTHONPATH: ${{ github.workspace }};${{ github.workspace }}/devops
+    defaults:
+      run:
+        shell: pwsh
+        working-directory: ${{ github.workspace }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: false
+          fetch-depth: 0
+      - name: Init submodules (sparse Boost)
+        continue-on-error: true
+        run: python -c "import sys;from devtool.commands.common import base_env;from devtool.commands.ops import cpp as cpp_ops;sys.exit(cpp_ops.git_submodules(base_env()) or 0)"
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: "temurin"
+          java-version: ${{ matrix.java }}
+          cache: "maven"
+      - name: Install Maven
+        run: choco install maven -y
+      - name: Setup Java
+        continue-on-error: true
+        run: python -m devtool.cli setup-java
+      - name: Build Java
+        continue-on-error: true
+        run: python -m devtool.cli build-java
+      - name: Coverage Java
+        continue-on-error: true
+        run: python -m devtool.cli coverage-java
+      - name: Extract cov.json (never fail)
+        if: always()
+        continue-on-error: true
+        run: |
+          python tools/ci/extract_coverage_java.py --os windows --java "${{ matrix.java }}" --xml java/flink-datastream-demo/target/site/jacoco/jacoco.xml --out cov.json
+
+          if (-not (Test-Path cov.json)) {
+            python -c "import json,os;obj={'lang':'java','os':'windows','java':'${{ matrix.java }}','line_pct':0.0,'status':'placeholder','sha':os.getenv('GITHUB_SHA',''),'run_id':os.getenv('GITHUB_RUN_ID',''),'source':'placeholder'};json.dump(obj,open('cov.json','w',encoding='utf-8'),ensure_ascii=False,indent=2)"
+          }
+      - name: Stash coverage files (unique path)
+        id: stash
+        if: always()
+        continue-on-error: true
+        run: |
+          $artifactKey = "windows-jdk${{ matrix.java }}"
+          "artifact_key=$artifactKey" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          New-Item -ItemType Directory -Force -Path "_cov/java/$artifactKey" | Out-Null
+          Copy-Item -Force cov.json "_cov/java/$artifactKey/cov.json" -ErrorAction SilentlyContinue
+      - name: Upload coverage artifacts (unique)
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: java-cov-${{ steps.stash.outputs.artifact_key }}
+          path: _cov
+          retention-days: 7
+          if-no-files-found: warn
+      - name: install-java
+        run: python -m devtool.cli install-java
+      - name: verify-install-java
+        run: python -m devtool.cli verify-install java
+      - name: uninstall-java
+        run: python -m devtool.cli uninstall-java
+      - name: verify-uninstall-java (expect failure)
+        id: verify_uninstall_java
+        continue-on-error: true
+        env:
+          VERIFY_REQUIRE_INSTALL: "1"
+        run: python -m devtool.cli verify-install java
+      - name: assert-verify-uninstall-java failed
+        if: ${{ steps.verify_uninstall_java.outcome != 'failure' }}
+        run: |
+          throw "verify-install succeeded after uninstall; expected failure"

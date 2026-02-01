@@ -4,6 +4,16 @@ This file captures recent work plus portability guidance, grouped by language.
 
 ## General
 - 有关于仓库的公共规范在每次更新完代码后都往AGENTS.md里及时更新。
+- Java/Python: add Flink DataStream demo skeleton under `java/flink-datastream-demo` and `python/mental1104/flink_demo`, reusing `devops/images/flink/docker-compose.yaml`; Java demo uses single-module layout with impl/examples/tests packages and devtool `setup-java`/`build-java`/`test-java`/`coverage-java`/`run-java`/`run-java-docker`.
+- Java: add `com.mental1104.common.Contains` with tests; enable Java install/uninstall + verify-install checks and JaCoCo XML extraction helper.
+- Java: `coverage-java` now prints a per-sourcefile coverage table via `tools/ci/extract_coverage_java.py --table`.
+- Java: `coverage-java` prints missed lines by default (set `JAVA_COVER_LINES=none` to disable; supports missed/partial/all).
+- Java: `coverage-java` defaults to GCC-style summary; override with `JAVA_COVER_FORMAT=table` or `both`.
+- CI/Pages: add Java workflow + Java coverage artifacts and pages module (java-coverage).
+- CI/Devtool: Windows Java install uses Maven via choco; python tests/coverage set importlib mode + rootdir and cache dir to avoid import mismatch and /dev cache errors.
+- Tests: adapt Pulsar/Kafka MQ tests to use `mental1104.mq.pulsar`/`mental1104.mq.kafka` helpers (test-only changes).
+- Java/Flink: add `java/flink-datastream-demo/.mvn/jvm.config` with `--add-opens=java.base/java.lang=ALL-UNNAMED` so exec runs on JDK 17+ without ClosureCleaner module errors.
+- Golang: add lab directory skeleton under `golang/` with cmd/internal/labs/examples/docs/scripts and demo stubs to keep directories tracked.
 - Devops: `devops/INSTALLROOT/root/extensions.json` stores `common` defaults and per-extension settings placeholders for VSCode server settings assembly.
 - Devops: `devops/INSTALLROOT/root/extensions.list` drives VSCode extension installation independently from settings changes.
 - Devops: `devops/INSTALLROOT/root/vscode_extensions.py` accepts JSONC and preserves comments when rendering settings.json.
@@ -148,6 +158,7 @@ This file captures recent work plus portability guidance, grouped by language.
 - Gitignore: unignore `cpp/include/mental1104/debug` so stacktrace headers are tracked.
 - Stacktrace: add pluggable formatter (JSON/Python-like), new formatting options, and route stack output through formatter hooks.
 - Stacktrace: undef MSVC `exception_code` macro in Windows implementation to avoid struct field name collision.
+- AsyncSimple scheduler: handle `Executor::schedule` failures by decrementing pending and notifying waiters to avoid hangs.
 - Examples: deepen C function call chain and add class-method stack depth for C++ crash demo.
 - Examples: move stacktrace demos into `cpp/examples/debug/stacktrace` with a Chinese README guide.
 - Docs: convert `cpp/README.md` to Chinese and update stacktrace usage details.
@@ -218,6 +229,8 @@ This file captures recent work plus portability guidance, grouped by language.
 - Utils: add Chinese usage comments for batch_rename functions.
 - Utils: use typing.Union for batch_rename type aliases to keep Python 3.8/3.9 compatible.
 - Pulsar: move AbstractMessageQueue into connector/mq module and keep PulsarMessageQueue using it.
+- Pulsar: add schema selection for Avro/JSON/bytes/Protobuf and cover it in connector tests.
+- Pulsar: add schema registry compatibility tests (backward/forward/full) and include protobuf dependency.
 - Dev tool: Python coverage now installs requirements if coverage isn't in the venv (keeps CI from failing on missing coverage).
 - Dev tool: uninstall now mirrors install (supports `--prefix`), and verify-install can require installed artifacts via `VERIFY_REQUIRE_INSTALL=1`.
 - Dev tool: Go/Rust install now emits verify binaries and dotnet install packs into the local feed so uninstall/verify-uninstall can validate removal.

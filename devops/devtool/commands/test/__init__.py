@@ -9,6 +9,7 @@ from devtool.commands.ops import (
     dotnet as dotnet_ops,
     export as export_ops,
     go as go_ops,
+    java as java_ops,
     python as python_ops,
     rust as rust_ops,
 )
@@ -17,7 +18,7 @@ from devtool.commands.ops import (
 @register("test")
 def configure(subparsers: ArgumentParser):
     parser = subparsers.add_parser("test", help="Run tests")
-    parser.add_argument("target", choices=["python", "go", "cpp", "rust", "dotnet", "all"], nargs="?", default="all", help="Target to test")
+    parser.add_argument("target", choices=["python", "go", "cpp", "rust", "dotnet", "java", "all"], nargs="?", default="all", help="Target to test")
     parser.add_argument("--filter", help="Filter expression (maps to FILTER env)", dest="filter_expr")
     parser.add_argument("--file", help="File pattern (maps to FILE env)")
     parser.add_argument("-v", "--verbose", action="store_true", help="Verbose test output")
@@ -43,3 +44,5 @@ def run(args):
         rust_ops.test(env, file_pattern=args.file, filter_expr=args.filter_expr)
     if target in ("dotnet", "all"):
         dotnet_ops.test(env, file_pattern=args.file, filter_expr=args.filter_expr)
+    if target in ("java", "all"):
+        java_ops.test(env)

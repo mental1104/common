@@ -8,6 +8,7 @@ from devtool.commands.ops import (
     cpp as cpp_ops,
     dotnet as dotnet_ops,
     go as go_ops,
+    java as java_ops,
     python as python_ops,
     rust as rust_ops,
 )
@@ -54,6 +55,7 @@ def run(args):
     _write_env_example()
     python_ops.setup(env)
     go_ops.setup(env)
+    java_ops.setup(env)
     cpp_ops.prepare_submodules(env, skip_when_ready=True)
     cpp_ops.configure(env)
     rust_ops.setup(env)

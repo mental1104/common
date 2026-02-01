@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import os
 from importlib import import_module
 
@@ -15,6 +17,32 @@ Producer = _pulsar_mod.Producer
 PulsarAdminHelper = _pulsar_mod.PulsarAdminHelper
 PulsarConnector = _pulsar_mod.PulsarConnector
 PulsarEnvironment = _pulsar_mod.PulsarEnvironment
+
+
+def _pulsar_admin_reachable() -> tuple[bool, str]:
+    host = os.getenv(PulsarEnvironment.PULSAR_HOST.value)
+    broker_port = os.getenv(PulsarEnvironment.PULSAR_BROKER_PORT.value)
+    admin_port = os.getenv(PulsarEnvironment.PULSAR_ADMIN_PORT.value)
+    if not host or not broker_port or not admin_port:
+        return False, "Pulsar env vars not set"
+    admin_url = f"http://{host}:{admin_port}"
+    try:
+        resp = requests.get(f"{admin_url}/admin/v2/brokers/health", timeout=2)
+    except Exception as exc:
+        return False, f"Pulsar admin not reachable: {exc}"
+    if resp.status_code != 200:
+        return False, f"Pulsar admin unhealthy: status={resp.status_code}"
+    return True, ""
+
+
+@pytest.fixture(scope="session", autouse=True)
+def require_pulsar_admin():
+    ok, reason = _pulsar_admin_reachable()
+    if not ok:
+        pytest.skip(reason)
+
+
+pytestmark = pytest.mark.usefixtures("require_pulsar_admin")
 
 
 @pytest.fixture(autouse=True)
