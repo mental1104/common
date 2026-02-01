@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Mapping
 
 from devtool.commands import register
 from devtool.commands.common import GO_DIR, ROOT, RUST_DIR, base_env, run
+from devtool.commands.ops import java as java_ops
 
 if TYPE_CHECKING:
     from argparse import ArgumentParser
@@ -203,6 +204,48 @@ def _verify_go(env: Mapping[str, str]) -> None:
         run([go_bin, "build", "."], env=env_go, cwd=tmp_path)
 
 
+def _verify_java(env: Mapping[str, str]) -> None:
+    java_bin = env.get("JAVA", "java")
+    javac_bin = env.get("JAVAC", "javac")
+    if not shutil.which(java_bin):
+        raise SystemExit(f"[error] missing java: {java_bin}")
+    if not shutil.which(javac_bin):
+        raise SystemExit(f"[error] missing javac: {javac_bin}")
+    if _require_installed(env):
+        jar_path = java_ops.installed_jar_path(env)
+        if not jar_path.exists():
+            raise SystemExit(f"[error] missing Java jar at {jar_path}; run ./dev install-java")
+    else:
+        jar_path = java_ops.target_jar_path()
+        if not jar_path.exists():
+            raise SystemExit(f"[error] missing Java jar at {jar_path}; run ./dev build-java")
+
+    with tempfile.TemporaryDirectory(prefix="m1104-verify-java-") as tmp:
+        tmp_path = Path(tmp)
+        src = tmp_path / "Verify.java"
+        src.write_text(
+            "import com.mental1104.common.Contains;\n"
+            "\n"
+            "public class Verify {\n"
+            "  public static void main(String[] args) {\n"
+            "    if (!Contains.contains(\"abc\", \"a\")) {\n"
+            "      throw new RuntimeException(\"verify failed\");\n"
+            "    }\n"
+            "    int[] nums = new int[] {1, 2, 3};\n"
+            "    if (!Contains.contains(nums, 2)) {\n"
+            "      throw new RuntimeException(\"verify failed\");\n"
+            "    }\n"
+            "  }\n"
+            "}\n"
+        )
+        classes_dir = tmp_path / "classes"
+        classes_dir.mkdir(parents=True, exist_ok=True)
+        run([javac_bin, "-d", str(classes_dir), "-cp", str(jar_path), str(src)], env=env, cwd=tmp_path)
+        classpath = f"{classes_dir}{os.pathsep}{jar_path}"
+        run([java_bin, "-cp", classpath, "Verify"], env=env, cwd=tmp_path)
+    print("java-ok")
+
+
 def _verify_rust(env: Mapping[str, str]) -> None:
     if not shutil.which("cargo"):
         raise SystemExit("[error] missing cargo")
@@ -285,7 +328,7 @@ def _verify_dotnet(env: Mapping[str, str]) -> None:
 @register("verify-install")
 def configure(subparsers: "ArgumentParser"):
     parser = subparsers.add_parser("verify-install", help="Verify install outputs", aliases=["install-verify"])
-    parser.add_argument("target", choices=["python", "go", "cpp", "rust", "dotnet", "all"], nargs="?", default="all")
+    parser.add_argument("target", choices=["python", "go", "cpp", "rust", "dotnet", "java", "all"], nargs="?", default="all")
     parser.add_argument("--prefix", help="Install prefix for C++ verification")
     parser.add_argument("-v", "--verbose", action="store_true", help="Verbose output")
     parser.add_argument("--jobs", type=int, help="Parallelism hint")
@@ -301,6 +344,8 @@ def run_verify(args):
         _verify_python(env)
     if args.target in ("go", "all"):
         _verify_go(env)
+    if args.target in ("java", "all"):
+        _verify_java(env)
     if args.target in ("rust", "all"):
         _verify_rust(env)
     if args.target in ("dotnet", "all"):

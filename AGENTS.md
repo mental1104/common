@@ -5,6 +5,11 @@ This file captures recent work plus portability guidance, grouped by language.
 ## General
 - 有关于仓库的公共规范在每次更新完代码后都往AGENTS.md里及时更新。
 - Java/Python: add Flink DataStream demo skeleton under `java/flink-datastream-demo` and `python/mental1104/flink_demo`, reusing `devops/images/flink/docker-compose.yaml`; Java demo uses single-module layout with impl/examples/tests packages and devtool `setup-java`/`build-java`/`test-java`/`coverage-java`/`run-java`/`run-java-docker`.
+- Java: add `com.mental1104.common.Contains` with tests; enable Java install/uninstall + verify-install checks and JaCoCo XML extraction helper.
+- Java: `coverage-java` now prints a per-sourcefile coverage table via `tools/ci/extract_coverage_java.py --table`.
+- Java: `coverage-java` prints missed lines by default (set `JAVA_COVER_LINES=none` to disable; supports missed/partial/all).
+- Java: `coverage-java` defaults to GCC-style summary; override with `JAVA_COVER_FORMAT=table` or `both`.
+- CI/Pages: add Java workflow + Java coverage artifacts and pages module (java-coverage).
 - Java/Flink: add `java/flink-datastream-demo/.mvn/jvm.config` with `--add-opens=java.base/java.lang=ALL-UNNAMED` so exec runs on JDK 17+ without ClosureCleaner module errors.
 - Golang: add lab directory skeleton under `golang/` with cmd/internal/labs/examples/docs/scripts and demo stubs to keep directories tracked.
 - Devops: `devops/INSTALLROOT/root/extensions.json` stores `common` defaults and per-extension settings placeholders for VSCode server settings assembly.
