@@ -77,6 +77,7 @@ def run_docker(env: Mapping[str, str]) -> None:
     if compose_cmd is None:
         print("[warn] 未检测到 docker compose（docker compose 或 docker-compose），跳过 run-docker")
         return
+    _ensure_env_file()
     compose_file = ROOT / env.get("COMPOSE_FILE_NAME", "docker-compose.yaml")
     if not compose_file.exists():
         print(f"[warn] 未找到 {compose_file}，跳过 run-docker")
@@ -108,6 +109,18 @@ def _env_files() -> tuple[Path, Path]:
     env_src = ROOT / ".env"
     env_stamp = ROOT / ".env.active"
     return env_src, env_stamp
+
+
+def _ensure_env_file() -> None:
+    env_src, _ = _env_files()
+    if env_src.exists():
+        return
+    env_example = ROOT / ".env.example"
+    if not env_example.exists():
+        print(f"[warn] 未找到 {env_example}，跳过 .env 生成")
+        return
+    shutil.copyfile(env_example, env_src)
+    print("[ok] 已生成 .env（来自 .env.example）")
 
 
 def _compose_dirs(env: Mapping[str, str]) -> list[Path]:

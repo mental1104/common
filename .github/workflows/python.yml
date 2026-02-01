@@ -123,6 +123,10 @@ jobs:
       PULSAR_TOKEN: ""
       PULSAR_SCHEMA_PATH: "/tmp/pulsar/schema"
       PULSAR_DATA_PATH: "/tmp/pulsar/data"
+      KAFKA_PORT: "9092"
+      KAFKA_EXTERNAL_PORT: "29092"
+      KAFKA_CONTROLLER_PORT: "9093"
+      KAFKA_ADVERTISED_HOST: localhost
       MYSQL_HOST: localhost
       MYSQL_PORT: "3306"
       MYSQL_USER: test
@@ -193,7 +197,24 @@ jobs:
             apachepulsar/pulsar:3.2.0 \
             bin/pulsar standalone -nss
 
-      - name: Wait for postgres/redis/mysql/mongo/clickhouse/pulsar
+      - name: Start Kafka (KRaft)
+        continue-on-error: true
+        run: |
+          docker rm -f kafka || true
+          docker run -d --name kafka \
+            -p ${KAFKA_PORT}:${KAFKA_PORT} -p ${KAFKA_EXTERNAL_PORT}:${KAFKA_EXTERNAL_PORT} \
+            -e KAFKA_CFG_NODE_ID=1 \
+            -e KAFKA_CFG_PROCESS_ROLES=broker,controller \
+            -e KAFKA_CFG_CONTROLLER_LISTENER_NAMES=CONTROLLER \
+            -e KAFKA_CFG_LISTENERS=PLAINTEXT://:${KAFKA_PORT},CONTROLLER://:${KAFKA_CONTROLLER_PORT},EXTERNAL://:${KAFKA_EXTERNAL_PORT} \
+            -e KAFKA_CFG_ADVERTISED_LISTENERS=PLAINTEXT://${KAFKA_ADVERTISED_HOST}:${KAFKA_PORT},EXTERNAL://${KAFKA_ADVERTISED_HOST}:${KAFKA_EXTERNAL_PORT} \
+            -e KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP=CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,EXTERNAL:PLAINTEXT \
+            -e KAFKA_CFG_CONTROLLER_QUORUM_VOTERS=1@${KAFKA_ADVERTISED_HOST}:${KAFKA_CONTROLLER_PORT} \
+            -e KAFKA_CFG_INTER_BROKER_LISTENER_NAME=PLAINTEXT \
+            -e ALLOW_PLAINTEXT_LISTENER=yes \
+            bitnamilegacy/kafka:4.0.0-debian-12-r10
+
+      - name: Wait for postgres/redis/mysql/mongo/clickhouse/pulsar/kafka
         continue-on-error: true
         run: |
           ports=(
@@ -204,6 +225,7 @@ jobs:
             "${CLICKHOUSE_HTTP_PORT}"
             "${PULSAR_BROKER_PORT}"
             "${PULSAR_ADMIN_PORT}"
+            "${KAFKA_EXTERNAL_PORT}"
           )
           for i in {1..40}; do
             ready=true

@@ -1,10 +1,64 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Any, Callable, Optional, TYPE_CHECKING
+from typing import Any, Callable, Optional
 
-if TYPE_CHECKING:
-    from .pulsar import Consumer, Producer
+try:
+    from pulsar import ConsumerType
+except Exception:
+    class ConsumerType:
+        Shared = "Shared"
+
+class AbstractProducer(ABC):
+    @abstractmethod
+    def send(self, record: Any) -> None:
+        raise NotImplementedError
+
+    @abstractmethod
+    def send_async(self, record: Any, callback: Optional[Callable[..., Any]] = None) -> None:
+        raise NotImplementedError
+
+    @abstractmethod
+    def close(self) -> None:
+        raise NotImplementedError
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.close()
+
+
+class AbstractConsumer(ABC):
+    @abstractmethod
+    def receive(self, timeout_millis: Optional[int] = None) -> Any:
+        raise NotImplementedError
+
+    @abstractmethod
+    def acknowledge(self, record: Any) -> None:
+        raise NotImplementedError
+
+    @abstractmethod
+    def negative_acknowledge(self, record: Any) -> None:
+        raise NotImplementedError
+
+    @abstractmethod
+    def unsubscribe(self) -> None:
+        raise NotImplementedError
+
+    @abstractmethod
+    def resubscribe(self) -> None:
+        raise NotImplementedError
+
+    @abstractmethod
+    def close(self) -> None:
+        raise NotImplementedError
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.close()
 
 
 class AbstractMessageQueue(ABC):
@@ -16,7 +70,7 @@ class AbstractMessageQueue(ABC):
         topic: str,
         schema: dict,
         batching_enabled: bool = True,
-    ) -> "Producer":
+    ) -> "AbstractProducer":
         raise NotImplementedError
 
     @abstractmethod
@@ -30,7 +84,7 @@ class AbstractMessageQueue(ABC):
         subscription_type: Any = None,
         message_listener: Optional[Callable[..., Any]] = None,
         **kwargs: Any,
-    ) -> "Consumer":
+    ) -> "AbstractConsumer":
         raise NotImplementedError
 
     @abstractmethod
