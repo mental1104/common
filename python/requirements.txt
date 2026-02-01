@@ -11,6 +11,7 @@ requests
 redis>=5.0 
 pymongo
 motor
+protobuf
 pulsar-client>=2.10 ; sys_platform != "win32"
 pulsar-client[avro] ; sys_platform != "win32"
 confluent-kafka ; sys_platform != "win32" and python_version < "3.13"

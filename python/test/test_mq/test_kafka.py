@@ -1,17 +1,16 @@
 import os
 import time
 import uuid
-from importlib import import_module
-
 import pytest
 
 pytest.importorskip("confluent_kafka", reason="confluent-kafka is not available")
 
-_kafka_mod = import_module("mental1104.connector.kafka")
-KafkaEnvironment = _kafka_mod.KafkaEnvironment
-KafkaConnector = _kafka_mod.KafkaConnector
-KafkaAdminHelper = _kafka_mod.KafkaAdminHelper
-KafkaMessageQueue = _kafka_mod.KafkaMessageQueue
+from mental1104.mq.kafka import (
+    KafkaAdminHelper,
+    KafkaConnector,
+    KafkaEnvironment,
+    KafkaMessageQueue,
+)
 
 _REQUIRED_ENV = [
     KafkaEnvironment.KAFKA_PORT.value,

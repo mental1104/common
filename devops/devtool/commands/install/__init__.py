@@ -8,6 +8,7 @@ from devtool.commands.ops import (
     cpp as cpp_ops,
     dotnet as dotnet_ops,
     go as go_ops,
+    java as java_ops,
     python as python_ops,
     rust as rust_ops,
 )
@@ -19,7 +20,7 @@ if TYPE_CHECKING:
 @register("install")
 def configure(subparsers: ArgumentParser):
     parser = subparsers.add_parser("install", help="Install built artifacts")
-    parser.add_argument("target", choices=["python", "go", "cpp", "rust", "dotnet", "all"], nargs="?", default="all", help="Target to install")
+    parser.add_argument("target", choices=["python", "go", "cpp", "rust", "dotnet", "java", "all"], nargs="?", default="all", help="Target to install")
     parser.add_argument("--prefix", help="Install prefix for C++ (and similar)")
     parser.add_argument("-v", "--verbose", action="store_true", help="Verbose output")
     parser.add_argument("--jobs", type=int, help="Parallelism hint")
@@ -39,3 +40,5 @@ def run(args):
         rust_ops.install(env)
     if args.target in ("dotnet", "all"):
         dotnet_ops.install(env)
+    if args.target in ("java", "all"):
+        java_ops.install(env)

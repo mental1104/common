@@ -10,5 +10,7 @@
     "${workspaceFolder}/python"
   ],
   "git.detectSubmodules": false,
-  "git.detectSubmodulesLimit": 0
+  "git.detectSubmodulesLimit": 0,
+  "java.compile.nullAnalysis.mode": "automatic",
+  "java.configuration.updateBuildConfiguration": "interactive"
 }
