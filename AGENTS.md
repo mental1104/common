@@ -10,6 +10,8 @@ This file captures recent work plus portability guidance, grouped by language.
 - Java: `coverage-java` prints missed lines by default (set `JAVA_COVER_LINES=none` to disable; supports missed/partial/all).
 - Java: `coverage-java` defaults to GCC-style summary; override with `JAVA_COVER_FORMAT=table` or `both`.
 - CI/Pages: add Java workflow + Java coverage artifacts and pages module (java-coverage).
+- CI/Devtool: Windows Java install uses Maven via choco; python tests/coverage set importlib mode + rootdir and cache dir to avoid import mismatch and /dev cache errors.
+- Tests: adapt Pulsar/Kafka MQ tests to use `mental1104.mq.pulsar`/`mental1104.mq.kafka` helpers (test-only changes).
 - Java/Flink: add `java/flink-datastream-demo/.mvn/jvm.config` with `--add-opens=java.base/java.lang=ALL-UNNAMED` so exec runs on JDK 17+ without ClosureCleaner module errors.
 - Golang: add lab directory skeleton under `golang/` with cmd/internal/labs/examples/docs/scripts and demo stubs to keep directories tracked.
 - Devops: `devops/INSTALLROOT/root/extensions.json` stores `common` defaults and per-extension settings placeholders for VSCode server settings assembly.

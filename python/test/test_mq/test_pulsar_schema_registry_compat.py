@@ -3,12 +3,14 @@ import uuid
 
 import pytest
 import requests
+from urllib.parse import urlparse
 
 pulsar = pytest.importorskip(
     "pulsar", reason="pulsar-client is not available on this platform"
 )
 from pulsar import ConsumerType, InitialPosition
 from pulsar.schema import Record, String, Integer, AvroSchema, JsonSchema, BytesSchema
+from mental1104.mq.pulsar import PulsarConnector, PulsarMessageQueue
 
 
 PULSAR_URL = os.getenv("PULSAR_URL", "pulsar://localhost:6650")
@@ -20,6 +22,30 @@ NAMESPACE = "default"
 # Use BACKWARD for additive evolution patterns (common for JSON-like payloads).
 STRATEGY_FULL = "FULL"
 STRATEGY_BACKWARD = "BACKWARD"
+
+
+def _sync_env_from_urls():
+    host = os.environ.get("PULSAR_HOST")
+    broker_port = os.environ.get("PULSAR_BROKER_PORT")
+    admin_port = os.environ.get("PULSAR_ADMIN_PORT")
+
+    if (not host or not broker_port) and PULSAR_URL:
+        info = urlparse(PULSAR_URL)
+        if info.hostname and not host:
+            os.environ["PULSAR_HOST"] = info.hostname
+            host = info.hostname
+        if info.port and not broker_port:
+            os.environ["PULSAR_BROKER_PORT"] = str(info.port)
+            broker_port = str(info.port)
+
+    if (not host or not admin_port) and PULSAR_ADMIN_URL:
+        info = urlparse(PULSAR_ADMIN_URL)
+        if info.hostname and not host:
+            os.environ["PULSAR_HOST"] = info.hostname
+            host = info.hostname
+        if info.port and not admin_port:
+            os.environ["PULSAR_ADMIN_PORT"] = str(info.port)
+            admin_port = str(info.port)
 
 
 def _optional_string(default=None):
@@ -92,8 +118,24 @@ JsonUserBad = _make_record(
 
 @pytest.fixture(scope="session")
 def pulsar_env():
-    admin_url = PULSAR_ADMIN_URL
-    broker_url = PULSAR_URL
+    _sync_env_from_urls()
+
+    admin_url = os.environ.get("PULSAR_ADMIN_URL")
+    if not admin_url:
+        try:
+            admin_url = PulsarConnector.get_admin_url()
+        except Exception:
+            admin_url = None
+
+    broker_url = os.environ.get("PULSAR_URL")
+    if not broker_url:
+        try:
+            broker_url = PulsarConnector.get_broker_url()
+        except Exception:
+            broker_url = None
+
+    if not admin_url or not broker_url:
+        pytest.skip("Pulsar env vars are not set: need admin/broker URL")
 
     try:
         resp = requests.get(f"{admin_url}/admin/v2/brokers/health", timeout=3)
@@ -126,9 +168,12 @@ def pulsar_env():
 
 def _create_client(broker_url):
     try:
-        return pulsar.Client(broker_url, operation_timeout_seconds=3)
-    except TypeError:
-        return pulsar.Client(broker_url)
+        return PulsarConnector.make_client()
+    except Exception:
+        try:
+            return pulsar.Client(broker_url, operation_timeout_seconds=3)
+        except TypeError:
+            return pulsar.Client(broker_url)
 
 
 def _topic_name(prefix):
@@ -140,7 +185,10 @@ def _topic_path(topic):
 
 
 def _admin_request(admin_url, method, path, **kwargs):
-    return requests.request(method, f"{admin_url}{path}", timeout=3, **kwargs)
+    headers = kwargs.pop("headers", None)
+    if headers is None:
+        headers = PulsarConnector.get_header()
+    return requests.request(method, f"{admin_url}{path}", timeout=3, headers=headers, **kwargs)
 
 
 def _ensure_topic(admin_url, topic):
@@ -353,26 +401,29 @@ def test_bytes_schema_backward_compatible(pulsar_env):
     _set_topic_compatibility(admin_url, topic, STRATEGY_BACKWARD)
 
     client = _create_client(broker_url)
+    queue = PulsarMessageQueue(client)
     producer_v1 = None
     producer_v2 = None
     consumer = None
     try:
-        producer_v1 = client.create_producer(
-            _topic_path(topic), schema=BytesSchema(), send_timeout_millis=2000
+        producer_v1 = queue.create_producer(
+            tenant=TENANT, namespace=NAMESPACE, topic=topic, schema=BytesSchema()
         )
         producer_v1.send(b"v1-payload")
 
         # Bytes has no structural fields, so the compatible evolution is reusing the same schema.
-        producer_v2 = client.create_producer(
-            _topic_path(topic), schema=BytesSchema(), send_timeout_millis=2000
+        producer_v2 = queue.create_producer(
+            tenant=TENANT, namespace=NAMESPACE, topic=topic, schema=BytesSchema()
         )
         producer_v2.send(b"v2-payload")
 
-        consumer = client.subscribe(
-            _topic_path(topic),
-            subscription_name=f"sub-{uuid.uuid4().hex}",
-            consumer_type=ConsumerType.Exclusive,
+        consumer = queue.create_consumer(
+            tenant=TENANT,
+            namespace=NAMESPACE,
+            topic=topic,
+            subscription=f"sub-{uuid.uuid4().hex}",
             schema=BytesSchema(),
+            subscription_type=ConsumerType.Exclusive,
             initial_position=InitialPosition.Earliest,
             receiver_queue_size=1,
         )
@@ -389,6 +440,7 @@ def test_bytes_schema_backward_compatible(pulsar_env):
         _close_quietly(consumer)
         _close_quietly(producer_v2)
         _close_quietly(producer_v1)
+        _close_quietly(queue)
         _close_quietly(client)
 
 
@@ -402,18 +454,19 @@ def test_bytes_schema_incompatible_switch_from_json_to_bytes(pulsar_env):
     _set_topic_compatibility(admin_url, topic, STRATEGY_FULL)
 
     client = _create_client(broker_url)
+    queue = PulsarMessageQueue(client)
     producer = None
     try:
-        producer = client.create_producer(
-            _topic_path(topic), schema=JsonSchema(JsonUserV1), send_timeout_millis=2000
+        producer = queue.create_producer(
+            tenant=TENANT, namespace=NAMESPACE, topic=topic, schema=JsonSchema(JsonUserV1)
         )
         producer.send(JsonUserV1(name="seed", age=1))
     finally:
         _close_quietly(producer)
 
     def _create_bytes_producer():
-        return client.create_producer(
-            _topic_path(topic), schema=BytesSchema(), send_timeout_millis=2000
+        return queue.create_producer(
+            tenant=TENANT, namespace=NAMESPACE, topic=topic, schema=BytesSchema()
         )
 
     try:
@@ -430,6 +483,7 @@ def test_bytes_schema_incompatible_switch_from_json_to_bytes(pulsar_env):
                 finally:
                     _close_quietly(producer)
     finally:
+        _close_quietly(queue)
         _close_quietly(client)
 
 
@@ -442,25 +496,28 @@ def test_avro_full_compatible_add_optional_field(pulsar_env):
     _set_topic_compatibility(admin_url, topic, STRATEGY_FULL)
 
     client = _create_client(broker_url)
+    queue = PulsarMessageQueue(client)
     producer_v1 = None
     producer_v2 = None
     consumer = None
     try:
-        producer_v1 = client.create_producer(
-            _topic_path(topic), schema=AvroSchema(AvroUserV1), send_timeout_millis=2000
+        producer_v1 = queue.create_producer(
+            tenant=TENANT, namespace=NAMESPACE, topic=topic, schema=AvroSchema(AvroUserV1)
         )
         producer_v1.send(AvroUserV1(name="alice", age=30))
 
-        producer_v2 = client.create_producer(
-            _topic_path(topic), schema=AvroSchema(AvroUserV2), send_timeout_millis=2000
+        producer_v2 = queue.create_producer(
+            tenant=TENANT, namespace=NAMESPACE, topic=topic, schema=AvroSchema(AvroUserV2)
         )
         producer_v2.send(AvroUserV2(name="bob", age=28, email="bob@example.com"))
 
-        consumer = client.subscribe(
-            _topic_path(topic),
-            subscription_name=f"sub-{uuid.uuid4().hex}",
-            consumer_type=ConsumerType.Exclusive,
+        consumer = queue.create_consumer(
+            tenant=TENANT,
+            namespace=NAMESPACE,
+            topic=topic,
+            subscription=f"sub-{uuid.uuid4().hex}",
             schema=AvroSchema(AvroUserV2),
+            subscription_type=ConsumerType.Exclusive,
             initial_position=InitialPosition.Earliest,
             receiver_queue_size=1,
         )
@@ -477,6 +534,7 @@ def test_avro_full_compatible_add_optional_field(pulsar_env):
         _close_quietly(consumer)
         _close_quietly(producer_v2)
         _close_quietly(producer_v1)
+        _close_quietly(queue)
         _close_quietly(client)
 
 
@@ -489,18 +547,19 @@ def test_avro_full_incompatible_type_change_on_producer(pulsar_env):
     _set_topic_compatibility(admin_url, topic, STRATEGY_FULL)
 
     client = _create_client(broker_url)
+    queue = PulsarMessageQueue(client)
     producer = None
     try:
-        producer = client.create_producer(
-            _topic_path(topic), schema=AvroSchema(AvroUserV1), send_timeout_millis=2000
+        producer = queue.create_producer(
+            tenant=TENANT, namespace=NAMESPACE, topic=topic, schema=AvroSchema(AvroUserV1)
         )
         producer.send(AvroUserV1(name="seed", age=1))
     finally:
         _close_quietly(producer)
 
     def _create_bad_producer():
-        return client.create_producer(
-            _topic_path(topic), schema=AvroSchema(AvroUserBad), send_timeout_millis=2000
+        return queue.create_producer(
+            tenant=TENANT, namespace=NAMESPACE, topic=topic, schema=AvroSchema(AvroUserBad)
         )
 
     try:
@@ -510,6 +569,7 @@ def test_avro_full_incompatible_type_change_on_producer(pulsar_env):
         if not incompatible:
             pytest.fail("Expected incompatible schema error on producer create/send")
     finally:
+        _close_quietly(queue)
         _close_quietly(client)
 
 
@@ -522,25 +582,28 @@ def test_json_backward_compatible_add_optional_field(pulsar_env):
     _set_topic_compatibility(admin_url, topic, STRATEGY_BACKWARD)
 
     client = _create_client(broker_url)
+    queue = PulsarMessageQueue(client)
     producer_v1 = None
     producer_v2 = None
     consumer = None
     try:
-        producer_v1 = client.create_producer(
-            _topic_path(topic), schema=JsonSchema(JsonUserV1), send_timeout_millis=2000
+        producer_v1 = queue.create_producer(
+            tenant=TENANT, namespace=NAMESPACE, topic=topic, schema=JsonSchema(JsonUserV1)
         )
         producer_v1.send(JsonUserV1(name="alice", age=20))
 
-        producer_v2 = client.create_producer(
-            _topic_path(topic), schema=JsonSchema(JsonUserV2), send_timeout_millis=2000
+        producer_v2 = queue.create_producer(
+            tenant=TENANT, namespace=NAMESPACE, topic=topic, schema=JsonSchema(JsonUserV2)
         )
         producer_v2.send(JsonUserV2(name="bob", age=21, nickname="b"))
 
-        consumer = client.subscribe(
-            _topic_path(topic),
-            subscription_name=f"sub-{uuid.uuid4().hex}",
-            consumer_type=ConsumerType.Exclusive,
+        consumer = queue.create_consumer(
+            tenant=TENANT,
+            namespace=NAMESPACE,
+            topic=topic,
+            subscription=f"sub-{uuid.uuid4().hex}",
             schema=JsonSchema(JsonUserV2),
+            subscription_type=ConsumerType.Exclusive,
             initial_position=InitialPosition.Earliest,
             receiver_queue_size=1,
         )
@@ -557,6 +620,7 @@ def test_json_backward_compatible_add_optional_field(pulsar_env):
         _close_quietly(consumer)
         _close_quietly(producer_v2)
         _close_quietly(producer_v1)
+        _close_quietly(queue)
         _close_quietly(client)
 
 
@@ -569,21 +633,24 @@ def test_json_backward_incompatible_type_change_on_consumer(pulsar_env):
     _set_topic_compatibility(admin_url, topic, STRATEGY_BACKWARD)
 
     client = _create_client(broker_url)
+    queue = PulsarMessageQueue(client)
     producer = None
     try:
-        producer = client.create_producer(
-            _topic_path(topic), schema=JsonSchema(JsonUserV1), send_timeout_millis=2000
+        producer = queue.create_producer(
+            tenant=TENANT, namespace=NAMESPACE, topic=topic, schema=JsonSchema(JsonUserV1)
         )
         producer.send(JsonUserV1(name="seed", age=1))
     finally:
         _close_quietly(producer)
 
     def _create_bad_consumer():
-        return client.subscribe(
-            _topic_path(topic),
-            subscription_name=f"sub-{uuid.uuid4().hex}",
-            consumer_type=ConsumerType.Exclusive,
+        return queue.create_consumer(
+            tenant=TENANT,
+            namespace=NAMESPACE,
+            topic=topic,
+            subscription=f"sub-{uuid.uuid4().hex}",
             schema=JsonSchema(JsonUserBad),
+            subscription_type=ConsumerType.Exclusive,
             initial_position=InitialPosition.Earliest,
             receiver_queue_size=1,
         )
@@ -593,6 +660,7 @@ def test_json_backward_incompatible_type_change_on_consumer(pulsar_env):
         if not incompatible:
             pytest.fail("Expected incompatible schema error on consumer subscribe")
     finally:
+        _close_quietly(queue)
         _close_quietly(client)
 
 
@@ -626,25 +694,28 @@ def test_protobuf_full_compatible_add_optional_field(pulsar_env):
     schema_v2 = _build_protobuf_schema(UserV2, record_v2)
 
     client = _create_client(broker_url)
+    queue = PulsarMessageQueue(client)
     producer_v1 = None
     producer_v2 = None
     consumer = None
     try:
-        producer_v1 = client.create_producer(
-            _topic_path(topic), schema=schema_v1, send_timeout_millis=2000
+        producer_v1 = queue.create_producer(
+            tenant=TENANT, namespace=NAMESPACE, topic=topic, schema=schema_v1
         )
         producer_v1.send(UserV1(name="alice", age=30))
 
-        producer_v2 = client.create_producer(
-            _topic_path(topic), schema=schema_v2, send_timeout_millis=2000
+        producer_v2 = queue.create_producer(
+            tenant=TENANT, namespace=NAMESPACE, topic=topic, schema=schema_v2
         )
         producer_v2.send(UserV2(name="bob", age=31, email="bob@example.com"))
 
-        consumer = client.subscribe(
-            _topic_path(topic),
-            subscription_name=f"sub-{uuid.uuid4().hex}",
-            consumer_type=ConsumerType.Exclusive,
+        consumer = queue.create_consumer(
+            tenant=TENANT,
+            namespace=NAMESPACE,
+            topic=topic,
+            subscription=f"sub-{uuid.uuid4().hex}",
             schema=schema_v2,
+            subscription_type=ConsumerType.Exclusive,
             initial_position=InitialPosition.Earliest,
             receiver_queue_size=1,
         )
@@ -661,6 +732,7 @@ def test_protobuf_full_compatible_add_optional_field(pulsar_env):
         _close_quietly(consumer)
         _close_quietly(producer_v2)
         _close_quietly(producer_v1)
+        _close_quietly(queue)
         _close_quietly(client)
 
 
@@ -693,21 +765,24 @@ def test_protobuf_full_incompatible_type_change_on_consumer(pulsar_env):
     schema_bad = _build_protobuf_schema(UserBad, record_bad)
 
     client = _create_client(broker_url)
+    queue = PulsarMessageQueue(client)
     producer = None
     try:
-        producer = client.create_producer(
-            _topic_path(topic), schema=schema_v1, send_timeout_millis=2000
+        producer = queue.create_producer(
+            tenant=TENANT, namespace=NAMESPACE, topic=topic, schema=schema_v1
         )
         producer.send(UserV1(name="seed", age=1))
     finally:
         _close_quietly(producer)
 
     def _create_bad_consumer():
-        return client.subscribe(
-            _topic_path(topic),
-            subscription_name=f"sub-{uuid.uuid4().hex}",
-            consumer_type=ConsumerType.Exclusive,
+        return queue.create_consumer(
+            tenant=TENANT,
+            namespace=NAMESPACE,
+            topic=topic,
+            subscription=f"sub-{uuid.uuid4().hex}",
             schema=schema_bad,
+            subscription_type=ConsumerType.Exclusive,
             initial_position=InitialPosition.Earliest,
             receiver_queue_size=1,
         )
@@ -718,8 +793,8 @@ def test_protobuf_full_incompatible_type_change_on_consumer(pulsar_env):
             # Some brokers/clients only enforce schema compatibility when registering
             # a new schema via producer; fall back to producer-side registration.
             def _create_bad_producer():
-                return client.create_producer(
-                    _topic_path(topic), schema=schema_bad, send_timeout_millis=2000
+                return queue.create_producer(
+                    tenant=TENANT, namespace=NAMESPACE, topic=topic, schema=schema_bad
                 )
 
             incompatible = _assert_incompatible_on_producer(
@@ -728,10 +803,11 @@ def test_protobuf_full_incompatible_type_change_on_consumer(pulsar_env):
             if not incompatible:
                 # Last resort: force a schema type switch to ensure incompatibility is detected.
                 def _create_json_producer():
-                    return client.create_producer(
-                        _topic_path(topic),
+                    return queue.create_producer(
+                        tenant=TENANT,
+                        namespace=NAMESPACE,
+                        topic=topic,
                         schema=JsonSchema(JsonUserV1),
-                        send_timeout_millis=2000,
                     )
 
                 incompatible = _assert_incompatible_on_producer(
@@ -740,4 +816,5 @@ def test_protobuf_full_incompatible_type_change_on_consumer(pulsar_env):
                 if not incompatible:
                     pytest.fail("Expected incompatible schema error on consumer or producer")
     finally:
+        _close_quietly(queue)
         _close_quietly(client)

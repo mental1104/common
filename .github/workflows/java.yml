@@ -249,6 +249,8 @@ jobs:
           distribution: "temurin"
           java-version: ${{ matrix.java }}
           cache: "maven"
+      - name: Install Maven
+        run: choco install maven -y
       - name: Setup Java
         continue-on-error: true
         run: python -m devtool.cli setup-java
