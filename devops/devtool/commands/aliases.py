@@ -200,9 +200,9 @@ for lang in ("python", "go", "cpp", "rust", "dotnet"):
     _alias_fmt(f"fmt-{lang}", lang)
 for lang in ("python", "go", "cpp", "rust", "dotnet"):
     _alias_bench(f"bench-{lang}", lang)
-for lang in ("python", "go", "cpp", "rust", "dotnet"):
+for lang in ("python", "go", "cpp", "rust", "dotnet", "java"):
     _alias_install(f"install-{lang}", lang)
-for lang in ("python", "go", "cpp", "rust", "dotnet"):
+for lang in ("python", "go", "cpp", "rust", "dotnet", "java"):
     _alias_uninstall(f"uninstall-{lang}", lang)
 for lang in ("python", "go", "cpp", "rust", "dotnet"):
     _alias_clean(f"clean-{lang}", lang, clean_submodules=False, base_cmd="clean")

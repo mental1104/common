@@ -26,8 +26,12 @@ jobs:
     uses: ./.github/workflows/golang.yml
     secrets: inherit
 
+  java:
+    uses: ./.github/workflows/java.yml
+    secrets: inherit
+
   pages:
-    needs: [cpp, python, rust, dotnet, golang]
+    needs: [cpp, python, rust, dotnet, golang, java]
     if: always()
     uses: ./.github/workflows/walkthrough-pages.yml
     secrets: inherit
