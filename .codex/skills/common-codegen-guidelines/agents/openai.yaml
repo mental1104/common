@@ -1,0 +1,4 @@
+interface:
+  display_name: "Common Codegen Guidelines"
+  short_description: "Generate code matching common repo conventions"
+  default_prompt: "Use $common-codegen-guidelines to implement changes in /home/mental1104/code/common using the repository's multi-language style and validation rules."
