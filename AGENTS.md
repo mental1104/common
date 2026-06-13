@@ -4,6 +4,7 @@ This file captures recent work plus portability guidance, grouped by language.
 
 ## General
 - 有关于仓库的公共规范在每次更新完代码后都往AGENTS.md里及时更新。
+- Skill: repo-specific code generation guidance is archived at `.codex/skills/common-codegen-guidelines`; update it when cross-language generation rules change.
 - Java/Python: add Flink DataStream demo skeleton under `java/flink-datastream-demo` and `python/mental1104/flink_demo`, reusing `devops/images/flink/docker-compose.yaml`; Java demo uses single-module layout with impl/examples/tests packages and devtool `setup-java`/`build-java`/`test-java`/`coverage-java`/`run-java`/`run-java-docker`.
 - Java: add `com.mental1104.common.Contains` with tests; enable Java install/uninstall + verify-install checks and JaCoCo XML extraction helper.
 - Java: `coverage-java` now prints a per-sourcefile coverage table via `tools/ci/extract_coverage_java.py --table`.
@@ -158,6 +159,7 @@ This file captures recent work plus portability guidance, grouped by language.
 - Gitignore: unignore `cpp/include/mental1104/debug` so stacktrace headers are tracked.
 - Stacktrace: add pluggable formatter (JSON/Python-like), new formatting options, and route stack output through formatter hooks.
 - Stacktrace: undef MSVC `exception_code` macro in Windows implementation to avoid struct field name collision.
+- C API RAII: add `mental1104/c_api_raii.h` with `unique_fd` (POSIX-only), `unique_file`, and `scope_exit` / `make_scope_exit`; docs live at `docs/cpp_c_api_raii_guideline.md`.
 - AsyncSimple scheduler: handle `Executor::schedule` failures by decrementing pending and notifying waiters to avoid hangs.
 - Examples: deepen C function call chain and add class-method stack depth for C++ crash demo.
 - Examples: move stacktrace demos into `cpp/examples/debug/stacktrace` with a Chinese README guide.
