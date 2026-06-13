@@ -20,6 +20,12 @@
 #include "mental1104/log.h"
 #include "mental1104/log/adapters/cache_printer.h"
 
+#if __cplusplus < 202002L
+#define M1104_LOG_TEST_MARK_LINE_USED(line_value) (void)(line_value)
+#else
+#define M1104_LOG_TEST_MARK_LINE_USED(line_value) ((void)0)
+#endif
+
 using mental1104::LFUCache;
 using mental1104::LRUCache;
 using mental1104::make_cache;
@@ -31,6 +37,7 @@ TEST(ContainerPrinterTest, PrintForwardList) {
   // clang-format off
     int line = __LINE__; auto out = mental1104::log_detail::format_container(flist);
   // clang-format on
+  M1104_LOG_TEST_MARK_LINE_USED(line);
 // forward_list没有 .size() 方法
 #if __cplusplus >= 202002L
   EXPECT_EQ(out, std::format("[File: {}, Line: {}] {{1, 2, 3, 4, 5, 6, 7}}\n",
@@ -48,6 +55,7 @@ TEST(ContainerPrinterTest, PrintList) {
   // clang-format off
     int line = __LINE__; auto out = mental1104::log_detail::format_container(l);
   // clang-format on
+  M1104_LOG_TEST_MARK_LINE_USED(line);
 #if __cplusplus >= 202002L
   EXPECT_EQ(
       out,
@@ -65,6 +73,7 @@ TEST(ContainerPrinterTest, PrintVector) {
   // clang-format off
     int line = __LINE__; auto out = mental1104::log_detail::format_container(v);
   // clang-format on
+  M1104_LOG_TEST_MARK_LINE_USED(line);
 #if __cplusplus >= 202002L
   EXPECT_EQ(out, std::format("[File: {}, Line: {}] (size: "
                              "7) \n{{1, 2, 3, 4, 5, 6, 7}}\n",
@@ -80,6 +89,7 @@ TEST(ContainerPrinterTest, PrintMap) {
   // clang-format off
     int line = __LINE__; auto out = mental1104::log_detail::format_container(m);
   // clang-format on
+  M1104_LOG_TEST_MARK_LINE_USED(line);
 #if __cplusplus >= 202002L
   EXPECT_EQ(out, std::format(
                      "[File: {}, Line: {}] (size: 3) \n{{\n    "
@@ -97,6 +107,7 @@ TEST(ContainerPrinterTest, PrintMap) {
   // clang-format off
     line = __LINE__; auto nested_out = mental1104::log_detail::format_container(nested_map);
   // clang-format on
+  M1104_LOG_TEST_MARK_LINE_USED(line);
 #if __cplusplus >= 202002L
   EXPECT_EQ(nested_out,
             std::format("[File: {}, Line: {}] (size: 2) \n{{\n   "
@@ -119,6 +130,7 @@ TEST(ContainerPrinterTest, PrintUnorderMap) {
   // clang-format off
     int line = __LINE__; auto out = mental1104::log_detail::format_container(m);
   // clang-format on
+  M1104_LOG_TEST_MARK_LINE_USED(line);
 #if __cplusplus >= 202002L
   EXPECT_EQ(
       out,
@@ -138,6 +150,7 @@ TEST(ContainerPrinterTest, PrintUnorderMap) {
   // clang-format off
     line = __LINE__; auto nested_out = mental1104::log_detail::format_container(nested_umap);
   // clang-format on
+  M1104_LOG_TEST_MARK_LINE_USED(line);
 #if __cplusplus >= 202002L
   EXPECT_EQ(nested_out,
             std::format("[File: {}, Line: {}] (size: 2) \n{{\n   "
@@ -507,3 +520,5 @@ TEST(LFUCacheTest, PrintInternal) {
 }
 )");
 }
+
+#undef M1104_LOG_TEST_MARK_LINE_USED

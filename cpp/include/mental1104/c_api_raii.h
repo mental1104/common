@@ -108,7 +108,15 @@ private:
 };
 
 inline unique_file open_file(const char *path, const char *mode) noexcept {
+#if defined(_MSC_VER)
+  std::FILE *file = NULL;
+  if (fopen_s(&file, path, mode) != 0) {
+    file = NULL;
+  }
+  return unique_file(file);
+#else
   return unique_file(std::fopen(path, mode));
+#endif
 }
 
 // Runs a cleanup callback once when leaving scope unless dismissed.

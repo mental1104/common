@@ -8,7 +8,8 @@ Use this reference after `SKILL.md` triggers. Load only the sections relevant to
 - Main source roots are `cpp/`, `python/`, `golang/`, `rust/mental1104/`, `dotnet/`, `java/flink-datastream-demo/`, `export/`, `devops/`, `tools/ci/`, and `.github/workflows/`.
 - Use `./dev` as the preferred entrypoint. It wraps setup, build, test, coverage, fmt, bench, install, uninstall, vet, guard, Docker, Java/Flink run, and verify-install commands.
 - Keep CI and Pages conventions aligned: language workflows upload coverage artifacts, `ci-main.yml` coordinates main-branch execution, and coverage extraction scripts under `tools/ci/` produce normalized `cov.json`.
-- When a change creates reusable rules or public workflow knowledge, update `AGENTS.md` in the same change.
+- `AGENTS.md` is a pointer-only compatibility file. Do not add new maintenance content there.
+- When a change creates reusable rules or public workflow knowledge, update `.codex/skills/common-codegen-guidelines/SKILL.md` or the relevant file under `references/` in the same change.
 - Preserve dirty worktree changes that are not yours. Read before editing files that already changed.
 
 ## C++
@@ -49,7 +50,7 @@ Use this reference after `SKILL.md` triggers. Load only the sections relevant to
 - Keep public utility APIs simple and explicit. For convenience APIs, it is acceptable to use reflection with comments explaining semantics and performance tradeoffs; for hot paths, add generic typed alternatives.
 - Use Chinese comments where they clarify API semantics, such as whether map containment means keys or values.
 - Keep lab demos small, runnable, and documented. Use `internal/labkit` for shared lab run metadata instead of duplicating setup.
-- For scheduler/GC/concurrency work, emit the mandatory Go artifacts from `AGENTS.md`: `metrics.csv`, `trace.out`, `mutex.pprof`, `block.pprof`, and `summary.txt`.
+- For scheduler/GC/concurrency work, emit the mandatory Go artifacts from `references/agents-archive.md`: `metrics.csv`, `trace.out`, `mutex.pprof`, `block.pprof`, and `summary.txt`.
 - Typical validation: `./dev build-go`, `./dev test-go`, `./dev coverage-go`, `./dev fmt-go`, `./dev vet-go`, `./dev guard-go`, `./dev install-go`, `./dev verify-install`.
 
 ## Rust
@@ -96,7 +97,7 @@ Use this reference after `SKILL.md` triggers. Load only the sections relevant to
 
 ## Benchmark And Performance Protocol
 
-For any performance, benchmark, latency, throughput, scheduler, GC, concurrency, lock, contention, or data-backed claim:
+For any performance, benchmark, latency, throughput, scheduler, GC, concurrency, lock, contention, or data-backed claim, follow the archived protocol in `references/agents-archive.md`:
 
 1. Define the unit of work and fix inputs, concurrency, duration, and iteration counts.
 2. Use same-binary A/B: implement both variants in one program and run them sequentially in the same process when possible.

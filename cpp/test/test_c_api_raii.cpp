@@ -63,7 +63,13 @@ bool make_pipe(int fds[2]) { return ::pipe(fds) == 0; }
 #endif
 
 std::FILE *make_tmp_file() {
+#if defined(_MSC_VER)
+  std::FILE *file = nullptr;
+  const int rc = tmpfile_s(&file);
+  EXPECT_EQ(rc, 0);
+#else
   std::FILE *file = std::tmpfile();
+#endif
   EXPECT_NE(file, nullptr);
   return file;
 }

@@ -14,6 +14,23 @@
 static LPTOP_LEVEL_EXCEPTION_FILTER g_prev_filter = NULL;
 static int g_sym_initialized = 0;
 
+static void st_copy_cstr(char* dst, size_t dst_size, const char* src) {
+  size_t len;
+  if (dst_size == 0) {
+    return;
+  }
+  if (!src) {
+    dst[0] = '\0';
+    return;
+  }
+  len = strlen(src);
+  if (len >= dst_size) {
+    len = dst_size - 1;
+  }
+  memcpy(dst, src, len);
+  dst[len] = '\0';
+}
+
 static const char* st_exception_name(DWORD code) {
   switch (code) {
     case EXCEPTION_ACCESS_VIOLATION:
@@ -124,23 +141,20 @@ static void st_symbolize_frame(DWORD64 pc,
   *line = 0;
 
   if (SymFromAddr(process, pc, &displacement, sym)) {
-    strncpy(function, sym->Name, function_size - 1);
-    function[function_size - 1] = '\0';
+    st_copy_cstr(function, function_size, sym->Name);
   }
 
   memset(&line_info, 0, sizeof(line_info));
   line_info.SizeOfStruct = sizeof(line_info);
   if (SymGetLineFromAddr64(process, pc, &line_disp, &line_info)) {
-    strncpy(file, line_info.FileName, file_size - 1);
-    file[file_size - 1] = '\0';
+    st_copy_cstr(file, file_size, line_info.FileName);
     *line = line_info.LineNumber;
   }
 
   memset(&module_info, 0, sizeof(module_info));
   module_info.SizeOfStruct = sizeof(module_info);
   if (SymGetModuleInfo64(process, pc, &module_info)) {
-    strncpy(module, module_info.ImageName, module_size - 1);
-    module[module_size - 1] = '\0';
+    st_copy_cstr(module, module_size, module_info.ImageName);
   }
 }
 

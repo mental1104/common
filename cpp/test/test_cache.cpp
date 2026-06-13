@@ -75,7 +75,7 @@ TEST(LRUCacheTest, CacheHitBehavior) {
 }
 
 TEST(LRUCacheTest, ComputeFibonacci50) {
-  std::unique_ptr<LRUCache<int, unsigned long long>> cache_ptr;
+  std::unique_ptr<LRUCache<unsigned long long, int>> cache_ptr;
 
   std::function<unsigned long long(int)> fibonacci =
       [&](int n) -> unsigned long long {
@@ -92,7 +92,7 @@ TEST(LRUCacheTest, ComputeFibonacci50) {
 
   // 绑定 LRUCache（容量 40，使用 Fibonacci 计算）
   cache_ptr =
-      std::make_unique<LRUCache<int, unsigned long long>>(40, fibonacci);
+      std::make_unique<LRUCache<unsigned long long, int>>(40, fibonacci);
 
   // 计算 Fibonacci(50)
   unsigned long long fib40 = (*cache_ptr)(40);
