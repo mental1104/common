@@ -1,6 +1,7 @@
 #pragma once
 
 #include <chrono>
+#include <cstdint>
 #include <random>
 #include <sstream>
 #include <string>
@@ -15,7 +16,8 @@ inline uint64_t mix_seed() {
 }
 
 template <typename Engine> Engine &thread_local_engine() {
-  static thread_local Engine engine(mix_seed());
+  typedef typename Engine::result_type seed_type;
+  static thread_local Engine engine(static_cast<seed_type>(mix_seed()));
   return engine;
 }
 

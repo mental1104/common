@@ -151,6 +151,7 @@ template <typename Container, typename SourceLocation>
 // size() 能力分层编译。
 void maybe_print_info(const Container &c, bool show_info, std::ostream &out,
                       SourceLocation loc) {
+  (void)loc;
 #if M1104_HAS_CXX20
   if (show_info) {
     out << "[File: " << loc.file_name() << ", Line: " << loc.line()
@@ -567,11 +568,23 @@ inline LogLevel default_level() {
 inline LogLevel env_level() {
   // getenv 可能返回 nullptr；这里先判 env 非空，再判首字符非 '\0'
   // 才解引用，避免用户担心的空指针解引用。
+#if defined(_MSC_VER)
+  char *env = NULL;
+  size_t len = 0;
+  if (_dupenv_s(&env, &len, "MENTAL1104_LOG_LEVEL") == 0 && env != NULL) {
+    std::string text(env);
+    std::free(env);
+    if (!text.empty()) {
+      return level_from_string(text);
+    }
+  }
+#else
   if (const char *env = std::getenv("MENTAL1104_LOG_LEVEL")) {
     if (*env != '\0') {
       return level_from_string(env);
     }
   }
+#endif
   return default_level();
 }
 
