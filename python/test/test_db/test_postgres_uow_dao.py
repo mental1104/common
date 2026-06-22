@@ -14,16 +14,17 @@ from mental1104.db import (
 )
 from mental1104.db import AutoSessionDAO
 
-pytest.importorskip("psycopg")
-
 # 必须配置 PG* 环境变量，否则跳过这些集成测试。
 REQUIRED_ENV = ["PGUSER", "PGPASSWORD", "PGHOST", "PGPORT", "PGDATABASE"]
 MISSING_ENV = [key for key in REQUIRED_ENV if not os.getenv(key)]
 
-pytestmark = pytest.mark.skipif(
-    bool(MISSING_ENV),
-    reason="PG* env vars are not fully configured; skip PostgreSQL db tests",
-)
+if MISSING_ENV:
+    pytest.skip("PG* env vars are not fully configured; skip PostgreSQL db tests", allow_module_level=True)
+
+try:
+    import psycopg
+except ImportError as exc:
+    pytest.skip(f"psycopg is not importable; skip PostgreSQL db tests: {exc}", allow_module_level=True)
 
 
 def _pg_params() -> ConnParams:
@@ -72,8 +73,6 @@ class _UserDAO(AutoSessionDAO):
 
 def _connect_raw(params: ConnParams):
     # 直接用 psycopg 建立原生连接，执行管理类 SQL。
-    import psycopg
-
     return psycopg.connect(
         dbname=params.database,
         user=params.user,

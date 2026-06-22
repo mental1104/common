@@ -1,0 +1,119 @@
+name: Collect C++ coverage artifact
+description: Extract, stash, and upload one C++ coverage artifact.
+
+inputs:
+  os:
+    description: Coverage OS label.
+    required: true
+  compiler:
+    description: Coverage compiler label.
+    required: true
+  compiler-key:
+    description: Filesystem-safe compiler key.
+    required: true
+  cxx-std:
+    description: C++ standard matrix value.
+    required: true
+  artifact-name:
+    description: GitHub Actions artifact name.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Extract and stash coverage files
+      if: ${{ inputs.os != 'windows' }}
+      shell: bash
+      env:
+        COVERAGE_OS: ${{ inputs.os }}
+        COVERAGE_COMPILER: ${{ inputs.compiler }}
+        COVERAGE_COMPILER_KEY: ${{ inputs['compiler-key'] }}
+        COVERAGE_CXX_STD: ${{ inputs['cxx-std'] }}
+      run: |
+        set +e
+        python3 tools/ci/extract_coverage_cpp.py \
+          --os "$COVERAGE_OS" \
+          --compiler "$COVERAGE_COMPILER" \
+          --cxx-std "$COVERAGE_CXX_STD" \
+          --out cov.json || true
+
+        if [ ! -f cov.json ]; then
+          python3 - <<'PY'
+        import json
+        import os
+
+        obj = {
+            "os": os.environ.get("COVERAGE_OS", "unknown"),
+            "compiler": os.environ.get("COVERAGE_COMPILER", "unknown"),
+            "cxx_std": int(os.environ.get("COVERAGE_CXX_STD", "0") or 0),
+            "line_pct": 0.0,
+            "source": "placeholder",
+            "sha": os.environ.get("GITHUB_SHA", ""),
+            "run_id": os.environ.get("GITHUB_RUN_ID", ""),
+            "status": "placeholder",
+        }
+        with open("cov.json", "w", encoding="utf-8") as f:
+            json.dump(obj, f, ensure_ascii=False, indent=2)
+        PY
+        fi
+
+        key="${COVERAGE_OS}-${COVERAGE_COMPILER_KEY}-cxx${COVERAGE_CXX_STD}"
+        mkdir -p "_cov/cpp/${key}"
+        cp -f cov.json "_cov/cpp/${key}/cov.json" 2>/dev/null || true
+        cp -f coverage.xml "_cov/cpp/${key}/coverage.xml" 2>/dev/null || true
+
+    - name: Extract and stash coverage files
+      if: ${{ inputs.os == 'windows' }}
+      shell: pwsh
+      env:
+        COVERAGE_OS: ${{ inputs.os }}
+        COVERAGE_COMPILER: ${{ inputs.compiler }}
+        COVERAGE_COMPILER_KEY: ${{ inputs['compiler-key'] }}
+        COVERAGE_CXX_STD: ${{ inputs['cxx-std'] }}
+      run: |
+        $oldNativeCommandPreference = $PSNativeCommandUseErrorActionPreference
+        $PSNativeCommandUseErrorActionPreference = $false
+        python tools/ci/extract_coverage_cpp.py `
+          --os "$env:COVERAGE_OS" `
+          --compiler "$env:COVERAGE_COMPILER" `
+          --cxx-std "$env:COVERAGE_CXX_STD" `
+          --out cov.json
+        $extractStatus = $LASTEXITCODE
+        $PSNativeCommandUseErrorActionPreference = $oldNativeCommandPreference
+
+        if ($extractStatus -ne 0) {
+          Write-Warning "extract_coverage_cpp.py exited with $extractStatus"
+        }
+
+        if (-not (Test-Path cov.json)) {
+          @'
+        import json
+        import os
+
+        obj = {
+            "os": os.environ.get("COVERAGE_OS", "unknown"),
+            "compiler": os.environ.get("COVERAGE_COMPILER", "unknown"),
+            "cxx_std": int(os.environ.get("COVERAGE_CXX_STD", "0") or 0),
+            "line_pct": 0.0,
+            "source": "placeholder",
+            "sha": os.environ.get("GITHUB_SHA", ""),
+            "run_id": os.environ.get("GITHUB_RUN_ID", ""),
+            "status": "placeholder",
+        }
+        with open("cov.json", "w", encoding="utf-8") as f:
+            json.dump(obj, f, ensure_ascii=False, indent=2)
+        '@ | python -
+        }
+
+        $key = "$($env:COVERAGE_OS)-$($env:COVERAGE_COMPILER_KEY)-cxx$($env:COVERAGE_CXX_STD)"
+        New-Item -ItemType Directory -Force -Path "_cov/cpp/$key" | Out-Null
+        Copy-Item -Force cov.json "_cov/cpp/$key/cov.json" -ErrorAction SilentlyContinue
+        Copy-Item -Force coverage.xml "_cov/cpp/$key/coverage.xml" -ErrorAction SilentlyContinue
+
+    - name: Upload coverage artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ inputs['artifact-name'] }}
+        path: _cov
+        retention-days: 7
+        if-no-files-found: warn

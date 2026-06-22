@@ -14,6 +14,29 @@ MigrationHandler = Callable[[DBKind, str, DBRegistry], None]
 _migration_handler: Optional[MigrationHandler] = None
 
 
+def _set_clickhouse_cluster_options(
+    tables: Iterable,
+    cluster: Optional[str],
+) -> List[Tuple[Any, Optional[str]]]:
+    applied: List[Tuple[Any, Optional[str]]] = []
+    for table in tables:
+        opts = table.dialect_options["clickhouse"]
+        try:
+            prev = opts["cluster"]
+        except KeyError:
+            prev = None
+        applied.append((table, prev))
+        opts["cluster"] = cluster
+    return applied
+
+
+def _restore_clickhouse_cluster_options(
+    applied: Iterable[Tuple[Any, Optional[str]]],
+) -> None:
+    for table, prev in applied:
+        table.dialect_options["clickhouse"]["cluster"] = prev
+
+
 def set_migration_handler(handler: MigrationHandler) -> None:
     global _migration_handler
     _migration_handler = handler
@@ -107,17 +130,12 @@ def create_all(
                 "ClickHouse distributed profile requires cluster name. "
                 "Set options={'cluster': '...'} or options={'on_cluster': '...'}."
             )
-        if cluster:
-            for table in target_tables:
-                opts = table.dialect_options["clickhouse"]
-                cluster_applied.append((table, opts.get("cluster")))
-                opts["cluster"] = cluster
+        cluster_applied = _set_clickhouse_cluster_options(target_tables, cluster)
     engine: Engine = registry.get_engine(kind, db_name)
     try:
         base.metadata.create_all(bind=engine, tables=target_tables if tables else None)
     finally:
-        for table, prev in cluster_applied:
-            table.dialect_options["clickhouse"]["cluster"] = prev
+        _restore_clickhouse_cluster_options(cluster_applied)
 
 
 async def create_all_async(
@@ -153,17 +171,12 @@ def drop_all(
                 "ClickHouse distributed profile requires cluster name. "
                 "Set options={'cluster': '...'} or options={'on_cluster': '...'}."
             )
-        if cluster:
-            for table in target_tables:
-                opts = table.dialect_options["clickhouse"]
-                cluster_applied.append((table, opts.get("cluster")))
-                opts["cluster"] = cluster
+        cluster_applied = _set_clickhouse_cluster_options(target_tables, cluster)
     engine: Engine = registry.get_engine(kind, db_name)
     try:
         base.metadata.drop_all(bind=engine, tables=target_tables if tables else None)
     finally:
-        for table, prev in cluster_applied:
-            table.dialect_options["clickhouse"]["cluster"] = prev
+        _restore_clickhouse_cluster_options(cluster_applied)
 
 
 async def drop_all_async(
