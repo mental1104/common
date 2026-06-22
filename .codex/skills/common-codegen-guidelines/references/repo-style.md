@@ -8,6 +8,7 @@ Use this reference after `SKILL.md` triggers. Load only the sections relevant to
 - Main source roots are `cpp/`, `python/`, `golang/`, `rust/mental1104/`, `dotnet/`, `java/flink-datastream-demo/`, `export/`, `devops/`, `tools/ci/`, and `.github/workflows/`.
 - Use `./dev` as the preferred entrypoint. It wraps setup, build, test, coverage, fmt, bench, install, uninstall, vet, guard, Docker, Java/Flink run, and verify-install commands.
 - Keep CI and Pages conventions aligned: language workflows upload coverage artifacts, `ci-main.yml` coordinates main-branch execution, and coverage extraction scripts under `tools/ci/` produce normalized `cov.json`.
+- Treat the current GitHub Actions definitions as the repository compatibility contract. Code should be written against the platforms, compilers, runtimes, language standards, build/test/install/coverage steps, and local actions declared under `.github/workflows/` and `.github/actions/`, not just against the local developer machine.
 - `AGENTS.md` is a pointer-only compatibility file. Do not add new maintenance content there.
 - When a change creates reusable rules or public workflow knowledge, update `.codex/skills/common-codegen-guidelines/SKILL.md` or the relevant file under `references/` in the same change.
 - Preserve dirty worktree changes that are not yours. Read before editing files that already changed.
@@ -17,8 +18,10 @@ Use this reference after `SKILL.md` triggers. Load only the sections relevant to
 - Put public headers under `cpp/include/mental1104/...`; implementations live under `cpp/src/...`; examples belong under `cpp/examples/...`.
 - Use namespace `mental1104` for public APIs. Keep public names consistent with nearby files.
 - Use `cpp/include/mental1104/meta/compiler_support.h` feature macros: `M1104_CPLUSPLUS`, `M1104_HAS_CXX11/14/17/20/23`, `M1104_HAS_INCLUDE`, and `M1104_HAS_STRING_VIEW`.
+- C++ common-library code must honor the `.github/workflows/cpp.yml` matrix: Linux GCC/Clang, macOS Clang/GCC, Windows MSVC, and C++11, C++14, C++17, C++20, and C++23. Treat C++11 as the baseline for shared headers and broadly reused source unless the target is explicitly gated out of older standards.
 - Prefer `mental1104::string_view` in public APIs. It maps to `std::string_view` on C++17+ and `std::string` on C++11/14.
 - Do not introduce C++17+ features into shared headers unless guarded with repository macros and a lower-standard fallback.
+- When using C++14/17/20/23 features in C++, provide a C++11-compatible fallback, isolate the code behind feature macros/CMake conditions, or make the target unavailable only where the CI matrix already excludes it.
 - For C++11-compatible templates, use trailing return types with `decltype(...)` when return type deduction would require newer standards.
 - Keep GCC/Clang/MSVC warning-clean. Avoid unused captures/parameters, narrowing conversions, signed/unsigned mistakes, and missing platform guards.
 - For cross-platform code, isolate POSIX and Windows paths with `#ifdef _WIN32` or platform-specific source files. Do not assume Linux-only APIs in public headers.
@@ -27,7 +30,7 @@ Use this reference after `SKILL.md` triggers. Load only the sections relevant to
 - Use existing logging first: `mental1104/log.h`, `M1104_LOG_*`, and `M1104_LOG_*F`. Do not add another logging dependency.
 - Preserve the file-local comment style. Chinese `用法` / `说明` comments are welcome when they explain non-obvious compatibility, ABI, concurrency, or algorithm decisions; avoid noisy comments.
 - Public APIs need focused tests and, when useful, examples. If Redis++ or middleware behavior is touched, include the specialized devtool command or documented environment requirement.
-- Typical validation: `./dev build-cpp`, `./dev test-cpp`, `./dev coverage-cpp`, `./dev fmt-cpp`, `./dev vet-cpp`, `./dev guard-cpp`, `./dev test-redispp`, `./dev install-cpp`, `./dev verify-install`.
+- Typical validation: `./dev build-cpp`, `./dev test-cpp`, `./dev coverage-cpp`, `./dev fmt-cpp`, `./dev vet-cpp`, `./dev guard-cpp`, `./dev test-redispp`, `./dev install-cpp`, `./dev verify-install`. For shared C++ changes, locally exercise at least the oldest and newest relevant standards when feasible, for example `CXX_STD=11 ./dev build-cpp --config Debug` and `CXX_STD=23 ./dev build-cpp --config Debug`; rely on CI for the full OS/compiler/standard matrix.
 
 ## Python
 
@@ -88,6 +91,7 @@ Use this reference after `SKILL.md` triggers. Load only the sections relevant to
 
 - Devtool command modules live under `devops/devtool/commands/...`; register commands through the existing `configure(subparsers)` and alias patterns.
 - If adding a language-facing workflow, wire build/test/coverage/install/verify behavior through `./dev` first, then update CI to call the wrapper.
+- If a workflow matrix, local action, or required compiler/runtime changes, update this skill reference so future code generation follows the new compatibility contract.
 - Coverage extractors under `tools/ci/extract_coverage_*.py` should parse real reports into normalized `cov.json`; do not replace missing data with fake success.
 - C++ CI uses `.github/actions/cpp-coverage-artifact` to keep `cov.json` extraction, `_cov` staging, and artifact upload behind one workflow step across Linux, macOS, and Windows.
 - Pages generation should tolerate missing coverage by producing N/A badges/tables rather than broken links.

@@ -11,7 +11,7 @@ This repository is a multi-language common-library workspace, so generated code 
 ## Required Workflow
 
 1. Treat `.codex/skills/common-codegen-guidelines` as the live repository guidance. `AGENTS.md` is only a pointer to the archived guidance.
-2. Read the nearest existing implementation, tests, README, build file, and devtool command for the language you are touching.
+2. Read the nearest existing implementation, tests, README, build file, and devtool command for the language you are touching. When compatibility may be affected, also inspect the matching `.github/workflows/` workflow and `.github/actions/` local actions.
 3. For non-trivial code generation, read `references/repo-style.md`; for historical recent-work context or detailed archived rules, read `references/agents-archive.md`.
 4. Keep edits close to the existing module boundary. Prefer extending current helpers, aliases, registries, and command wrappers over adding a parallel style.
 5. Add or update tests next to the existing tests for the touched language. Public APIs need behavior tests; cross-language/installation surfaces also need install or verify checks.
@@ -22,7 +22,8 @@ This repository is a multi-language common-library workspace, so generated code 
 
 Generated code must satisfy these repository conditions:
 
-- **Portability first**: support the repository's intended OS/compiler/runtime matrix; guard platform-specific code and avoid unguarded language-version features in shared surfaces.
+- **CI matrix is the coding contract**: write code to satisfy the current GitHub Actions platform, compiler, runtime, language-standard, build, test, install, and coverage matrix defined under `.github/workflows/` and `.github/actions/`.
+- **Portability first**: support the repository's intended OS/compiler/runtime matrix; for reusable common-library code, treat the lowest CI-supported language/runtime version as the baseline and guard newer language-version features in shared surfaces.
 - **Warning-clean**: keep C++/C#/Go/Rust/Java compiler and linter warnings clean because CI and some third-party integrations treat warnings as failures.
 - **Local API consistency**: use `mental1104` namespaces/packages/modules and existing helpers for logging, concurrency, database scopes, message queues, coverage extraction, and devtool operations.
 - **Validation evidence**: run the smallest meaningful build/test/coverage command, then broaden if the touched surface is shared.
