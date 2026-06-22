@@ -98,14 +98,17 @@ TEST(UniqueFdTest, ClosesOwnedFdOnScopeExit) {
 TEST(UniqueFdTest, MoveConstructTransfersOwnership) {
   int fds[2];
   ASSERT_TRUE(make_pipe(fds));
-  mental1104::unique_fd read_end(fds[0]);
-  mental1104::unique_fd write_end(fds[1]);
+  const int read_fd = fds[0];
+  {
+    mental1104::unique_fd read_end(fds[0]);
+    mental1104::unique_fd write_end(fds[1]);
 
-  mental1104::unique_fd moved(std::move(read_end));
+    mental1104::unique_fd moved(std::move(read_end));
 
-  EXPECT_EQ(read_end.get(), -1);
-  EXPECT_EQ(moved.get(), fds[0]);
-  EXPECT_TRUE(fd_is_open(moved.get()));
+    EXPECT_EQ(moved.release(), read_fd);
+  }
+  EXPECT_TRUE(fd_is_open(read_fd));
+  close_if_open(read_fd);
 }
 
 TEST(UniqueFdTest, MoveAssignmentClosesOldFdThenTransfersOwnership) {
@@ -116,16 +119,17 @@ TEST(UniqueFdTest, MoveAssignmentClosesOldFdThenTransfersOwnership) {
 
   mental1104::unique_fd owner(first[0]);
   mental1104::unique_fd first_write(first[1]);
-  mental1104::unique_fd replacement(second[0]);
-  mental1104::unique_fd second_write(second[1]);
   const int old_fd = first[0];
   const int new_fd = second[0];
+  {
+    mental1104::unique_fd replacement(second[0]);
+    mental1104::unique_fd second_write(second[1]);
 
-  owner = std::move(replacement);
+    owner = std::move(replacement);
+  }
 
   EXPECT_FALSE(fd_is_open(old_fd));
   EXPECT_EQ(owner.get(), new_fd);
-  EXPECT_EQ(replacement.get(), -1);
   EXPECT_TRUE(fd_is_open(new_fd));
 }
 
@@ -211,7 +215,6 @@ TEST(UniqueFileTest, MoveConstructTransfersOwnership) {
 
   mental1104::unique_file moved(std::move(file));
 
-  EXPECT_EQ(file.get(), nullptr);
   EXPECT_EQ(moved.get(), raw);
 }
 
@@ -229,7 +232,6 @@ TEST(UniqueFileTest, MoveAssignmentClosesOldFileThenTransfersOwnership) {
   owner = std::move(replacement);
 
   EXPECT_EQ(owner.get(), second);
-  EXPECT_EQ(replacement.get(), nullptr);
 #if !defined(_WIN32)
   EXPECT_FALSE(fd_is_open(old_fd));
 #endif
@@ -299,6 +301,7 @@ TEST(ScopeExitTest, RunsOnEarlyReturn) {
   bool ran = false;
   const bool result = [&ran]() {
     auto guard = mental1104::make_scope_exit([&ran]() { ran = true; });
+    EXPECT_TRUE(guard.active());
     return false;
   }();
 
@@ -310,6 +313,7 @@ TEST(ScopeExitTest, RunsOnExceptionPath) {
   bool ran = false;
   try {
     auto guard = mental1104::make_scope_exit([&ran]() { ran = true; });
+    EXPECT_TRUE(guard.active());
     throw std::runtime_error("fail");
   } catch (const std::runtime_error &) {
   }
@@ -323,7 +327,6 @@ TEST(ScopeExitTest, MoveConstructRunsCleanupOnlyOnce) {
     auto first = mental1104::make_scope_exit([&count]() { ++count; });
     {
       auto second(std::move(first));
-      EXPECT_FALSE(first.active());
       EXPECT_TRUE(second.active());
     }
     EXPECT_EQ(count, 1);

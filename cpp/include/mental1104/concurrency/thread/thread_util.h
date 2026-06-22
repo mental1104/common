@@ -12,6 +12,7 @@
 #include <queue>
 #include <thread>
 #include <type_traits>
+#include <tuple>
 #include <vector>
 
 namespace mental1104 {
@@ -70,8 +71,19 @@ auto ThreadPool::submit(F &&f, Args &&...args)
     -> std::future<mental1104::detail::threadpool_invoke_result_t<F, Args...>> {
   using ReturnType = mental1104::detail::threadpool_invoke_result_t<F, Args...>;
 
+#if (defined(_MSVC_LANG) && _MSVC_LANG >= 201703L) ||                         \
+    (!defined(_MSVC_LANG) && __cplusplus >= 201703L)
+  auto bound = [func = std::forward<F>(f),
+                args_tuple = std::make_tuple(std::forward<Args>(args)...)]()
+                   mutable -> ReturnType {
+    return std::apply(std::move(func), std::move(args_tuple));
+  };
+  auto task =
+      std::make_shared<std::packaged_task<ReturnType()>>(std::move(bound));
+#else
   auto task = std::make_shared<std::packaged_task<ReturnType()>>(
       std::bind(std::forward<F>(f), std::forward<Args>(args)...));
+#endif
 
   std::future<ReturnType> result = task->get_future();
   {

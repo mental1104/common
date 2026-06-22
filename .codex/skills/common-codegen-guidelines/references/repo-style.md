@@ -89,6 +89,7 @@ Use this reference after `SKILL.md` triggers. Load only the sections relevant to
 - Devtool command modules live under `devops/devtool/commands/...`; register commands through the existing `configure(subparsers)` and alias patterns.
 - If adding a language-facing workflow, wire build/test/coverage/install/verify behavior through `./dev` first, then update CI to call the wrapper.
 - Coverage extractors under `tools/ci/extract_coverage_*.py` should parse real reports into normalized `cov.json`; do not replace missing data with fake success.
+- C++ CI uses `.github/actions/cpp-coverage-artifact` to keep `cov.json` extraction, `_cov` staging, and artifact upload behind one workflow step across Linux, macOS, and Windows.
 - Pages generation should tolerate missing coverage by producing N/A badges/tables rather than broken links.
 - Dockerfile changes should preserve layer caching: install stable tools and VSCode extensions before app code, then generate settings or build app artifacts after relevant source copies.
 - Docker/proxy behavior should honor existing build args and env pass-through (`HTTP_PROXY`, `HTTPS_PROXY`, `NO_PROXY`, `ALL_PROXY`, custom feeds/mirrors).
