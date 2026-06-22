@@ -72,7 +72,6 @@ jobs:
           fetch-depth: 0
 
       - name: Init submodules (sparse Boost)
-        continue-on-error: true
         run: |
           python3 -c "import sys;from devtool.commands.common import base_env;from devtool.commands.ops import cpp as cpp_ops;sys.exit(cpp_ops.git_submodules(base_env()) or 0)"
 
@@ -86,7 +85,6 @@ jobs:
           exit 1
 
       - name: Install toolchain
-        continue-on-error: true
         run: |
           sudo apt-get update
           sudo apt-get install -y build-essential cmake ninja-build clang clang-format clang-tidy gcovr lcov \
@@ -105,22 +103,18 @@ jobs:
 
       - name: Setup C++
         id: setup_cpp
-        continue-on-error: true
         run: ./dev setup-cpp --config Debug
 
       - name: Format C++
         if: ${{ matrix.compiler == 'gcc' && matrix.cxx_std == '23' }}
-        continue-on-error: true
         run: ./dev fmt-cpp
 
       - name: Build C++
         id: build_cpp
-        continue-on-error: true
         run: ./dev build-cpp --config Debug
 
       - name: Coverage C++
         id: coverage_cpp
-        continue-on-error: true
         run: ./dev coverage-cpp
 
       - name: Export coverage.xml (never fail)
@@ -191,12 +185,10 @@ jobs:
 
       - name: Vet C++
         if: ${{ matrix.compiler == 'gcc' && matrix.cxx_std == '23' }}
-        continue-on-error: true
         run: ./dev vet-cpp
 
       - name: Guard C++
         if: ${{ matrix.compiler == 'gcc' && matrix.cxx_std == '23' }}
-        continue-on-error: true
         run: ./dev guard-cpp
 
       - name: install-cpp
@@ -227,10 +219,6 @@ jobs:
             exit 1
           fi
 
-      - name: Mark job failed if core steps failed
-        if: ${{ steps.setup_cpp.outcome == 'failure' || steps.build_cpp.outcome == 'failure' || steps.coverage_cpp.outcome == 'failure' }}
-        run: exit 1
-
   macos:
     name: macOS / ${{ matrix.compiler == 'clang' && 'clang++' || 'g++' }} / C++${{ matrix.cxx_std }}
     runs-on: macos-latest
@@ -259,12 +247,10 @@ jobs:
           fetch-depth: 0
 
       - name: Init submodules (sparse Boost)
-        continue-on-error: true
         run: |
           python3 -c "import sys;from devtool.commands.common import base_env;from devtool.commands.ops import cpp as cpp_ops;sys.exit(cpp_ops.git_submodules(base_env()) or 0)"
 
       - name: Install toolchain
-        continue-on-error: true
         run: |
           brew update
           brew install cmake llvm ninja gcovr lcov mpfr gmp gcc
@@ -272,17 +258,14 @@ jobs:
 
       - name: Setup C++
         id: setup_cpp
-        continue-on-error: true
         run: ./dev setup-cpp --config Debug
 
       - name: Build C++
         id: build_cpp
-        continue-on-error: true
         run: ./dev build-cpp --config Debug
 
       - name: Coverage C++
         id: coverage_cpp
-        continue-on-error: true
         run: ./dev coverage-cpp
 
       - name: Export coverage.xml (never fail)
@@ -379,10 +362,6 @@ jobs:
             exit 1
           fi
 
-      - name: Mark job failed if core steps failed
-        if: ${{ steps.setup_cpp.outcome == 'failure' || steps.build_cpp.outcome == 'failure' || steps.coverage_cpp.outcome == 'failure' }}
-        run: exit 1
-
   windows:
     name: Windows / MSVC / C++${{ matrix.cxx_std }}
     runs-on: windows-latest
@@ -411,27 +390,22 @@ jobs:
 
       - name: Init submodules (sparse Boost)
         id: init_submodules
-        continue-on-error: true
         run: python -c "import sys;from devtool.commands.common import base_env;from devtool.commands.ops import cpp as cpp_ops;sys.exit(cpp_ops.git_submodules(base_env()) or 0)"
 
       - name: Setup C++
         id: setup_cpp
-        continue-on-error: true
         run: python -m devtool.cli setup-cpp --config Debug
 
       - name: Build export C++ layer
         id: build_export
-        continue-on-error: true
         run: python -m devtool.cli build-export-cpp --config Debug
 
       - name: Build C++
         id: build_cpp
-        continue-on-error: true
         run: python -m devtool.cli build-cpp --config Debug
 
       - name: Coverage C++
         id: coverage_cpp
-        continue-on-error: true
         run: python -m devtool.cli coverage-cpp
 
       - name: Extract cov.json (never fail)
@@ -495,7 +469,3 @@ jobs:
         if: ${{ steps.verify_uninstall_cpp.outcome != 'failure' }}
         run: |
           throw "verify-install succeeded after uninstall; expected failure"
-
-      - name: Mark job failed if core steps failed
-        if: ${{ steps.setup_cpp.outcome == 'failure' || steps.build_cpp.outcome == 'failure' || steps.coverage_cpp.outcome == 'failure' }}
-        run: exit 1
