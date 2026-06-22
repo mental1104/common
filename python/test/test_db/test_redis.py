@@ -19,6 +19,18 @@ def clear_keys(client, prefix):
         client.delete(key)
 
 
+def test_redis_bloom_module_name_from_mapping_response():
+    assert RedisBloom._module_name({b"name": b"bf", b"ver": 20400}) == "bf"
+
+
+def test_redis_bloom_module_name_from_flat_response():
+    assert RedisBloom._module_name([b"name", b"bf", b"ver", 20400]) == "bf"
+
+
+def test_redis_bloom_module_name_from_pair_response():
+    assert RedisBloom._module_name([[b"name", b"bf"], [b"ver", 20400]]) == "bf"
+
+
 # 模块级 worker 避免 spawn/forkserver 方式下的 pickle 失败。
 def _redis_lock_worker(counter, redis_params, key):
     with RedisConnection(

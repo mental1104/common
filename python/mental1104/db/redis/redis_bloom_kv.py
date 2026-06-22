@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import contextlib
-from typing import Optional
+from typing import Any, Mapping, Optional
 
 import redis
 
@@ -28,6 +28,39 @@ class RedisBloom:
         self.capacity = capacity
         self.enabled = self._check_and_init_bloom()
 
+    @staticmethod
+    def _to_text(value: Any) -> str:
+        if isinstance(value, bytes):
+            return value.decode(errors="ignore")
+        return str(value)
+
+    @classmethod
+    def _module_name(cls, module: Any) -> str:
+        if isinstance(module, Mapping):
+            for key in ("name", b"name"):
+                if key in module:
+                    return cls._to_text(module[key]).lower()
+            return ""
+
+        if not isinstance(module, (list, tuple)):
+            return ""
+
+        values = list(module)
+        for item in values:
+            if isinstance(item, Mapping):
+                name = cls._module_name(item)
+                if name:
+                    return name
+            if isinstance(item, (list, tuple)) and len(item) >= 2:
+                if cls._to_text(item[0]).lower() == "name":
+                    return cls._to_text(item[1]).lower()
+
+        for idx in range(0, len(values) - 1, 2):
+            if cls._to_text(values[idx]).lower() == "name":
+                return cls._to_text(values[idx + 1]).lower()
+
+        return ""
+
     def _check_and_init_bloom(self) -> bool:
         try:
             modules = self.client.execute_command("MODULE", "LIST")
@@ -36,7 +69,7 @@ class RedisBloom:
 
         has_bf = False
         for module in modules:
-            if len(module) >= 2 and str(module[1]).lower() == "bf":
+            if self._module_name(module) in {"bf", "redisbloom"}:
                 has_bf = True
                 break
 

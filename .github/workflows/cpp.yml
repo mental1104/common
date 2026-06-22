@@ -72,7 +72,6 @@ jobs:
           fetch-depth: 0
 
       - name: Init submodules (sparse Boost)
-        continue-on-error: true
         run: |
           python3 -c "import sys;from devtool.commands.common import base_env;from devtool.commands.ops import cpp as cpp_ops;sys.exit(cpp_ops.git_submodules(base_env()) or 0)"
 
@@ -86,7 +85,6 @@ jobs:
           exit 1
 
       - name: Install toolchain
-        continue-on-error: true
         run: |
           sudo apt-get update
           sudo apt-get install -y build-essential cmake ninja-build clang clang-format clang-tidy gcovr lcov \
@@ -105,22 +103,18 @@ jobs:
 
       - name: Setup C++
         id: setup_cpp
-        continue-on-error: true
         run: ./dev setup-cpp --config Debug
 
       - name: Format C++
         if: ${{ matrix.compiler == 'gcc' && matrix.cxx_std == '23' }}
-        continue-on-error: true
         run: ./dev fmt-cpp
 
       - name: Build C++
         id: build_cpp
-        continue-on-error: true
         run: ./dev build-cpp --config Debug
 
       - name: Coverage C++
         id: coverage_cpp
-        continue-on-error: true
         run: ./dev coverage-cpp
 
       - name: Export coverage.xml (never fail)
@@ -154,82 +148,46 @@ jobs:
               > coverage.xml
           fi
 
-      - name: Extract cov.json (never fail)
+      - name: Collect and upload coverage artifacts
         if: always()
         continue-on-error: true
-        run: |
-          set +e
-          python3 tools/ci/extract_coverage_cpp.py \
-            --os linux \
-            --compiler "${COMPILER_LABEL}" \
-            --cxx-std ${{ matrix.cxx_std }} \
-            --out cov.json || true
-
-          if [ ! -f cov.json ]; then
-            python3 -c "import json,os;obj={'os':'linux','compiler':os.getenv('COMPILER_LABEL','unknown'),'cxx_std':int('${{ matrix.cxx_std }}'),'line_pct':0.0,'source':'placeholder','sha':os.getenv('GITHUB_SHA',''),'run_id':os.getenv('GITHUB_RUN_ID',''),'status':'placeholder'};json.dump(obj,open('cov.json','w',encoding='utf-8'),ensure_ascii=False,indent=2)"
-          fi
-
-      - name: Stash coverage files (unique path)
-        if: always()
-        continue-on-error: true
-        run: |
-          set +e
-          key="linux-${COMPILER_KEY}-cxx${{ matrix.cxx_std }}"
-          mkdir -p "_cov/cpp/${key}"
-          cp -f cov.json "_cov/cpp/${key}/cov.json" 2>/dev/null || true
-          cp -f coverage.xml "_cov/cpp/${key}/coverage.xml" 2>/dev/null || true
-
-      - name: Upload coverage artifacts (unique)
-        if: always()
-        continue-on-error: true
-        uses: actions/upload-artifact@v4
+        uses: ./.github/actions/cpp-coverage-artifact
         with:
-          name: cpp-cov-linux-${{ env.COMPILER_KEY }}-cxx${{ matrix.cxx_std }}
-          path: _cov
-          retention-days: 7
-          if-no-files-found: warn
+          os: linux
+          compiler: ${{ env.COMPILER_LABEL }}
+          compiler-key: ${{ env.COMPILER_KEY }}
+          cxx-std: ${{ matrix.cxx_std }}
+          artifact-name: cpp-cov-linux-${{ env.COMPILER_KEY }}-cxx${{ matrix.cxx_std }}
 
       - name: Vet C++
         if: ${{ matrix.compiler == 'gcc' && matrix.cxx_std == '23' }}
-        continue-on-error: true
         run: ./dev vet-cpp
 
       - name: Guard C++
         if: ${{ matrix.compiler == 'gcc' && matrix.cxx_std == '23' }}
-        continue-on-error: true
         run: ./dev guard-cpp
 
-      - name: install-cpp
+      - name: install-cpp and verify-install-cpp
         env:
           PREFIX: ${{ github.workspace }}/artifacts/cpp
-        run: ./dev install-cpp
+        run: |
+          ./dev install-cpp
+          ./dev verify-install cpp
 
-      - name: verify-install-cpp
-        env:
-          PREFIX: ${{ github.workspace }}/artifacts/cpp
-        run: ./dev verify-install cpp
-
-      - name: uninstall-cpp
-        env:
-          PREFIX: ${{ github.workspace }}/artifacts/cpp
-        run: ./dev uninstall-cpp
-
-      - name: verify-uninstall-cpp (expect failure)
+      - name: uninstall-cpp and verify-uninstall-cpp
         env:
           PREFIX: ${{ github.workspace }}/artifacts/cpp
           VERIFY_REQUIRE_INSTALL: "1"
         run: |
+          ./dev uninstall-cpp
           set +e
           ./dev verify-install cpp
           status=$?
+          set -e
           if [ $status -eq 0 ]; then
             echo "verify-install succeeded after uninstall; expected failure"
             exit 1
           fi
-
-      - name: Mark job failed if core steps failed
-        if: ${{ steps.setup_cpp.outcome == 'failure' || steps.build_cpp.outcome == 'failure' || steps.coverage_cpp.outcome == 'failure' }}
-        run: exit 1
 
   macos:
     name: macOS / ${{ matrix.compiler == 'clang' && 'clang++' || 'g++' }} / C++${{ matrix.cxx_std }}
@@ -259,12 +217,10 @@ jobs:
           fetch-depth: 0
 
       - name: Init submodules (sparse Boost)
-        continue-on-error: true
         run: |
           python3 -c "import sys;from devtool.commands.common import base_env;from devtool.commands.ops import cpp as cpp_ops;sys.exit(cpp_ops.git_submodules(base_env()) or 0)"
 
       - name: Install toolchain
-        continue-on-error: true
         run: |
           brew update
           brew install cmake llvm ninja gcovr lcov mpfr gmp gcc
@@ -272,17 +228,14 @@ jobs:
 
       - name: Setup C++
         id: setup_cpp
-        continue-on-error: true
         run: ./dev setup-cpp --config Debug
 
       - name: Build C++
         id: build_cpp
-        continue-on-error: true
         run: ./dev build-cpp --config Debug
 
       - name: Coverage C++
         id: coverage_cpp
-        continue-on-error: true
         run: ./dev coverage-cpp
 
       - name: Export coverage.xml (never fail)
@@ -316,72 +269,38 @@ jobs:
               > coverage.xml
           fi
 
-      - name: Extract cov.json (never fail)
+      - name: Collect and upload coverage artifacts
         if: always()
         continue-on-error: true
-        run: |
-          set +e
-          python3 tools/ci/extract_coverage_cpp.py \
-            --os macos \
-            --compiler "${COMPILER_LABEL}" \
-            --cxx-std ${{ matrix.cxx_std }} \
-            --out cov.json || true
-
-          if [ ! -f cov.json ]; then
-            python3 -c "import json,os;obj={'os':'macos','compiler':os.getenv('COMPILER_LABEL','unknown'),'cxx_std':int('${{ matrix.cxx_std }}'),'line_pct':0.0,'source':'placeholder','sha':os.getenv('GITHUB_SHA',''),'run_id':os.getenv('GITHUB_RUN_ID',''),'status':'placeholder'};json.dump(obj,open('cov.json','w',encoding='utf-8'),ensure_ascii=False,indent=2)"
-          fi
-
-      - name: Stash coverage files (unique path)
-        if: always()
-        continue-on-error: true
-        run: |
-          set +e
-          key="macos-${COMPILER_KEY}-cxx${{ matrix.cxx_std }}"
-          mkdir -p "_cov/cpp/${key}"
-          cp -f cov.json "_cov/cpp/${key}/cov.json" 2>/dev/null || true
-          cp -f coverage.xml "_cov/cpp/${key}/coverage.xml" 2>/dev/null || true
-
-      - name: Upload coverage artifacts (unique)
-        if: always()
-        continue-on-error: true
-        uses: actions/upload-artifact@v4
+        uses: ./.github/actions/cpp-coverage-artifact
         with:
-          name: cpp-cov-macos-${{ env.COMPILER_KEY }}-cxx${{ matrix.cxx_std }}
-          path: _cov
-          retention-days: 7
-          if-no-files-found: warn
+          os: macos
+          compiler: ${{ env.COMPILER_LABEL }}
+          compiler-key: ${{ env.COMPILER_KEY }}
+          cxx-std: ${{ matrix.cxx_std }}
+          artifact-name: cpp-cov-macos-${{ env.COMPILER_KEY }}-cxx${{ matrix.cxx_std }}
 
-      - name: install-cpp
+      - name: install-cpp and verify-install-cpp
         env:
           PREFIX: ${{ github.workspace }}/artifacts/cpp
-        run: ./dev install-cpp
+        run: |
+          ./dev install-cpp
+          ./dev verify-install cpp
 
-      - name: verify-install-cpp
-        env:
-          PREFIX: ${{ github.workspace }}/artifacts/cpp
-        run: ./dev verify-install cpp
-
-      - name: uninstall-cpp
-        env:
-          PREFIX: ${{ github.workspace }}/artifacts/cpp
-        run: ./dev uninstall-cpp
-
-      - name: verify-uninstall-cpp (expect failure)
+      - name: uninstall-cpp and verify-uninstall-cpp
         env:
           PREFIX: ${{ github.workspace }}/artifacts/cpp
           VERIFY_REQUIRE_INSTALL: "1"
         run: |
+          ./dev uninstall-cpp
           set +e
           ./dev verify-install cpp
           status=$?
+          set -e
           if [ $status -eq 0 ]; then
             echo "verify-install succeeded after uninstall; expected failure"
             exit 1
           fi
-
-      - name: Mark job failed if core steps failed
-        if: ${{ steps.setup_cpp.outcome == 'failure' || steps.build_cpp.outcome == 'failure' || steps.coverage_cpp.outcome == 'failure' }}
-        run: exit 1
 
   windows:
     name: Windows / MSVC / C++${{ matrix.cxx_std }}
@@ -395,8 +314,10 @@ jobs:
       PYTHONPATH: ${{ github.workspace }};${{ github.workspace }}/devops
       PYTHONUTF8: "1"
       PYTHONIOENCODING: "utf-8"
-      CMAKE_GENERATOR: "Visual Studio 17 2022"
+      CMAKE_GENERATOR: Ninja
       CMAKE_BUILD_PARALLEL_LEVEL: 4
+      CC: cl
+      CXX: cl
       CXX_STD: ${{ matrix.cxx_std }}
     defaults:
       run:
@@ -409,93 +330,67 @@ jobs:
           submodules: false
           fetch-depth: 0
 
+      - name: Setup MSVC developer command prompt
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Check Ninja
+        run: ninja --version
+
       - name: Init submodules (sparse Boost)
         id: init_submodules
-        continue-on-error: true
         run: python -c "import sys;from devtool.commands.common import base_env;from devtool.commands.ops import cpp as cpp_ops;sys.exit(cpp_ops.git_submodules(base_env()) or 0)"
 
       - name: Setup C++
         id: setup_cpp
-        continue-on-error: true
         run: python -m devtool.cli setup-cpp --config Debug
-
-      - name: Build export C++ layer
-        id: build_export
-        continue-on-error: true
-        run: python -m devtool.cli build-export-cpp --config Debug
 
       - name: Build C++
         id: build_cpp
-        continue-on-error: true
-        run: python -m devtool.cli build-cpp --config Debug
+        run: |
+          python -m devtool.cli build-export-cpp --config Debug
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python -m devtool.cli build-cpp --config Debug
 
       - name: Coverage C++
         id: coverage_cpp
-        continue-on-error: true
         run: python -m devtool.cli coverage-cpp
 
-      - name: Extract cov.json (never fail)
+      - name: Collect and upload coverage artifacts
         if: always()
         continue-on-error: true
-        run: |
-          python tools/ci/extract_coverage_cpp.py `
-            --os windows `
-            --compiler msvc `
-            --cxx-std ${{ matrix.cxx_std }} `
-            --out cov.json
-
-          if (-not (Test-Path cov.json)) {
-            python -c "import json,os; obj={'os':'windows','compiler':'msvc','cxx_std':int(os.getenv('CXX_STD','0') or 0),'line_pct':0.0,'source':'placeholder','sha':os.getenv('GITHUB_SHA',''),'run_id':os.getenv('GITHUB_RUN_ID',''),'status':'placeholder'}; json.dump(obj,open('cov.json','w',encoding='utf-8'),ensure_ascii=False,indent=2)"
-          }
-
-      - name: Stash coverage files (unique path)
-        if: always()
-        continue-on-error: true
-        run: |
-          $key = "windows-msvc-cxx${{ matrix.cxx_std }}"
-          New-Item -ItemType Directory -Force -Path "_cov/cpp/$key" | Out-Null
-          Copy-Item -Force cov.json "_cov/cpp/$key/cov.json" -ErrorAction SilentlyContinue
-
-      - name: Upload coverage artifacts (unique)
-        if: always()
-        continue-on-error: true
-        uses: actions/upload-artifact@v4
+        uses: ./.github/actions/cpp-coverage-artifact
         with:
-          name: cpp-cov-windows-msvc-cxx${{ matrix.cxx_std }}
-          path: _cov
-          retention-days: 7
-          if-no-files-found: warn
+          os: windows
+          compiler: msvc
+          compiler-key: msvc
+          cxx-std: ${{ matrix.cxx_std }}
+          artifact-name: cpp-cov-windows-msvc-cxx${{ matrix.cxx_std }}
 
-      - name: install-cpp
+      - name: install-cpp and verify-install-cpp
         env:
           PREFIX: ${{ github.workspace }}/artifacts/cpp
           CMAKE_INSTALL_CONFIG_NAME: Debug
-        run: python -m devtool.cli install-cpp
-
-      - name: verify-install-cpp
-        env:
-          PREFIX: ${{ github.workspace }}/artifacts/cpp
-        run: python -m devtool.cli verify-install cpp
-
-      - name: uninstall-cpp
-        env:
-          PREFIX: ${{ github.workspace }}/artifacts/cpp
-          CMAKE_INSTALL_CONFIG_NAME: Debug
-        run: python -m devtool.cli uninstall-cpp
-
-      - name: verify-uninstall-cpp (expect failure)
-        id: verify_uninstall_cpp
-        continue-on-error: true
-        env:
-          PREFIX: ${{ github.workspace }}/artifacts/cpp
-          VERIFY_REQUIRE_INSTALL: "1"
-        run: python -m devtool.cli verify-install cpp
-
-      - name: assert-verify-uninstall-cpp failed
-        if: ${{ steps.verify_uninstall_cpp.outcome != 'failure' }}
         run: |
-          throw "verify-install succeeded after uninstall; expected failure"
+          python -m devtool.cli install-cpp
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python -m devtool.cli verify-install cpp
 
-      - name: Mark job failed if core steps failed
-        if: ${{ steps.setup_cpp.outcome == 'failure' || steps.build_cpp.outcome == 'failure' || steps.coverage_cpp.outcome == 'failure' }}
-        run: exit 1
+      - name: uninstall-cpp and verify-uninstall-cpp
+        env:
+          PREFIX: ${{ github.workspace }}/artifacts/cpp
+          CMAKE_INSTALL_CONFIG_NAME: Debug
+          VERIFY_REQUIRE_INSTALL: "1"
+        run: |
+          python -m devtool.cli uninstall-cpp
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $oldNativeCommandPreference = $PSNativeCommandUseErrorActionPreference
+          $PSNativeCommandUseErrorActionPreference = $false
+          python -m devtool.cli verify-install cpp
+          $verifyStatus = $LASTEXITCODE
+          $PSNativeCommandUseErrorActionPreference = $oldNativeCommandPreference
+          if ($verifyStatus -eq 0) {
+            throw "verify-install succeeded after uninstall; expected failure"
+          }
+          exit 0
