@@ -347,7 +347,7 @@ def build_submodules(
     wanted = _wanted_list(env, paths)
     hiredis_install = _hiredis_install_dir()
     extra_cmake_args = {
-        "cpp/lib/cJSON": ["-DENABLE_CUSTOM_COMPILER_FLAGS=OFF"],
+        "cpp/lib/cJSON": ["-DENABLE_CUSTOM_COMPILER_FLAGS=OFF", "-DCMAKE_POLICY_VERSION_MINIMUM=3.5"],
         "cpp/lib/hiredis": [
             "-DDISABLE_TESTS=ON",
             f"-DCMAKE_INSTALL_PREFIX={hiredis_install}",
@@ -840,7 +840,24 @@ def bench(env: Mapping[str, str], *, file_pattern: str | None, filter_expr: str 
     env_np = strip_proxies(env)
     if not CPP_BUILD_DIR.exists():
         raise SystemExit("[info] 未发现 cpp/build，请先 ./dev build cpp")
+    try:
+        run(
+            [
+                env_np["CMAKE"],
+                "--build",
+                str(CPP_BUILD_DIR),
+                "--target",
+                "m1104_benchmarks",
+                "--parallel",
+                env_np["JOBS"],
+            ],
+            env=env_np,
+        )
+    except subprocess.CalledProcessError:
+        raise SystemExit("[error] C++ benchmark target is not available or failed to build")
     binaries = [p for p in (CPP_BUILD_DIR / "bin").glob("bench_*") if p.is_file()]
+    if not binaries:
+        raise SystemExit("[error] no C++ benchmark binaries were built")
     ensure_dir(Path(CPP_BENCH_ARTIFACT_DIR) / "plots")
     for exe in binaries:
         if file_pattern and file_pattern not in exe.name:
