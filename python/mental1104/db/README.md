@@ -1,35 +1,35 @@
-# DB Framework
+# 数据库框架
 
-This package provides a unified database access layer (SQLAlchemy-first) with:
+此包提供统一的数据库访问层，优先面向 SQLAlchemy，并包含：
 
-- Declarative ORM base (`Base`) and mixins (`TimestampMixin`, `SoftDeleteMixin`).
-- Engine/session registry with per-process caching.
-- ContextVar-driven session injection (no session params required by default).
-- Explicit read/write scopes: `session_scope(DBKind.X)` for read, `tx_scope(DBKind.X)` for write.
-- Async variants: `async_session_scope(DBKind.X)` / `async_tx_scope(DBKind.X)`.
-- Convenience aliases: `pg_session_scope()`, `ck_tx_scope()`, etc.
+- 声明式 ORM 基类 (`Base`) 和 mixin (`TimestampMixin`, `SoftDeleteMixin`)。
+- 带进程内缓存的引擎 / 会话注册表。
+- 基于 ContextVar 的会话注入，默认无需显式传入 session 参数。
+- 明确的读 / 写作用域：读操作使用 `session_scope(DBKind.X)`，写操作使用 `tx_scope(DBKind.X)`。
+- 异步变体：`async_session_scope(DBKind.X)` / `async_tx_scope(DBKind.X)`。
+- 便捷别名：`pg_session_scope()`、`ck_tx_scope()` 等。
 
-## Scopes (hard rule)
+## 作用域规则
 
-- Pure read: `session_scope(DBKind.X)` or `pg_session_scope()`
-- Write or mixed read/write: `tx_scope(DBKind.X)` or `pg_tx_scope()`
-- ClickHouse (clickhouse-connect): `tx_scope()` is a no-op wrapper; no ACID.
+- 纯读取：使用 `session_scope(DBKind.X)` 或 `pg_session_scope()`。
+- 写入或读写混合：使用 `tx_scope(DBKind.X)` 或 `pg_tx_scope()`。
+- ClickHouse（clickhouse-connect）：`tx_scope()` 是无操作包装，不提供 ACID。
 
-## Registry
+## 注册表
 
-Register once per process, then call scopes by kind + db name.
+每个进程注册一次，然后按数据库类型和数据库名称调用作用域。
 
 ```
 register_db(DBKind.POSTGRES, dsn="postgresql+psycopg://...", db_name="main_pg")
 ```
 
-Optional: register + create tables in one call (idempotent create_all):
+可选：一次调用完成注册和建表（`create_all` 幂等）：
 
 ```
 register_db_and_create(DBKind.POSTGRES, dsn="postgresql+psycopg://...", db_name="main_pg")
 ```
 
-ClickHouse (non-SQLAlchemy, clickhouse-connect):
+ClickHouse（非 SQLAlchemy，使用 clickhouse-connect）：
 
 ```
 register_db(DBKind.CLICKHOUSE, dsn="clickhouse://...", db_name="analytics_ch", options={"driver": "connect"})
@@ -37,7 +37,7 @@ with session_scope(DBKind.CLICKHOUSE, "analytics_ch") as ch:
     rows = ch.select("SELECT 1")
 ```
 
-ClickHouse distributed defaults (auto inject global IN/JOIN settings):
+ClickHouse 分布式默认配置（自动注入 global IN/JOIN 设置）：
 
 ```
 from mental1104.db import ClickHouseProfile
@@ -52,7 +52,7 @@ register_db(
 
 ## Redis
 
-Register once per process, then use redis scopes:
+每个进程注册一次，然后使用 Redis 作用域：
 
 ```
 from mental1104.db import register_redis, redis_session_scope, redis_params_from_env
@@ -62,7 +62,7 @@ with redis_session_scope("cache") as client:
     client.set("k", "v")
 ```
 
-Redis cluster:
+Redis 集群：
 
 ```
 from mental1104.db import RedisMode
@@ -75,7 +75,7 @@ register_redis(
 )
 ```
 
-Redis sentinel:
+Redis sentinel：
 
 ```
 register_redis(
@@ -86,7 +86,7 @@ register_redis(
 )
 ```
 
-## MongoDB (sync)
+## MongoDB（同步）
 
 ```
 from mental1104.db import mongo_params_from_env, register_mongo, mongo_session_scope
@@ -98,7 +98,7 @@ with mongo_session_scope() as mongo:
     print(list(coll.find({"name": "alice"})))
 ```
 
-## MongoDB (async)
+## MongoDB（异步）
 
 ```
 from mental1104.db import mongo_params_from_env, register_mongo, async_mongo_session_scope
@@ -111,7 +111,6 @@ async with async_mongo_session_scope() as mongo:
     print(rows)
 ```
 
-## Migration Hook
+## 迁移钩子
 
-`set_migration_handler()` + `run_migrations()` define an integration point
-for Alembic or other migration tools.
+`set_migration_handler()` + `run_migrations()` 定义了 Alembic 或其他迁移工具的集成点。

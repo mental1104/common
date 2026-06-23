@@ -1,66 +1,66 @@
-# C++ utilities
+# C++ 工具库
 
-Public C++ headers live under `cpp/include/mental1104`. Include examples below assume the repository CMake install or an include path that contains `cpp/include`.
+公共 C++ 头文件位于 `cpp/include/mental1104`。下面的包含示例假设已经通过仓库 CMake 安装，或包含路径中已有 `cpp/include`。
 
-## Maintenance rule
+## 维护规则
 
-When adding a public function, class, struct, enum, alias, macro, reusable method, or public header, update this README with its category, include path, purpose, minimal call, and notes. If the API surface is public but not clearly stable, mark it `Needs review`.
+新增公共函数、类、结构体、枚举、别名、宏、可复用方法或公共头文件时，必须更新此 README，写明类别、包含路径、用途、最小调用示例和备注。如果 API 已公开但稳定性尚不明确，请标记为 `待复核`。
 
-## Categories
+## 分类
 
-- Containers and strings
-- Cache wrappers
+- 容器与字符串
+- 缓存包装器
 - JSON
-- Logging
-- C API compatibility
-- Resource management
-- Random keys
-- Semantic base types
-- Timing
-- Concurrency
-- Network and services
-- Debugging
-- Numeric calculators
+- 日志
+- C API 兼容
+- 资源管理
+- 随机键
+- 语义基类型
+- 计时
+- 并发
+- 网络与服务
+- 调试
+- 数值计算器
 
-## Usage index
+## 用法索引
 
-| Category | Name | Type | Include | Purpose |
+| 类别 | 名称 | 类型 | 包含 | 用途 |
 |---|---|---|---|---|
-| Containers and strings | `contains` | function template | `mental1104/util.h` | Check membership in STL containers and map keys. |
-| Containers and strings | `to_lower_copy` | function | `mental1104/util.h` | Return a lowercase `std::string` copy. |
-| Containers and strings | `ExponentialBackoff` | class | `mental1104/util.h` | Step through capped retry delays. |
-| Cache wrappers | `LRUCache`, `make_lru_cache`, `make_cache` | class/functions | `mental1104/core/cache.h` | Wrap a callable with tuple-keyed LRU/unbounded caching. |
-| Cache wrappers | `LFUCache`, `make_lfu_cache` | class/function | `mental1104/core/cache.h` | Wrap a callable with tuple-keyed LFU caching. |
-| JSON | `JsonParser`, `parse_json`, `ParseResult`, `JsonDoc`, `JsonValueView` | enum/functions/classes | `mental1104/json.h` | Parse JSON through cJSON or RapidJSON and read values through a backend-neutral view. |
-| Logging | `LogLevel`, `get_log_level`, `set_log_level`, `log`, `logf`, `M1104_LOG_*` | enum/functions/macros | `mental1104/log.h` | Emit leveled logs with stdout/stderr or spdlog when available. |
-| C API compatibility | `COMMON_EXTERN_C_BEGIN`, `COMMON_EXTERN_C_END`, `COMMON_EXTERN_C` | macros | `mental1104/common/c_api_compat.h` | Wrap C declarations so the same header can be included from C and C++. |
-| Resource management | `unique_fd` | class | `mental1104/c_api_raii.h` | Own a POSIX file descriptor. |
-| Resource management | `unique_file`, `open_file` | class/function | `mental1104/c_api_raii.h` | Own a C `FILE*`. |
-| Resource management | `scope_exit`, `make_scope_exit` | class/function | `mental1104/c_api_raii.h` | Run cleanup code at scope exit. |
-| Random keys | `random_hex`, `key_with_random_suffix` | function templates | `mental1104/random.h` | Generate random hex strings and prefixed keys. |
-| Semantic base types | `NonCopyable`, `Movable`, `Immovable`, `MENTAL1104_MOVE_ONLY`, `is_move_only_v` | structs/macro/trait | `mental1104/semantic.h` | Declare copy/move semantics for resource-owning types. |
-| Timing | `Timed`, `make_timed` | class template/function | `mental1104/timed.h` | Wrap function pointers with simple entry/exit timing output. |
-| Concurrency | `IExecutor` | interface class | `mental1104/concurrency/executor.h` | Common fire-and-forget executor interface. |
-| Concurrency | `sleep_for`, `sleep_for_ms`, `ThreadPool` | functions/class | `mental1104/concurrency/thread/thread_util.h` | Sleep helpers and a future-returning thread pool. |
-| Concurrency | `ThreadPoolExecutor`, `BoostAsioExecutor` | classes | `mental1104/concurrency/thread/*.h` | `IExecutor` adapters backed by local or Boost.Asio thread pools. |
-| Concurrency | `Task`, `ICoroutineScheduler`, `BasicCoroutineScheduler`, `MnCoroutinePoolT`, `MnCoroutinePool`, `BoostMnCoroutinePool` | classes/aliases | `mental1104/concurrency/coroutine/*.h`, `mental1104/concurrency/mn/*.h` | C++20 coroutine scheduling over executor adapters. |
-| Containers | `BasicBloomFilter`, `BloomFilter`, `CoarseLockBloomFilter`, `CoarseLockStringBloomFilter` | classes/aliases | `mental1104/bloom_filter.h` | Bloom filter variants for string or custom key membership checks. |
-| Network and services | `RedisLock`, `create_redis_from_env` | class/function | `mental1104/redis_lock.h` | Redis-backed lock helper. |
-| Network and services | `EpollServer` | class | `mental1104/net/epoll_server.h` | Register file descriptors and dispatch event callbacks. |
-| Debugging | `st_options_t`, `st_init`, `st_shutdown`, `st_dump_current_thread` | C API | `mental1104/debug/stacktrace.h` | Initialize and dump native stacktrace output. |
-| Numeric calculators | `high_precision`, `InfiniteDecimalCalculator`, `ECalculator`, `FixedPointCalculator`, `PiCalculator` | alias/classes | `mental1104/high_precision_decimal.h` | Produce decimal strings from high-precision calculators. |
+| 容器与字符串 | `contains` | 函数模板 | `mental1104/util.h` | 检查 STL 容器成员关系和 map 键是否存在。 |
+| 容器与字符串 | `to_lower_copy` | 函数 | `mental1104/util.h` | 返回小写化后的 `std::string` 副本。 |
+| 容器与字符串 | `ExponentialBackoff` | 类 | `mental1104/util.h` | 按上限推进重试延迟。 |
+| 缓存包装器 | `LRUCache`, `make_lru_cache`, `make_cache` | 类 / 函数 | `mental1104/core/cache.h` | 用 tuple 键 LRU 或无界缓存包装可调用对象。 |
+| 缓存包装器 | `LFUCache`, `make_lfu_cache` | 类 / 函数 | `mental1104/core/cache.h` | 用 tuple 键 LFU 缓存包装可调用对象。 |
+| JSON | `JsonParser`, `parse_json`, `ParseResult`, `JsonDoc`, `JsonValueView` | 枚举 / 函数 / 类 | `mental1104/json.h` | 通过 cJSON 或 RapidJSON 解析 JSON，并通过后端无关视图读取值。 |
+| 日志 | `LogLevel`, `get_log_level`, `set_log_level`, `log`, `logf`, `M1104_LOG_*` | 枚举 / 函数 / 宏 | `mental1104/log.h` | 通过 stdout/stderr 输出分级日志，可用时使用 spdlog。 |
+| C API 兼容 | `COMMON_EXTERN_C_BEGIN`, `COMMON_EXTERN_C_END`, `COMMON_EXTERN_C` | 宏 | `mental1104/common/c_api_compat.h` | 包装 C 声明，使同一头文件可被 C 和 C++ 包含。 |
+| 资源管理 | `unique_fd` | 类 | `mental1104/c_api_raii.h` | 持有 POSIX 文件描述符。 |
+| 资源管理 | `unique_file`, `open_file` | 类 / 函数 | `mental1104/c_api_raii.h` | 持有 C `FILE*`。 |
+| 资源管理 | `scope_exit`, `make_scope_exit` | 类 / 函数 | `mental1104/c_api_raii.h` | 在作用域退出时执行清理代码。 |
+| 随机键 | `random_hex`, `key_with_random_suffix` | 函数模板 | `mental1104/random.h` | 生成随机十六进制字符串和带前缀的键。 |
+| 语义基类型 | `NonCopyable`, `Movable`, `Immovable`, `MENTAL1104_MOVE_ONLY`, `is_move_only_v` | 结构体 / 宏 / trait | `mental1104/semantic.h` | 为持有资源的类型声明复制 / 移动语义。 |
+| 计时 | `Timed`, `make_timed` | 类模板 / 函数 | `mental1104/timed.h` | 包装函数指针，并在调用前后输出简单计时信息。 |
+| 并发 | `IExecutor` | 接口类 | `mental1104/concurrency/executor.h` | 通用 fire-and-forget 执行器接口。 |
+| 并发 | `sleep_for`, `sleep_for_ms`, `ThreadPool` | 函数 / 类 | `mental1104/concurrency/thread/thread_util.h` | 睡眠辅助函数和返回 future 的线程池。 |
+| 并发 | `ThreadPoolExecutor`, `BoostAsioExecutor` | 类 | `mental1104/concurrency/thread/*.h` | 基于本地线程池或 Boost.Asio 线程池的 `IExecutor` 适配器。 |
+| 并发 | `Task`, `ICoroutineScheduler`, `BasicCoroutineScheduler`, `MnCoroutinePoolT`, `MnCoroutinePool`, `BoostMnCoroutinePool` | 类 / 别名 | `mental1104/concurrency/coroutine/*.h`, `mental1104/concurrency/mn/*.h` | 在执行器适配器上调度 C++20 coroutine。 |
+| 容器 | `BasicBloomFilter`, `BloomFilter`, `CoarseLockBloomFilter`, `CoarseLockStringBloomFilter` | 类 / 别名 | `mental1104/bloom_filter.h` | 用于字符串或自定义键成员判断的 Bloom filter 变体。 |
+| 网络与服务 | `RedisLock`, `create_redis_from_env` | 类 / 函数 | `mental1104/redis_lock.h` | 基于 Redis 的锁辅助工具。 |
+| 网络与服务 | `EpollServer` | 类 | `mental1104/net/epoll_server.h` | 注册文件描述符并分发事件回调。 |
+| 调试 | `st_options_t`, `st_init`, `st_shutdown`, `st_dump_current_thread` | C API | `mental1104/debug/stacktrace.h` | 初始化并输出原生 stacktrace。 |
+| 数值计算器 | `high_precision`, `InfiniteDecimalCalculator`, `ECalculator`, `FixedPointCalculator`, `PiCalculator` | 别名 / 类 | `mental1104/high_precision_decimal.h` | 从高精度计算器生成十进制字符串。 |
 
-## Details
+## 详情
 
 ### `contains`, `to_lower_copy`, `ExponentialBackoff`
 
-**Category:** Containers and strings  
-**Type:** functions and class  
-**Defined in:** `cpp/include/mental1104/util.h`  
-**Include:** `#include "mental1104/util.h"`  
-**Purpose:** General membership, lowercase conversion, and retry delay stepping.
+- **类别：** 容器与字符串
+- **类型：** 函数和类
+- **定义位置：** `cpp/include/mental1104/util.h`
+- **包含：** `#include "mental1104/util.h"`
+- **用途：** 提供通用成员判断、小写转换和重试延迟推进。
 
-**Basic usage:**
+**基础用法：**
 
 ```cpp
 #include "mental1104/util.h"
@@ -83,19 +83,19 @@ int main() {
 }
 ```
 
-**Notes:**
+**备注：**
 
-- For maps, `contains` checks key existence.
+- 对 map 使用时，`contains` 检查键是否存在。
 
-### `LRUCache`, `LFUCache`, and cache factories
+### `LRUCache`、`LFUCache` 和缓存工厂
 
-**Category:** Cache wrappers  
-**Type:** class templates and factory functions  
-**Defined in:** `cpp/include/mental1104/core/cache.h`  
-**Include:** `#include "mental1104/core/cache.h"`  
-**Purpose:** Memoize callable results by argument tuple.
+- **类别：** 缓存包装器
+- **类型：** 类模板和工厂函数
+- **定义位置：** `cpp/include/mental1104/core/cache.h`
+- **包含：** `#include "mental1104/core/cache.h"`
+- **用途：** 按参数 tuple 缓存可调用对象的结果。
 
-**Basic usage:**
+**基础用法：**
 
 ```cpp
 #include "mental1104/core/cache.h"
@@ -112,19 +112,19 @@ int main() {
 }
 ```
 
-**Notes:**
+**备注：**
 
-- Template parameters are return type followed by argument types.
+- 模板参数顺序为返回类型，然后是参数类型。
 
-### JSON parsing
+### JSON 解析
 
-**Category:** JSON  
-**Type:** enum, functions, classes  
-**Defined in:** `cpp/include/mental1104/json.h`  
-**Include:** `#include "mental1104/json.h"`  
-**Purpose:** Parse JSON and read values without exposing backend-specific objects.
+- **类别：** JSON
+- **类型：** 枚举、函数、类
+- **定义位置：** `cpp/include/mental1104/json.h`
+- **包含：** `#include "mental1104/json.h"`
+- **用途：** 解析 JSON 并读取值，同时不暴露后端专有对象。
 
-**Basic usage:**
+**基础用法：**
 
 ```cpp
 #include "mental1104/json.h"
@@ -144,19 +144,19 @@ int main() {
 }
 ```
 
-**Notes:**
+**备注：**
 
-- Requires cJSON and RapidJSON headers/libraries as configured by the C++ build.
+- 需要 C++ 构建中配置的 cJSON 和 RapidJSON 头文件 / 库。
 
-### Logging
+### 日志
 
-**Category:** Logging  
-**Type:** enum, functions, macros  
-**Defined in:** `cpp/include/mental1104/log.h`  
-**Include:** `#include "mental1104/log.h"`  
-**Purpose:** Emit leveled messages and formatted messages.
+- **类别：** 日志
+- **类型：** 枚举、函数、宏
+- **定义位置：** `cpp/include/mental1104/log.h`
+- **包含：** `#include "mental1104/log.h"`
+- **用途：** 输出分级消息和格式化消息。
 
-**Basic usage:**
+**基础用法：**
 
 ```cpp
 #include "mental1104/log.h"
@@ -171,19 +171,19 @@ int main() {
 }
 ```
 
-**Notes:**
+**备注：**
 
-- `MENTAL1104_LOG_LEVEL` can set the initial process-level log level.
+- `MENTAL1104_LOG_LEVEL` 可设置进程级初始日志级别。
 
-### C API compatibility macros
+### C API 兼容宏
 
-**Category:** C API compatibility  
-**Type:** macros  
-**Defined in:** `cpp/include/mental1104/common/c_api_compat.h`  
-**Include:** `#include "mental1104/common/c_api_compat.h"`  
-**Purpose:** Share C declarations with C++ callers without repeating `extern "C"` guards.
+- **类别：** C API 兼容
+- **类型：** 宏
+- **定义位置：** `cpp/include/mental1104/common/c_api_compat.h`
+- **包含：** `#include "mental1104/common/c_api_compat.h"`
+- **用途：** 在不重复编写 `extern "C"` 保护的情况下，让 C 声明可被 C++ 调用方共享。
 
-**Basic usage:**
+**基础用法：**
 
 ```c
 #include "mental1104/common/c_api_compat.h"
@@ -196,7 +196,7 @@ void common_reset(void);
 COMMON_EXTERN_C_END
 ```
 
-**Single declaration usage:**
+**单个声明用法：**
 
 ```c
 #include "mental1104/common/c_api_compat.h"
@@ -204,20 +204,20 @@ COMMON_EXTERN_C_END
 COMMON_EXTERN_C int common_add(int lhs, int rhs);
 ```
 
-**Notes:**
+**备注：**
 
-- Use these macros only around C-compatible declarations.
-- Do not wrap C++ classes, templates, overloaded functions, or namespace-only APIs.
+- 这些宏只用于 C 兼容声明。
+- 不要用它们包装 C++ 类、模板、重载函数或仅存在于命名空间中的 API。
 
-### C API RAII wrappers
+### C API RAII 包装器
 
-**Category:** Resource management  
-**Type:** classes and factory function  
-**Defined in:** `cpp/include/mental1104/c_api_raii.h`  
-**Include:** `#include "mental1104/c_api_raii.h"`  
-**Purpose:** Own C file handles, POSIX descriptors, and scope cleanup callbacks.
+- **类别：** 资源管理
+- **类型：** 类和工厂函数
+- **定义位置：** `cpp/include/mental1104/c_api_raii.h`
+- **包含：** `#include "mental1104/c_api_raii.h"`
+- **用途：** 持有 C 文件句柄、POSIX 描述符和作用域清理回调。
 
-**Basic usage:**
+**基础用法：**
 
 ```cpp
 #include "mental1104/c_api_raii.h"
@@ -235,19 +235,19 @@ int main() {
 }
 ```
 
-**Notes:**
+**备注：**
 
-- `unique_fd` is only available on non-Windows platforms.
+- `unique_fd` 仅在非 Windows 平台可用。
 
-### Random keys
+### 随机键
 
-**Category:** Random keys  
-**Type:** function templates  
-**Defined in:** `cpp/include/mental1104/random.h`  
-**Include:** `#include "mental1104/random.h"`  
-**Purpose:** Build random suffixes for temporary keys and lock values.
+- **类别：** 随机键
+- **类型：** 函数模板
+- **定义位置：** `cpp/include/mental1104/random.h`
+- **包含：** `#include "mental1104/random.h"`
+- **用途：** 为临时键和锁值构建随机后缀。
 
-**Basic usage:**
+**基础用法：**
 
 ```cpp
 #include "mental1104/random.h"
@@ -259,15 +259,15 @@ int main() {
 }
 ```
 
-### Semantic base types
+### 语义基类型
 
-**Category:** Semantic base types  
-**Type:** structs, macro, trait  
-**Defined in:** `cpp/include/mental1104/semantic.h`  
-**Include:** `#include "mental1104/semantic.h"`  
-**Purpose:** Express copy/move constraints in public resource-owning types.
+- **类别：** 语义基类型
+- **类型：** 结构体、宏、trait
+- **定义位置：** `cpp/include/mental1104/semantic.h`
+- **包含：** `#include "mental1104/semantic.h"`
+- **用途：** 为持有资源的公共类型表达复制 / 移动约束。
 
-**Basic usage:**
+**基础用法：**
 
 ```cpp
 #include "mental1104/semantic.h"
@@ -281,19 +281,19 @@ public:
 static_assert(mental1104::is_move_only_v<Handle>, "Handle should be move-only");
 ```
 
-**Notes:**
+**备注：**
 
-- `is_move_only_v` requires C++17 inline variables.
+- `is_move_only_v` 需要 C++17 inline variables。
 
-### `Timed` and `make_timed`
+### `Timed` 和 `make_timed`
 
-**Category:** Timing  
-**Type:** class template and factory function  
-**Defined in:** `cpp/include/mental1104/timed.h`  
-**Include:** `#include "mental1104/timed.h"`  
-**Purpose:** Wrap a function pointer and print entry/exit timing around calls.
+- **类别：** 计时
+- **类型：** 类模板和工厂函数
+- **定义位置：** `cpp/include/mental1104/timed.h`
+- **包含：** `#include "mental1104/timed.h"`
+- **用途：** 包装函数指针，并在调用前后打印进入 / 退出计时。
 
-**Basic usage:**
+**基础用法：**
 
 ```cpp
 #include "mental1104/timed.h"
@@ -306,15 +306,15 @@ int main() {
 }
 ```
 
-### Executor and thread helpers
+### 执行器和线程辅助工具
 
-**Category:** Concurrency  
-**Type:** interface, classes, functions  
-**Defined in:** `cpp/include/mental1104/concurrency/...`  
-**Include:** `#include "mental1104/concurrency/thread/thread_pool_executor.h"`  
-**Purpose:** Run fire-and-forget tasks or future-returning work on thread pools.
+- **类别：** 并发
+- **类型：** 接口、类、函数
+- **定义位置：** `cpp/include/mental1104/concurrency/...`
+- **包含：** `#include "mental1104/concurrency/thread/thread_pool_executor.h"`
+- **用途：** 在线程池上运行 fire-and-forget 任务或返回 future 的工作。
 
-**Basic usage:**
+**基础用法：**
 
 ```cpp
 #include "mental1104/concurrency/thread/thread_pool_executor.h"
@@ -332,19 +332,19 @@ int main() {
 }
 ```
 
-**Notes:**
+**备注：**
 
-- `BoostAsioExecutor` requires Boost.Asio.
+- `BoostAsioExecutor` 需要 Boost.Asio。
 
-### C++20 coroutine helpers
+### C++20 coroutine 辅助工具
 
-**Category:** Concurrency  
-**Type:** classes and aliases  
-**Defined in:** `cpp/include/mental1104/concurrency/coroutine/*.h`, `cpp/include/mental1104/concurrency/mn/*.h`  
-**Include:** `#include "mental1104/concurrency/mn/mn_coroutine_pool.h"`  
-**Purpose:** Schedule repository `Task` coroutines over executor-backed pools.
+- **类别：** 并发
+- **类型：** 类和别名
+- **定义位置：** `cpp/include/mental1104/concurrency/coroutine/*.h`, `cpp/include/mental1104/concurrency/mn/*.h`
+- **包含：** `#include "mental1104/concurrency/mn/mn_coroutine_pool.h"`
+- **用途：** 在执行器支撑的池上调度仓库 `Task` coroutine。
 
-**Basic usage:**
+**基础用法：**
 
 ```cpp
 #include "mental1104/concurrency/mn/mn_coroutine_pool.h"
@@ -360,19 +360,19 @@ int main() {
 #endif
 ```
 
-**Notes:**
+**备注：**
 
-- C++20 is required. `AsyncSimpleCoroutineScheduler` aliases require `M1104_HAS_ASYNC_SIMPLE`.
+- 需要 C++20。`AsyncSimpleCoroutineScheduler` 别名需要 `M1104_HAS_ASYNC_SIMPLE`。
 
-### Bloom filters
+### Bloom filter
 
-**Category:** Containers  
-**Type:** class templates and aliases  
-**Defined in:** `cpp/include/mental1104/bloom_filter.h`  
-**Include:** `#include "mental1104/bloom_filter.h"`  
-**Purpose:** Add and test possibly-present keys with optional coarse-grained locking.
+- **类别：** 容器
+- **类型：** 类模板和别名
+- **定义位置：** `cpp/include/mental1104/bloom_filter.h`
+- **包含：** `#include "mental1104/bloom_filter.h"`
+- **用途：** 添加并测试可能存在的键，可选粗粒度锁保护。
 
-**Basic usage:**
+**基础用法：**
 
 ```cpp
 #include "mental1104/bloom_filter.h"
@@ -388,19 +388,19 @@ int main() {
 }
 ```
 
-**Notes:**
+**备注：**
 
-- A positive result means "may contain"; a negative result means absent.
+- 正结果表示“可能包含”；负结果表示一定不存在。
 
-### Redis lock
+### Redis 锁
 
-**Category:** Network and services  
-**Type:** class and function  
-**Defined in:** `cpp/include/mental1104/redis_lock.h`  
-**Include:** `#include "mental1104/redis_lock.h"`  
-**Purpose:** Acquire and release a Redis-backed lock.
+- **类别：** 网络与服务
+- **类型：** 类和函数
+- **定义位置：** `cpp/include/mental1104/redis_lock.h`
+- **包含：** `#include "mental1104/redis_lock.h"`
+- **用途：** 获取和释放基于 Redis 的锁。
 
-**Basic usage:**
+**基础用法：**
 
 ```cpp
 #include "mental1104/redis_lock.h"
@@ -417,20 +417,20 @@ int main() {
 }
 ```
 
-**Notes:**
+**备注：**
 
-- Requires Redis++ and `REDIS_HOST`/`REDIS_PORT`; `REDISCLI_AUTH` is optional.
-- Needs review: this header exposes `using namespace sw::redis;` and un-namespaced public symbols.
+- 需要 Redis++ 和 `REDIS_HOST`/`REDIS_PORT`；`REDISCLI_AUTH` 可选。
+- 待复核：此头文件暴露了 `using namespace sw::redis;` 和未放入命名空间的公共符号。
 
 ### `EpollServer`
 
-**Category:** Network and services  
-**Type:** class  
-**Defined in:** `cpp/include/mental1104/net/epoll_server.h`  
-**Include:** `#include "mental1104/net/epoll_server.h"`  
-**Purpose:** Register file descriptor callbacks and dispatch events.
+- **类别：** 网络与服务
+- **类型：** 类
+- **定义位置：** `cpp/include/mental1104/net/epoll_server.h`
+- **包含：** `#include "mental1104/net/epoll_server.h"`
+- **用途：** 注册文件描述符回调并分发事件。
 
-**Basic usage:**
+**基础用法：**
 
 ```cpp
 #include "mental1104/net/epoll_server.h"
@@ -446,19 +446,19 @@ int main() {
 }
 ```
 
-**Notes:**
+**备注：**
 
-- Needs review: platform behavior depends on the implementation file and available event API.
+- 待复核：平台行为取决于实现文件和可用事件 API。
 
 ### Stacktrace C API
 
-**Category:** Debugging  
-**Type:** C structs, enum, and functions  
-**Defined in:** `cpp/include/mental1104/debug/stacktrace.h`  
-**Include:** `#include "mental1104/debug/stacktrace.h"`  
-**Purpose:** Configure native stacktrace output and dump the current thread.
+- **类别：** 调试
+- **类型：** C 结构体、枚举和函数
+- **定义位置：** `cpp/include/mental1104/debug/stacktrace.h`
+- **包含：** `#include "mental1104/debug/stacktrace.h"`
+- **用途：** 配置原生 stacktrace 输出并转储当前线程。
 
-**Basic usage:**
+**基础用法：**
 
 ```cpp
 #include "mental1104/debug/stacktrace.h"
@@ -473,19 +473,19 @@ int main() {
 }
 ```
 
-**Notes:**
+**备注：**
 
-- Needs review: platform support depends on the linked stacktrace implementation.
+- 待复核：平台支持取决于链接的 stacktrace 实现。
 
-### High-precision decimal calculators
+### 高精度十进制计算器
 
-**Category:** Numeric calculators  
-**Type:** alias and classes  
-**Defined in:** `cpp/include/mental1104/high_precision_decimal.h`  
-**Include:** `#include "mental1104/high_precision_decimal.h"`  
-**Purpose:** Construct calculator objects and read formatted decimal strings.
+- **类别：** 数值计算器
+- **类型：** 别名和类
+- **定义位置：** `cpp/include/mental1104/high_precision_decimal.h`
+- **包含：** `#include "mental1104/high_precision_decimal.h"`
+- **用途：** 构造计算器对象并读取格式化十进制字符串。
 
-**Basic usage:**
+**基础用法：**
 
 ```cpp
 #include "mental1104/high_precision_decimal.h"
@@ -502,7 +502,7 @@ int main() {
 }
 ```
 
-**Notes:**
+**备注：**
 
-- Requires Boost.Multiprecision with MPFR/GMP support.
-- Needs review: these classes are currently in the global namespace, unlike most C++ APIs in this repository.
+- 需要带 MPFR/GMP 支持的 Boost.Multiprecision。
+- 待复核：这些类目前位于全局命名空间，不同于本仓库多数 C++ API。

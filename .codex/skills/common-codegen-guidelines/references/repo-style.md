@@ -11,6 +11,7 @@ Use this reference after `SKILL.md` triggers. Load only the sections relevant to
 - Treat the current GitHub Actions definitions as the repository compatibility contract. Code should be written against the platforms, compilers, runtimes, language standards, build/test/install/coverage steps, and local actions declared under `.github/workflows/` and `.github/actions/`, not just against the local developer machine.
 - `AGENTS.md` is a pointer-only compatibility file. Do not add new maintenance content there.
 - When a change creates reusable rules or public workflow knowledge, update `.codex/skills/common-codegen-guidelines/SKILL.md` or the relevant file under `references/` in the same change.
+- 语言 README 中的可调用 API 文档默认用中文维护。API 名称、路径、导入、命令和代码示例保持原文，但说明文字、表格标签、维护规则、备注和复核标记使用中文；用 `待复核` 代替 `Needs review`。
 - Preserve dirty worktree changes that are not yours. Read before editing files that already changed.
 
 ## C++

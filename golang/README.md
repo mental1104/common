@@ -1,39 +1,39 @@
-# Go utilities
+# Go 工具库
 
-Module path: `github.com/mental1104/common/golang`.
+模块路径：`github.com/mental1104/common/golang`。
 
-## Maintenance rule
+## 维护规则
 
-When adding an exported function, type, method, package-level utility, command, or reusable lab entry, update this README with its category, package path, purpose, minimal usage example, and notes. If the API is exported but not clearly stable, mark it `Needs review`.
+新增导出函数、类型、方法、包级工具、命令或可复用实验入口时，必须在同一次变更中更新此 README，写明类别、包路径、用途、最小用法示例和备注。如果 API 已导出但稳定性尚不明确，请标记为 `待复核`。
 
-## Categories
+## 分类
 
-- Collection and string containment
-- CLI and labs
+- 集合与字符串包含判断
+- CLI 与实验
 
-## Usage index
+## 用法索引
 
-| Category | Name | Type | Import / Path | Purpose |
+| 类别 | 名称 | 类型 | 导入 / 路径 | 用途 |
 |---|---|---|---|---|
-| Collection and string containment | `Contains` | function | `github.com/mental1104/common/golang` | Convenience containment check for string, rune, slices, arrays, map keys, and pointers to supported containers. |
-| Collection and string containment | `InSlice` | generic function | `github.com/mental1104/common/golang` | Type-safe value lookup in slices. |
-| Collection and string containment | `InMapKey` | generic function | `github.com/mental1104/common/golang` | Type-safe map-key lookup. |
-| Collection and string containment | `InMapValue` | generic function | `github.com/mental1104/common/golang` | Type-safe map-value lookup. |
-| Collection and string containment | `InString` | function | `github.com/mental1104/common/golang` | Substring lookup. |
-| Collection and string containment | `InRune` | function | `github.com/mental1104/common/golang` | Rune lookup in a string. |
-| CLI and labs | `labctl`, `labs/*` | commands | `./golang/cmd/labctl`, `./golang/labs/*` | Runnable lab/demo entry points. |
+| 集合与字符串包含判断 | `Contains` | 函数 | `github.com/mental1104/common/golang` | 对字符串、rune、切片、数组、map 键以及受支持容器指针进行便捷包含判断。 |
+| 集合与字符串包含判断 | `InSlice` | 泛型函数 | `github.com/mental1104/common/golang` | 以类型安全方式检查切片中是否存在指定值。 |
+| 集合与字符串包含判断 | `InMapKey` | 泛型函数 | `github.com/mental1104/common/golang` | 以类型安全方式检查 map 中是否存在指定键。 |
+| 集合与字符串包含判断 | `InMapValue` | 泛型函数 | `github.com/mental1104/common/golang` | 以类型安全方式检查 map 值中是否存在指定值。 |
+| 集合与字符串包含判断 | `InString` | 函数 | `github.com/mental1104/common/golang` | 检查字符串是否包含子串。 |
+| 集合与字符串包含判断 | `InRune` | 函数 | `github.com/mental1104/common/golang` | 检查字符串是否包含指定 rune。 |
+| CLI 与实验 | `labctl`, `labs/*` | 命令 | `./golang/cmd/labctl`, `./golang/labs/*` | 可运行的实验 / 演示入口。 |
 
-## Details
+## 详情
 
 ### `Contains`
 
-**Category:** Collection and string containment  
-**Type:** function  
-**Defined in:** `golang/mental1104/contains.go`  
-**Import:** `github.com/mental1104/common/golang`  
-**Purpose:** Use one call shape for strings, runes, slices, arrays, map keys, and supported pointers.
+- **类别：** 集合与字符串包含判断
+- **类型：** 函数
+- **定义位置：** `golang/mental1104/contains.go`
+- **导入：** `github.com/mental1104/common/golang`
+- **用途：** 用统一调用形式处理字符串、rune、切片、数组、map 键和受支持指针的包含判断。
 
-**Basic usage:**
+**基础用法：**
 
 ```go
 package main
@@ -51,20 +51,20 @@ func main() {
 }
 ```
 
-**Notes:**
+**备注：**
 
-- `Contains` uses map-key semantics for maps.
-- Prefer the generic helpers below on hot paths or when type safety matters.
+- `Contains` 对 map 使用键存在语义。
+- 热路径或需要类型安全时，优先使用下面的泛型辅助函数。
 
 ### `InSlice`
 
-**Category:** Collection and string containment  
-**Type:** generic function  
-**Defined in:** `golang/mental1104/contains.go`  
-**Import:** `github.com/mental1104/common/golang`  
-**Purpose:** Check whether a comparable value is in a slice.
+- **类别：** 集合与字符串包含判断
+- **类型：** 泛型函数
+- **定义位置：** `golang/mental1104/contains.go`
+- **导入：** `github.com/mental1104/common/golang`
+- **用途：** 检查可比较值是否存在于切片中。
 
-**Basic usage:**
+**基础用法：**
 
 ```go
 package main
@@ -82,13 +82,13 @@ func main() {
 
 ### `InMapKey`
 
-**Category:** Collection and string containment  
-**Type:** generic function  
-**Defined in:** `golang/mental1104/contains.go`  
-**Import:** `github.com/mental1104/common/golang`  
-**Purpose:** Check whether a key exists in a map.
+- **类别：** 集合与字符串包含判断
+- **类型：** 泛型函数
+- **定义位置：** `golang/mental1104/contains.go`
+- **导入：** `github.com/mental1104/common/golang`
+- **用途：** 检查 map 中是否存在指定键。
 
-**Basic usage:**
+**基础用法：**
 
 ```go
 package main
@@ -107,13 +107,13 @@ func main() {
 
 ### `InMapValue`
 
-**Category:** Collection and string containment  
-**Type:** generic function  
-**Defined in:** `golang/mental1104/contains.go`  
-**Import:** `github.com/mental1104/common/golang`  
-**Purpose:** Check whether a comparable value exists among map values.
+- **类别：** 集合与字符串包含判断
+- **类型：** 泛型函数
+- **定义位置：** `golang/mental1104/contains.go`
+- **导入：** `github.com/mental1104/common/golang`
+- **用途：** 检查可比较值是否存在于 map 的值集合中。
 
-**Basic usage:**
+**基础用法：**
 
 ```go
 package main
@@ -132,13 +132,13 @@ func main() {
 
 ### `InString`
 
-**Category:** Collection and string containment  
-**Type:** function  
-**Defined in:** `golang/mental1104/contains.go`  
-**Import:** `github.com/mental1104/common/golang`  
-**Purpose:** Check whether a string contains a substring.
+- **类别：** 集合与字符串包含判断
+- **类型：** 函数
+- **定义位置：** `golang/mental1104/contains.go`
+- **导入：** `github.com/mental1104/common/golang`
+- **用途：** 检查字符串是否包含子串。
 
-**Basic usage:**
+**基础用法：**
 
 ```go
 package main
@@ -156,13 +156,13 @@ func main() {
 
 ### `InRune`
 
-**Category:** Collection and string containment  
-**Type:** function  
-**Defined in:** `golang/mental1104/contains.go`  
-**Import:** `github.com/mental1104/common/golang`  
-**Purpose:** Check whether a string contains a rune.
+- **类别：** 集合与字符串包含判断
+- **类型：** 函数
+- **定义位置：** `golang/mental1104/contains.go`
+- **导入：** `github.com/mental1104/common/golang`
+- **用途：** 检查字符串是否包含指定 rune。
 
-**Basic usage:**
+**基础用法：**
 
 ```go
 package main
@@ -178,15 +178,15 @@ func main() {
 }
 ```
 
-### Lab commands
+### 实验命令
 
-**Category:** CLI and labs  
-**Type:** command packages  
-**Defined in:** `golang/cmd/labctl`, `golang/labs/*`  
-**Import / Path:** run with `go run ./cmd/labctl` or specific lab directories from `golang/`  
-**Purpose:** Run local scheduler, network, memory, and GC lab demos.
+- **类别：** CLI 与实验
+- **类型：** 命令包
+- **定义位置：** `golang/cmd/labctl`, `golang/labs/*`
+- **导入 / 路径：** 在 `golang/` 下通过 `go run ./cmd/labctl` 或具体实验目录运行
+- **用途：** 运行本地调度器、网络、内存和 GC 实验演示。
 
-**Basic usage:**
+**基础用法：**
 
 ```bash
 cd golang
@@ -194,6 +194,6 @@ go run ./cmd/labctl
 go run ./labs/gc/minimal
 ```
 
-**Notes:**
+**备注：**
 
-- Needs review: labs are runnable demos, not stable reusable library APIs.
+- 待复核：实验是可运行演示，不是稳定的可复用库 API。
