@@ -77,7 +77,12 @@ function(add_optional_test SRC)
   list(REMOVE_DUPLICATES AGG_INC)
   message(STATUS "  -> include dirs (priority): ${AGG_INC}")
 
-  add_executable(${TEST_NAME} "${SRC}")
+  set(_extra_sources "")
+  if (TEST_NAME STREQUAL "test_c_api_compat")
+    list(APPEND _extra_sources "${TEST_DIR}/c_api_compat_c_smoke.c")
+  endif()
+
+  add_executable(${TEST_NAME} "${SRC}" ${_extra_sources})
   if (AGG_INC)
     target_include_directories(${TEST_NAME} BEFORE PRIVATE
       ${AGG_INC}

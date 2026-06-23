@@ -30,6 +30,69 @@ Generated code must satisfy these repository conditions:
 - **No speculative performance claims**: for performance, benchmark, GC, scheduler, lock, contention, latency, or throughput work, follow the mandatory benchmark protocol in `references/agents-archive.md` before explaining conclusions.
 - **No unnecessary churn**: do not reformat unrelated files, rewrite generated artifacts, or change CI/Docker layers unless required by the task.
 
+## Public API documentation rule
+
+This repository is a multi-language common / utilities repository. Any new
+reusable public capability must be documented when it is added or changed.
+
+A public capability includes, but is not limited to:
+
+- public function
+- public class
+- public struct
+- public enum
+- public interface / trait
+- public method intended for reuse
+- package-level utility
+- reusable script
+- CLI entry
+
+When adding or changing a public capability, update the corresponding language
+directory `README.md`. The documentation update belongs in the language-specific
+README, not only in source comments.
+
+The root `README.md` should stay as a high-level navigation page. Detailed
+function, class, type, and script usage belongs in the language-specific README,
+for example:
+
+- `python/README.md`
+- `cpp/README.md`
+- `golang/README.md`
+- `rust/README.md`
+- `dotnet/README.md`
+- `java/flink-datastream-demo/README.md`
+
+Each documented capability should include:
+
+- category
+- name
+- type
+- defined in
+- import / include / use / package path
+- purpose
+- minimal usage example
+- notes or caveats, if needed
+
+Documentation should describe how to call and use the capability. Do not expose
+implementation details. Do not copy internal source code into README files.
+Private helpers, internal functions, test fixtures, generated files, build
+outputs, and third-party dependency code should not be documented unless they
+are intentionally reusable examples.
+
+For Python and other scripting-language utilities, include REPL / interactive
+console usage whenever documenting a public function or class.
+
+Example:
+
+```python
+>>> from package.module import function_name
+>>> function_name("input")
+'output'
+```
+
+If it is unclear whether something should be treated as public reusable API,
+document it as a candidate and mark it with `Needs review`.
+
 ## Reference Routing
 
 Read `references/repo-style.md` sections as needed:
