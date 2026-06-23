@@ -53,6 +53,14 @@ public class Example {
 }
 ```
 
+**示例输出：**
+
+```text
+true
+true
+true
+```
+
 **备注：**
 
 - map 处理逻辑检查键；如需查找值，请使用 `inMapValue`。
@@ -86,6 +94,12 @@ public class Example {
 }
 ```
 
+**示例输出：**
+
+```text
+true
+```
+
 ### `DemoPipeline.build`
 
 - **类别：** Flink 演示 pipeline
@@ -103,10 +117,19 @@ import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 public class Example {
   public static void main(String[] args) throws Exception {
     StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+    env.setParallelism(1);
     DemoPipeline.build(env).print();
     env.execute(DemoPipeline.jobName());
   }
 }
+```
+
+**示例输出：**
+
+忽略 Flink runtime 日志时，业务输出为：
+
+```text
+1
 ```
 
 **备注：**
@@ -133,6 +156,12 @@ public class Example {
 }
 ```
 
+**示例输出：**
+
+```text
+Flink DataStream Demo
+```
+
 ### `SimpleJob.main`
 
 - **类别：** CLI 入口
@@ -148,6 +177,14 @@ cd java/flink-datastream-demo
 mvn -q -DskipTests compile exec:java
 ```
 
+**示例输出：**
+
+忽略 Maven 和 Flink runtime 日志时，业务输出为：
+
+```text
+1
+```
+
 **Docker/Flink 集群用法：**
 
 ```bash
@@ -157,6 +194,14 @@ docker compose -f ../../devops/images/flink/docker-compose.yaml up -d
 docker compose -f ../../devops/images/flink/docker-compose.yaml exec flink-jobmanager \
   ./bin/flink run -c com.mental1104.flink.examples.SimpleJob \
   /opt/flink/usrlib/flink-datastream-demo.jar
+```
+
+**示例输出：**
+
+Flink 集群日志会因环境不同而变化；pipeline 的业务输出为：
+
+```text
+1
 ```
 
 ## 开发命令
@@ -170,4 +215,10 @@ docker compose -f ../../devops/images/flink/docker-compose.yaml exec flink-jobma
 ./dev coverage-java
 ./dev run-java
 ./dev run-java-docker
+```
+
+**命令结果：**
+
+```text
+setup/build/test/coverage 成功时退出码为 0；run-java/run-java-docker 的业务输出为 1（运行时日志省略）。
 ```

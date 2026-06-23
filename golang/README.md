@@ -51,6 +51,14 @@ func main() {
 }
 ```
 
+**示例输出：**
+
+```text
+true
+true
+true
+```
+
 **备注：**
 
 - `Contains` 对 map 使用键存在语义。
@@ -80,6 +88,12 @@ func main() {
 }
 ```
 
+**示例输出：**
+
+```text
+true
+```
+
 ### `InMapKey`
 
 - **类别：** 集合与字符串包含判断
@@ -103,6 +117,12 @@ func main() {
 	values := map[string]int{"a": 1}
 	fmt.Println(mental1104.InMapKey(values, "a"))
 }
+```
+
+**示例输出：**
+
+```text
+true
 ```
 
 ### `InMapValue`
@@ -130,6 +150,12 @@ func main() {
 }
 ```
 
+**示例输出：**
+
+```text
+true
+```
+
 ### `InString`
 
 - **类别：** 集合与字符串包含判断
@@ -152,6 +178,12 @@ import (
 func main() {
 	fmt.Println(mental1104.InString("golang", "go"))
 }
+```
+
+**示例输出：**
+
+```text
+true
 ```
 
 ### `InRune`
@@ -178,6 +210,12 @@ func main() {
 }
 ```
 
+**示例输出：**
+
+```text
+true
+```
+
 ### 实验命令
 
 - **类别：** CLI 与实验
@@ -192,6 +230,13 @@ func main() {
 cd golang
 go run ./cmd/labctl
 go run ./labs/gc/minimal
+```
+
+**示例输出：**
+
+```text
+labctl demo run: docs/labs/_verify/<YYYYMMDDTHHMMSSZ>
+gc minimal demo: <YYYYMMDDTHHMMSSZ>
 ```
 
 **备注：**
