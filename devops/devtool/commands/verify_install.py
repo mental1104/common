@@ -201,7 +201,7 @@ def _verify_go(env: Mapping[str, str]) -> None:
         run([go_bin, "mod", "init", "verify-mental1104"], env=env_go, cwd=tmp_path)
         run([go_bin, "mod", "edit", f"-replace={module_path}={GO_DIR}"], env=env_go, cwd=tmp_path)
         run([go_bin, "mod", "tidy"], env=env_go, cwd=tmp_path)
-        run([go_bin, "build", "."], env=env_go, cwd=tmp_path)
+        run([go_bin, "build", "-buildvcs=false", "."], env=env_go, cwd=tmp_path)
 
 
 def _verify_java(env: Mapping[str, str]) -> None:

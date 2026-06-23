@@ -45,6 +45,7 @@ Use this reference after `SKILL.md` triggers. Load only the sections relevant to
 - For MQ tests, use `mental1104.mq.pulsar` and `mental1104.mq.kafka` helpers instead of duplicating connector setup.
 - Keep compatibility deliberate. `python/pyproject.toml` declares a broad runtime floor, while current modules may use newer annotations. Match the touched file and CI target; in shared compatibility-sensitive modules, prefer `from __future__ import annotations` and `typing.Optional` / `typing.Union` where older Python parsing matters.
 - Tests should avoid real services unless the existing test suite already gates them through env vars, fixtures, or Docker setup. Use `tmp_path` for filesystem behavior and skip at module import when optional dependencies cannot import on a runtime.
+- Python system install must tolerate OS-managed packages without pip `RECORD` metadata. When installing requirements into system Python, detect such packages or retry with `--ignore-installed` instead of requiring users to remove Debian/Ubuntu packages by hand.
 - Typical validation: `./dev test-python`, `./dev coverage-python`, `./dev fmt-python`, `./dev vet-python`, `./dev guard-python`, `./dev install-python`, `./dev verify-install`.
 
 ## Go
@@ -54,6 +55,7 @@ Use this reference after `SKILL.md` triggers. Load only the sections relevant to
 - Keep public utility APIs simple and explicit. For convenience APIs, it is acceptable to use reflection with comments explaining semantics and performance tradeoffs; for hot paths, add generic typed alternatives.
 - Use Chinese comments where they clarify API semantics, such as whether map containment means keys or values.
 - Keep lab demos small, runnable, and documented. Use `internal/labkit` for shared lab run metadata instead of duplicating setup.
+- Go install/verify 的临时验证程序应使用 `go build -buildvcs=false`，避免本机 `/tmp/.git`、临时目录或 Git 状态异常影响幂等安装。
 - For scheduler/GC/concurrency work, emit the mandatory Go artifacts from `references/agents-archive.md`: `metrics.csv`, `trace.out`, `mutex.pprof`, `block.pprof`, and `summary.txt`.
 - Typical validation: `./dev build-go`, `./dev test-go`, `./dev coverage-go`, `./dev fmt-go`, `./dev vet-go`, `./dev guard-go`, `./dev install-go`, `./dev verify-install`.
 
