@@ -66,7 +66,7 @@ def _install_verify_binary(env: Mapping[str, str]) -> None:
         run([env_go["GO"], "mod", "edit", f"-replace={module_path}={GO_DIR}"], env=env_go, cwd=tmp_path)
         run([env_go["GO"], "mod", "tidy"], env=env_go, cwd=tmp_path)
         bin_name = "mental1104-go-verify.exe" if os.name == "nt" else "mental1104-go-verify"
-        run([env_go["GO"], "build", "-o", str(bin_dir / bin_name)], env=env_go, cwd=tmp_path)
+        run([env_go["GO"], "build", "-buildvcs=false", "-o", str(bin_dir / bin_name)], env=env_go, cwd=tmp_path)
 
 
 def setup(env: Mapping[str, str]) -> None:
