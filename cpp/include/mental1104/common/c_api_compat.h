@@ -1,0 +1,14 @@
+#ifndef MENTAL1104_COMMON_C_API_COMPAT_H
+#define MENTAL1104_COMMON_C_API_COMPAT_H
+
+#ifdef __cplusplus
+#define COMMON_EXTERN_C_BEGIN extern "C" {
+#define COMMON_EXTERN_C_END }
+#define COMMON_EXTERN_C extern "C"
+#else
+#define COMMON_EXTERN_C_BEGIN
+#define COMMON_EXTERN_C_END
+#define COMMON_EXTERN_C
+#endif
+
+#endif  // MENTAL1104_COMMON_C_API_COMPAT_H
