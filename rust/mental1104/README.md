@@ -49,6 +49,12 @@ fn main() {
 }
 ```
 
+**示例结果：**
+
+```text
+无标准输出；contains(values.as_slice(), &2) 返回 true，contains(&names, "alice") 返回 true。
+```
+
 **备注：**
 
 - 当切片已经排序且希望使用有序查找行为时，使用 `SortedSlice`。
@@ -80,6 +86,12 @@ fn main() {
 }
 ```
 
+**示例结果：**
+
+```text
+无标准输出；contains(&bag, &2) 返回 true。
+```
+
 ### `SortedSlice`
 
 - **类别：** 集合包含判断
@@ -97,6 +109,12 @@ fn main() {
     let values = [1, 2, 3, 5, 8];
     assert!(contains(SortedSlice(&values), &5));
 }
+```
+
+**示例结果：**
+
+```text
+无标准输出；contains(SortedSlice(&values), &5) 返回 true。
 ```
 
 **备注：**
@@ -128,6 +146,13 @@ fn main() {
 }
 ```
 
+**示例返回值：**
+
+```text
+require_name("common") => Ok("common")
+require_name("") => Err(MentalError::InvalidInput("name is empty"))
+```
+
 ### Prelude 和可选哈希别名
 
 - **类别：** Prelude 与 feature 导出
@@ -145,6 +170,12 @@ fn main() {
     let values = [1, 2, 3];
     assert!(contains(values.as_slice(), &2));
 }
+```
+
+**示例结果：**
+
+```text
+无标准输出；contains(values.as_slice(), &2) 返回 true。
 ```
 
 **备注：**

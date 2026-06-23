@@ -83,6 +83,12 @@ int main() {
 }
 ```
 
+**示例输出：**
+
+```text
+1 hello 10
+```
+
 **备注：**
 
 - 对 map 使用时，`contains` 检查键是否存在。
@@ -110,6 +116,12 @@ int main() {
 
   std::cout << lru(1, 2) << " " << lfu(1, 2) << " " << unlimited(1, 2);
 }
+```
+
+**示例输出：**
+
+```text
+3 3 3
 ```
 
 **备注：**
@@ -144,6 +156,12 @@ int main() {
 }
 ```
 
+**示例输出：**
+
+```text
+common
+```
+
 **备注：**
 
 - 需要 C++ 构建中配置的 cJSON 和 RapidJSON 头文件 / 库。
@@ -171,6 +189,17 @@ int main() {
 }
 ```
 
+**示例输出：**
+
+未启用 spdlog 时的回退输出如下；启用 spdlog 时会由 spdlog 添加自己的时间戳 / logger 格式。
+
+```text
+[info] ready: 1
+[warning] retry=3
+[info] plain macro log
+[error] code=500
+```
+
 **备注：**
 
 - `MENTAL1104_LOG_LEVEL` 可设置进程级初始日志级别。
@@ -196,12 +225,24 @@ void common_reset(void);
 COMMON_EXTERN_C_END
 ```
 
+**示例结果：**
+
+```text
+无标准输出；在 C++ 编译单元中，common_add/common_reset 以 C linkage 声明。
+```
+
 **单个声明用法：**
 
 ```c
 #include "mental1104/common/c_api_compat.h"
 
 COMMON_EXTERN_C int common_add(int lhs, int rhs);
+```
+
+**示例结果：**
+
+```text
+无标准输出；common_add 在 C++ 下等价于 extern "C" 声明，在 C 下保持普通函数声明。
 ```
 
 **备注：**
@@ -235,6 +276,13 @@ int main() {
 }
 ```
 
+**示例结果：**
+
+```text
+无标准输出；如果 example.txt 可写，文件内容为：
+hello
+```
+
 **备注：**
 
 - `unique_fd` 仅在非 Windows 平台可用。
@@ -259,6 +307,13 @@ int main() {
 }
 ```
 
+**示例输出：**
+
+```text
+<hex-string>
+job:<hex-string>
+```
+
 ### 语义基类型
 
 - **类别：** 语义基类型
@@ -279,6 +334,12 @@ public:
 };
 
 static_assert(mental1104::is_move_only_v<Handle>, "Handle should be move-only");
+```
+
+**示例结果：**
+
+```text
+无标准输出；static_assert 通过，Handle 被识别为 move-only 类型。
 ```
 
 **备注：**
@@ -306,6 +367,15 @@ int main() {
 }
 ```
 
+**示例输出和返回值：**
+
+```text
+Entering add
+Exiting add with <seconds> seconds
+```
+
+`timed_add(1, 2)` 返回 `3`；上面这个 `main` 会把进程退出码设为 `3`。
+
 ### 执行器和线程辅助工具
 
 - **类别：** 并发
@@ -330,6 +400,12 @@ int main() {
   executor.execute([] {});
   mental1104::sleep_for_ms(1);
 }
+```
+
+**示例输出：**
+
+```text
+42
 ```
 
 **备注：**
@@ -360,6 +436,12 @@ int main() {
 #endif
 ```
 
+**示例结果：**
+
+```text
+无标准输出；sample_task 完成后 wait_all 返回。
+```
+
 **备注：**
 
 - 需要 C++20。`AsyncSimpleCoroutineScheduler` 别名需要 `M1104_HAS_ASYNC_SIMPLE`。
@@ -386,6 +468,12 @@ int main() {
   locked.insert("bob");
   return maybe && locked.contains("bob") ? 0 : 1;
 }
+```
+
+**示例结果：**
+
+```text
+无标准输出；maybe 为 true，locked.contains("bob") 为 true，进程退出码为 0。
 ```
 
 **备注：**
@@ -417,6 +505,13 @@ int main() {
 }
 ```
 
+**示例结果：**
+
+```text
+未配置可连接的 Redis 时，create_redis_from_env() 失败并返回退出码 1。
+连接成功且获取锁成功时无标准输出，try_lock(30000) 返回 true 后释放锁。
+```
+
 **备注：**
 
 - 需要 Redis++ 和 `REDIS_HOST`/`REDIS_PORT`；`REDISCLI_AUTH` 可选。
@@ -446,6 +541,12 @@ int main() {
 }
 ```
 
+**示例结果：**
+
+```text
+无标准输出；dispatch_once(0) 执行一次非阻塞事件分发，然后 remove_fd(fd) 注销文件描述符。
+```
+
 **备注：**
 
 - 待复核：平台行为取决于实现文件和可用事件 API。
@@ -471,6 +572,12 @@ int main() {
   st_dump_current_thread();
   st_shutdown();
 }
+```
+
+**示例输出：**
+
+```text
+<当前线程的 stacktrace，具体帧名和路径取决于平台、编译选项和符号信息>
 ```
 
 **备注：**
@@ -500,6 +607,14 @@ int main() {
   std::cout << e.getDecimalSubstring(1, 8) << "\n";
   std::cout << fixed.to_string() << "\n";
 }
+```
+
+**示例输出：**
+
+```text
+3.14159265358979323846264338327950288419716939937511
+71828182
+0.73908513...
 ```
 
 **备注：**

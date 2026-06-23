@@ -32,8 +32,14 @@
 ```csharp
 using Mental1104.Executables;
 
-bool ok = ExeChecker.IsValidExe("app.exe");
+bool ok = ExeChecker.IsValidExe("missing.exe");
 Console.WriteLine(ok);
+```
+
+**示例输出：**
+
+```text
+False
 ```
 
 ### `ExeChecker.IsValidExe`
@@ -55,6 +61,16 @@ if (ExeChecker.IsValidExe(fileName))
     Console.WriteLine("valid executable");
 }
 ```
+
+**示例输出：**
+
+当 `fileName` 指向有效 Windows PE 可执行文件时：
+
+```text
+valid executable
+```
+
+当文件缺失、无效、是 DLL 或机器类型不受支持时，`IsValidExe(fileName)` 返回 `false`，上面的分支不会输出内容。
 
 **备注：**
 
