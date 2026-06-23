@@ -5,6 +5,7 @@
 #include <string>
 #include <utility>
 
+#include "mental1104/common/c_api_compat.h"
 #include "mental1104/meta/compiler_support.h"
 
 #if M1104_HAS_CXX17
@@ -13,13 +14,13 @@
 #include <boost/variant2/variant.hpp>
 #endif
 
-extern "C" {
+COMMON_EXTERN_C_BEGIN
 #if __has_include(<cJSON/cJSON.h>)
 #include <cJSON/cJSON.h>
 #else
 #include "cJSON.h"
 #endif
-}
+COMMON_EXTERN_C_END
 
 #if __has_include(<rapidjson/document.h>)
 #include <rapidjson/document.h>

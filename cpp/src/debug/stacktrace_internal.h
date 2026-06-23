@@ -6,9 +6,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+COMMON_EXTERN_C_BEGIN
 
 #define ST_MAX_FRAMES_LIMIT 256
 
@@ -31,8 +29,6 @@ void st_format_frame(const st_frame_t* frame);
 void st_format_maps_line(const char* line);
 void st_format_footer(const st_context_t* ctx, int exit_code);
 
-#ifdef __cplusplus
-}  // extern "C"
-#endif
+COMMON_EXTERN_C_END
 
 #endif  // STACKTRACE_INTERNAL_H_

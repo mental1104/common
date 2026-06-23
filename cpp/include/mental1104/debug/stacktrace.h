@@ -4,9 +4,9 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+#include "mental1104/common/c_api_compat.h"
+
+COMMON_EXTERN_C_BEGIN
 
 typedef struct st_options_s {
   int enable;
@@ -69,8 +69,6 @@ int st_init(const st_options_t* opt);
 void st_shutdown(void);
 int st_dump_current_thread(void);
 
-#ifdef __cplusplus
-}  // extern "C"
-#endif
+COMMON_EXTERN_C_END
 
 #endif  // DEBUG_STACKTRACE_H_
