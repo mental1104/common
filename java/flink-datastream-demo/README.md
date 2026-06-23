@@ -1,43 +1,43 @@
-# Java utilities and Flink demo
+# Java 工具库和 Flink 演示
 
-Maven project: `com.mental1104:flink-datastream-demo`.
+Maven 项目：`com.mental1104:flink-datastream-demo`。
 
-## Maintenance rule
+## 维护规则
 
-When adding a public class, method, reusable Flink pipeline, example entry point, or package-level utility, update this README with its category, package, purpose, minimal usage example, and notes. If the API is public but not clearly stable, mark it `Needs review`.
+新增公共类、方法、可复用 Flink pipeline、示例入口或包级工具时，必须更新此 README，写明类别、包名、用途、最小用法示例和备注。如果 API 是公开的但稳定性尚不明确，请标记为 `待复核`。
 
-## Categories
+## 分类
 
-- Collection and string containment
-- Flink demo pipeline
-- CLI entry
+- 集合与字符串包含判断
+- Flink 演示 pipeline
+- CLI 入口
 
-## Usage index
+## 用法索引
 
-| Category | Name | Type | Package | Purpose |
+| 类别 | 名称 | 类型 | 包 | 用途 |
 |---|---|---|---|---|
-| Collection and string containment | `Contains.contains` | static method | `com.mental1104.common` | Convenience containment check for strings, chars, iterables, arrays, and map keys. |
-| Collection and string containment | `Contains.inString` | static method | `com.mental1104.common` | Check whether one character sequence contains another. |
-| Collection and string containment | `Contains.inChar` | static method | `com.mental1104.common` | Check whether a character sequence contains a char. |
-| Collection and string containment | `Contains.inIterable` | static method | `com.mental1104.common` | Type-safe lookup in an `Iterable`. |
-| Collection and string containment | `Contains.inArray` | static method | `com.mental1104.common` | Type-safe lookup in an object array. |
-| Collection and string containment | `Contains.inMapKey` | static method | `com.mental1104.common` | Type-safe map-key lookup. |
-| Collection and string containment | `Contains.inMapValue` | static method | `com.mental1104.common` | Type-safe map-value lookup. |
-| Flink demo pipeline | `DemoPipeline.build` | static method | `com.mental1104.flink.impl` | Build the demo `DataStream<Integer>` pipeline. |
-| Flink demo pipeline | `DemoPipeline.jobName` | static method | `com.mental1104.flink.impl` | Return the demo job name. |
-| CLI entry | `SimpleJob.main` | static method | `com.mental1104.flink.examples` | Run the demo Flink job. |
+| 集合与字符串包含判断 | `Contains.contains` | 静态方法 | `com.mental1104.common` | 对字符串、字符、可迭代对象、数组和 map 键进行便捷包含判断。 |
+| 集合与字符串包含判断 | `Contains.inString` | 静态方法 | `com.mental1104.common` | 检查一个字符序列是否包含另一个字符序列。 |
+| 集合与字符串包含判断 | `Contains.inChar` | 静态方法 | `com.mental1104.common` | 检查字符序列是否包含指定字符。 |
+| 集合与字符串包含判断 | `Contains.inIterable` | 静态方法 | `com.mental1104.common` | 在 `Iterable` 中执行类型安全查找。 |
+| 集合与字符串包含判断 | `Contains.inArray` | 静态方法 | `com.mental1104.common` | 在对象数组中执行类型安全查找。 |
+| 集合与字符串包含判断 | `Contains.inMapKey` | 静态方法 | `com.mental1104.common` | 以类型安全方式检查 map 键。 |
+| 集合与字符串包含判断 | `Contains.inMapValue` | 静态方法 | `com.mental1104.common` | 以类型安全方式检查 map 值。 |
+| Flink 演示 pipeline | `DemoPipeline.build` | 静态方法 | `com.mental1104.flink.impl` | 构建演示用 `DataStream<Integer>` pipeline。 |
+| Flink 演示 pipeline | `DemoPipeline.jobName` | 静态方法 | `com.mental1104.flink.impl` | 返回演示作业名称。 |
+| CLI 入口 | `SimpleJob.main` | 静态方法 | `com.mental1104.flink.examples` | 运行演示 Flink 作业。 |
 
-## Details
+## 详情
 
 ### `Contains.contains`
 
-**Category:** Collection and string containment  
-**Type:** static method  
-**Defined in:** `src/main/java/com/mental1104/common/Contains.java`  
-**Package:** `com.mental1104.common`  
-**Purpose:** Use one method for common containment checks.
+- **类别：** 集合与字符串包含判断
+- **类型：** 静态方法
+- **定义位置：** `src/main/java/com/mental1104/common/Contains.java`
+- **包：** `com.mental1104.common`
+- **用途：** 用一个方法处理常见包含判断。
 
-**Basic usage:**
+**基础用法：**
 
 ```java
 import com.mental1104.common.Contains;
@@ -53,19 +53,19 @@ public class Example {
 }
 ```
 
-**Notes:**
+**备注：**
 
-- Map handling checks keys. Use `inMapValue` for value lookup.
+- map 处理逻辑检查键；如需查找值，请使用 `inMapValue`。
 
-### Typed `Contains` helpers
+### 类型明确的 `Contains` 辅助方法
 
-**Category:** Collection and string containment  
-**Type:** static methods  
-**Defined in:** `src/main/java/com/mental1104/common/Contains.java`  
-**Package:** `com.mental1104.common`  
-**Purpose:** Use explicit helper methods when the container type is known.
+- **类别：** 集合与字符串包含判断
+- **类型：** 静态方法
+- **定义位置：** `src/main/java/com/mental1104/common/Contains.java`
+- **包：** `com.mental1104.common`
+- **用途：** 容器类型已知时，使用语义更明确的辅助方法。
 
-**Basic usage:**
+**基础用法：**
 
 ```java
 import com.mental1104.common.Contains;
@@ -88,13 +88,13 @@ public class Example {
 
 ### `DemoPipeline.build`
 
-**Category:** Flink demo pipeline  
-**Type:** static method  
-**Defined in:** `src/main/java/com/mental1104/flink/impl/DemoPipeline.java`  
-**Package:** `com.mental1104.flink.impl`  
-**Purpose:** Build the demo stream from a `StreamExecutionEnvironment`.
+- **类别：** Flink 演示 pipeline
+- **类型：** 静态方法
+- **定义位置：** `src/main/java/com/mental1104/flink/impl/DemoPipeline.java`
+- **包：** `com.mental1104.flink.impl`
+- **用途：** 基于 `StreamExecutionEnvironment` 构建演示数据流。
 
-**Basic usage:**
+**基础用法：**
 
 ```java
 import com.mental1104.flink.impl.DemoPipeline;
@@ -109,19 +109,19 @@ public class Example {
 }
 ```
 
-**Notes:**
+**备注：**
 
-- Requires Flink dependencies from this Maven project.
+- 需要使用此 Maven 项目提供的 Flink 依赖。
 
 ### `DemoPipeline.jobName`
 
-**Category:** Flink demo pipeline  
-**Type:** static method  
-**Defined in:** `src/main/java/com/mental1104/flink/impl/DemoPipeline.java`  
-**Package:** `com.mental1104.flink.impl`  
-**Purpose:** Provide the job name passed to `env.execute(...)`.
+- **类别：** Flink 演示 pipeline
+- **类型：** 静态方法
+- **定义位置：** `src/main/java/com/mental1104/flink/impl/DemoPipeline.java`
+- **包：** `com.mental1104.flink.impl`
+- **用途：** 提供传入 `env.execute(...)` 的作业名称。
 
-**Basic usage:**
+**基础用法：**
 
 ```java
 import com.mental1104.flink.impl.DemoPipeline;
@@ -135,20 +135,20 @@ public class Example {
 
 ### `SimpleJob.main`
 
-**Category:** CLI entry  
-**Type:** static method  
-**Defined in:** `src/main/java/com/mental1104/flink/examples/SimpleJob.java`  
-**Package:** `com.mental1104.flink.examples`  
-**Purpose:** Run the demo pipeline as the Maven or shaded-jar main class.
+- **类别：** CLI 入口
+- **类型：** 静态方法
+- **定义位置：** `src/main/java/com/mental1104/flink/examples/SimpleJob.java`
+- **包：** `com.mental1104.flink.examples`
+- **用途：** 作为 Maven 或 shaded jar 的主类运行演示 pipeline。
 
-**Basic usage:**
+**基础用法：**
 
 ```bash
 cd java/flink-datastream-demo
 mvn -q -DskipTests compile exec:java
 ```
 
-**Docker/Flink cluster usage:**
+**Docker/Flink 集群用法：**
 
 ```bash
 cd java/flink-datastream-demo
@@ -159,9 +159,9 @@ docker compose -f ../../devops/images/flink/docker-compose.yaml exec flink-jobma
   /opt/flink/usrlib/flink-datastream-demo.jar
 ```
 
-## Dev commands
+## 开发命令
 
-From the repository root:
+在仓库根目录运行：
 
 ```bash
 ./dev setup-java

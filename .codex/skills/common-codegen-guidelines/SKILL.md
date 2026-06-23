@@ -1,6 +1,6 @@
 ---
 name: common-codegen-guidelines
-description: Repository-specific code generation and validation guide for /home/mental1104/code/common. Use when Codex creates or modifies code, tests, examples, devtool commands, CI/coverage plumbing, Docker/devops files, or multi-language public APIs in this repository, especially for C++, Python, Go, Rust, .NET, Java, cross-language ABI exports, benchmark/performance work, and updates to this repo skill's guidance.
+description: /home/mental1104/code/common 的仓库专用代码生成与验证指南。Codex 在本仓库创建或修改代码、测试、示例、devtool 命令、CI/覆盖率设施、Docker/devops 文件、多语言公共 API、跨语言 ABI 导出、benchmark/性能工作，或更新本仓库技能指南时使用。
 ---
 
 # Common Codegen Guidelines
@@ -30,30 +30,25 @@ Generated code must satisfy these repository conditions:
 - **No speculative performance claims**: for performance, benchmark, GC, scheduler, lock, contention, latency, or throughput work, follow the mandatory benchmark protocol in `references/agents-archive.md` before explaining conclusions.
 - **No unnecessary churn**: do not reformat unrelated files, rewrite generated artifacts, or change CI/Docker layers unless required by the task.
 
-## Public API documentation rule
+## 公共 API 文档规则
 
-This repository is a multi-language common / utilities repository. Any new
-reusable public capability must be documented when it is added or changed.
+本仓库是多语言 common / utilities 仓库。任何新增或变更的可复用公共能力，都必须同步记录文档。
 
-A public capability includes, but is not limited to:
+公共能力包括但不限于：
 
-- public function
-- public class
-- public struct
-- public enum
-- public interface / trait
-- public method intended for reuse
-- package-level utility
-- reusable script
-- CLI entry
+- 公共函数
+- 公共类
+- 公共结构体
+- 公共枚举
+- 公共 interface / trait
+- 预期复用的公共方法
+- 包级工具
+- 可复用脚本
+- CLI 入口
 
-When adding or changing a public capability, update the corresponding language
-directory `README.md`. The documentation update belongs in the language-specific
-README, not only in source comments.
+新增或修改公共能力时，必须更新对应语言目录的 `README.md`。文档更新应写入语言专属 README，而不只写在源码注释中。
 
-The root `README.md` should stay as a high-level navigation page. Detailed
-function, class, type, and script usage belongs in the language-specific README,
-for example:
+根目录 `README.md` 保持为高层导航页。函数、类、类型和脚本的详细用法应写入语言专属 README，例如：
 
 - `python/README.md`
 - `cpp/README.md`
@@ -62,27 +57,24 @@ for example:
 - `dotnet/README.md`
 - `java/flink-datastream-demo/README.md`
 
-Each documented capability should include:
+语言 README 中的公共 API 文档默认使用中文。API 名称、路径、导入语句、命令、代码示例和协议关键字保持原文；说明文字、表格列名、段落标题、备注和维护规则使用中文。稳定性不明确的公开符号标记为 `待复核`，不要继续使用英文 `Needs review`。
 
-- category
-- name
-- type
-- defined in
-- import / include / use / package path
-- purpose
-- minimal usage example
-- notes or caveats, if needed
+每个文档条目应包含：
 
-Documentation should describe how to call and use the capability. Do not expose
-implementation details. Do not copy internal source code into README files.
-Private helpers, internal functions, test fixtures, generated files, build
-outputs, and third-party dependency code should not be documented unless they
-are intentionally reusable examples.
+- 类别
+- 名称
+- 类型
+- 定义位置
+- 导入 / include / use / 包路径
+- 用途
+- 最小用法示例
+- 必要的备注或限制
 
-For Python and other scripting-language utilities, include REPL / interactive
-console usage whenever documenting a public function or class.
+文档应说明如何调用和使用能力，不暴露实现细节，也不要把内部源码复制到 README 中。私有辅助函数、内部函数、测试 fixture、生成文件、构建产物和第三方依赖代码不应记录，除非它们本来就是有意提供的可复用示例。
 
-Example:
+Python 和其他脚本语言工具在记录公共函数或类时，应包含 REPL / 交互式控制台用法。
+
+示例：
 
 ```python
 >>> from package.module import function_name
@@ -90,8 +82,7 @@ Example:
 'output'
 ```
 
-If it is unclear whether something should be treated as public reusable API,
-document it as a candidate and mark it with `Needs review`.
+如果不确定某个符号是否应视为可复用公共 API，请先作为候选项记录，并标记为 `待复核`。
 
 ## Reference Routing
 
