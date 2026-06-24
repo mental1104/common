@@ -1,85 +1,85 @@
-# Python utilities
+# Python 工具库
 
-Package name: `mental1104`.
+包名：`mental1104`。
 
-Install from this directory with `pip install . --upgrade` after building or updating package exports. The top-level package is generated from public exports, so if a new public function/class should be imported as `from mental1104 import ...`, regenerate the package init before release.
+构建或更新包导出后，可在此目录中使用 `pip install . --upgrade` 安装。顶层包由公共导出生成，因此如果新增公共函数 / 类需要通过 `from mental1104 import ...` 导入，请在发布前重新生成包 init。
 
-## Maintenance rule
+## 维护规则
 
-When adding a public function, class, enum, protocol, reusable method, script, CLI entry, or package-level utility, update this README in the same change.
+新增公共函数、类、枚举、protocol、可复用方法、脚本、CLI 入口或包级工具时，必须在同一次变更中更新此 README。
 
-Each entry needs category, name, purpose, import path, minimal usage, notes, and Python REPL usage. If the symbol is exported but its intended stability is unclear, add `Needs review` in the notes.
+每个条目都需要写明类别、名称、用途、导入路径、最小用法、备注和 Python REPL 用法。如果符号已导出但预期稳定性不明确，请在备注中加入 `待复核`。
 
-## Categories
+## 分类
 
-- Serialization and conversion
-- Text, time, random, environment, and encryption
-- File and path utilities
-- App helpers
-- Context, ASGI, and FastAPI
-- Concurrency
-- SQL database, DAO, and unit of work
+- 序列化与格式转换
+- 文本、时间、随机、环境和加密
+- 文件与路径工具
+- 应用辅助工具
+- 上下文、ASGI 和 FastAPI
+- 并发
+- SQL 数据库、DAO 和工作单元
 - Redis
 - MongoDB
-- Messaging
+- 消息队列
 - i18n
-- Plotting and benchmark reports
-- Debugging and networking
-- Schema helpers
-- CLI and scripts
-- Candidate or example-only APIs
+- 绘图与基准报告
+- 调试与网络
+- Schema 辅助工具
+- CLI 与脚本
+- 候选或仅示例 API
 
-## Usage index
+## 用法索引
 
-| Category | Name | Type | Import / Path | Purpose |
+| 类别 | 名称 | 类型 | 导入 / 路径 | 用途 |
 |---|---|---|---|---|
-| Serialization and conversion | `JsonParserType`, `JsonUtil`, `load_json`, `dump_json` | enum/class/functions | `from mental1104 import ...` | Read and write JSON strings or streams through available parser backends. |
-| Serialization and conversion | `YamlUtil`, `parse_yaml`, `dump_yaml` | class/functions | `from mental1104 import ...` | Read and write YAML strings or streams. |
-| Serialization and conversion | `json_to_yaml`, `yaml_to_json` | functions | `from mental1104 import ...` | Convert between JSON and YAML. |
-| Text and time | `replace_space_with`, `insert_newlines` | functions | `from mental1104 import ...` | Rewrite whitespace and insert simple line breaks. |
-| Text and time | `timed`, `async_timed`, `get_current_time`, `parse_time` | decorators/functions | `from mental1104 import ...` | Time function calls and parse/format datetimes. |
-| Random and encryption | `random_pick`, `encrypt`, `decrypt`, `generate_salt` | functions | `from mental1104 import ...` | Pick random list/dict entries and run AES-CBC helpers. |
-| Environment | `MissingEnvVarError`, `check_required_env_vars` | exception/function | `from mental1104 import ...` | Validate required environment variables. |
-| File and path | `file_iterator`, `csv_writer`, `export_csv_from_database` | functions | `from mental1104 import ...` | Process files and CSV rows. |
-| File and path | `RenameOp`, `list_files`, `build_rename_plan`, `build_indexed_rename_plan`, `plan_directory_rename`, `plan_directory_rename_indexed`, `apply_rename_plan`, `rename_with_suffix`, `rename_with_regex_group`, `rename_with_index`, `validate_rename_plan` | dataclass/functions | `from mental1104.utils.batch_rename import ...` | Plan and apply collision-safe batch file renames. |
-| App helpers | `extract_page_range` | function | `from mental1104 import extract_page_range` | Extract a page range from a PDF. |
-| App helpers | `AnkiApkgGenerator` | class | `from mental1104 import AnkiApkgGenerator` | Build a simple Anki `.apkg` deck from JSON input. |
-| Context and ASGI | `RequestCtx`, `ctx`, `set_ctx`, `reset_ctx`, `ctx_diag` | class/functions | `from mental1104 import ...` | Store request context in a `ContextVar`. |
-| Context and ASGI | `request_ctx_from_headers`, `RequestCtxMiddlewareFactory`, `RequestCtxContextVarMiddlewareFactory`, `register_request_ctx_middleware`, `register_all_request_ctx_middlewares` | functions/classes | `from mental1104 import ...` | Populate request context from FastAPI/Starlette requests. |
-| Concurrency | `CoroutinePool`, `GatherStrategy`, `AsCompletedStrategy`, `FirstSuccessfulStrategy`, `ThreadExecutorCoroutinePool`, `ProcessExecutorCoroutinePool`, `TaskExecutionStrategy` | classes | `from mental1104 import ...` | Run batches of async callables with configurable result strategies. |
-| Concurrency | `ThreadWorkerPool`, `ProcessWorkerPool`, `MPStartMethod`, `delay`, `async_delay` | classes/enum/functions | `from mental1104 import ...` | Run sync worker pools and simple delays. |
-| SQL database | `DBKind`, `ClickHouseProfile`, `ConnParams`, `SASettings`, `conn_params_from_env` | enums/classes/function | `from mental1104.db import ...` | Build DB connection parameters. |
-| SQL database | `SQLAlchemyClient`, `AsyncSQLAlchemyClient`, `make_sqlalchemy_client`, `make_async_sqlalchemy_client` | classes/functions | `from mental1104.db import ...` | Create SQLAlchemy clients with session scopes. |
-| SQL database | `DBRegistry`, `register_db`, `get_engine`, `get_async_engine`, `get_session_factory`, `get_async_session_factory`, `get_clickhouse_executor` | class/functions | `from mental1104.db import ...` | Register and retrieve engines/session factories. |
-| SQL database | `session_scope`, `tx_scope`, `async_session_scope`, `async_tx_scope`, `pg_session_scope`, `mysql_session_scope`, `sqlite_session_scope`, `ck_session_scope`, `pg_tx_scope`, `mysql_tx_scope`, `sqlite_tx_scope`, `ck_tx_scope` | context managers | `from mental1104.db import ...` | Open read/write DB sessions. |
-| SQL database | `Base`, `TimestampMixin`, `SoftDeleteMixin`, `SessionAwareDAO`, `AutoSessionDAO`, `singleton_dao`, `make_async_dao`, `UnitOfWork`, `AsyncUnitOfWork` | classes/functions | `from mental1104.db import ...` | Build ORM models, DAOs, and service transaction scopes. |
-| SQL database | `create_all`, `create_all_async`, `drop_all`, `drop_all_async`, `register_db_and_create`, `register_db_and_create_async`, `set_migration_handler`, `run_migrations` | functions | `from mental1104.db import ...` | Register schemas and run migration hooks. |
-| ClickHouse | `ClickHouseExecutor`, `ClickHouseSessionAware`, `make_clickhouse_executor`, `clickhouse_session_scope`, `clickhouse_tx_scope`, `resolve_clickhouse_profile`, `apply_clickhouse_profile` | classes/functions | `from mental1104.db import ...` | Run ClickHouse queries through configured executors. |
-| Redis | `RedisMode`, `RedisConnParams`, `redis_params_from_env`, `RedisConnection`, `RedisLock`, `RedisBloom`, `RedisSessionAware`, `RedisRegistry`, `register_redis`, `get_redis_client`, `redis_session_scope`, `redis_tx_scope`, `ctx_redis_client`, `require_ctx_redis_client` | classes/functions | `from mental1104.db import ...` | Configure Redis clients, scopes, locks, and Bloom keys. |
-| MongoDB | `MongoConnParams`, `mongo_params_from_env`, `MongoConnection`, `AsyncMongoConnection`, `MongoSession`, `AsyncMongoSession`, `MongoSessionAware`, `AsyncMongoSessionAware`, `AutoMongoSessionDAO`, `MongoRegistry`, `register_mongo`, `get_mongo_client`, `get_async_mongo_client`, `mongo_session_scope`, `mongo_tx_scope`, `async_mongo_session_scope`, `async_mongo_tx_scope`, `ctx_mongo_session`, `ctx_async_mongo_session` | classes/functions | `from mental1104.db import ...` or `from mental1104.db.nosql import ...` | Configure Mongo clients and sync/async scopes. |
-| Messaging | `AbstractProducer`, `AbstractConsumer`, `AbstractMessageQueue` | abstract classes | `from mental1104.mq import ...` | Define producer/consumer/message-queue contracts. |
-| Messaging | `PulsarEnvironment`, `PulsarConnector`, `PulsarMessageQueue`, `PulsarAdminHelper`, `AsyncPulsarAdminHelper`, `Producer`, `Consumer` | classes/enums | `from mental1104.mq.pulsar import ...` | Use Pulsar clients, producers, consumers, and admin helpers. |
-| Messaging | `KafkaEnvironment`, `KafkaConnector`, `KafkaMessageQueue`, `KafkaAdminHelper`, `Producer`, `Consumer` | classes/enums | `from mental1104.mq.kafka import ...` | Use Kafka clients, producers, consumers, and admin helpers. |
-| i18n | `I18n`, `FileMoProvider`, `I18nResourceProvider`, `get_locale`, `activate`, `reset_locale`, `locale_context`, `normalize_locale` | classes/protocol/functions | `from mental1104.common.i18n import ...` | Load MO resources and resolve locale-aware translations. |
-| i18n | `extract_placeholders`, `compare_placeholders`, `localize_json`, `I18nMiddleware`, `LocaleResolver`, `ChainResolver`, `QueryResolver`, `HeaderResolver`, `CookieResolver` | functions/classes | `from mental1104.common.i18n import ...` or submodules | Validate placeholders, localize JSON, and resolve FastAPI locales. |
-| i18n tools | `PoEntry`, `parse_po`, `write_mo`, `po_text_to_mo_bytes`, `compile_po_tree`, `check_po_tree`, `main` | class/functions/CLI | `from mental1104.common.i18n.tools...` | Parse, compile, and check PO/MO trees. |
-| Plotting | `BenchTestType`, `BenchmarkRecord`, `BenchmarkSuite`, `PytestBenchmarkSuite`, `GoogleBenchmarkSuite`, `load_benchmark_suite`, `BenchmarkPlotter`, `TrendPlotBase`, `TimeBasedTrendPlot` | classes/functions | `from mental1104 import ...` | Load benchmark payloads and render plots. |
-| Debugging and networking | `trace_if`, `deciprobe`, `fetch_status` | decorators/functions | `from mental1104 import ...` | Trace calls conditionally and fetch HTTP status codes. |
-| Schema helpers | `JsonSerializable` | class | `from mental1104 import JsonSerializable` | Convert simple objects to dicts. |
-| CLI and scripts | `python/tools/render_bench_plots.py`, `python/tools/assemble_bench_gallery.py`, `mental1104.common.i18n.tools.cli.main` | scripts/functions | run with Python or import `main` | Render benchmark assets and run i18n tooling. |
-| Candidate or example-only APIs | `User`, `UserDAO`, `AsyncUserDAO`, `bootstrap`, `example_read`, `example_write`, `example_read_then_write`, `example_threads`, `example_chunk_read`, `example_async_read`, `example_async_write` | example classes/functions | `from mental1104.db.examples import ...` | Demonstrate DB registration, DAO, and scope usage. |
+| 序列化与格式转换 | `JsonParserType`, `JsonUtil`, `load_json`, `dump_json` | 枚举 / 类 / 函数 | `from mental1104 import ...` | 通过可用解析后端读写 JSON 字符串或流。 |
+| 序列化与格式转换 | `YamlUtil`, `parse_yaml`, `dump_yaml` | 类 / 函数 | `from mental1104 import ...` | 读写 YAML 字符串或流。 |
+| 序列化与格式转换 | `json_to_yaml`, `yaml_to_json` | 函数 | `from mental1104 import ...` | 在 JSON 和 YAML 之间转换。 |
+| 文本与时间 | `replace_space_with`, `insert_newlines` | 函数 | `from mental1104 import ...` | 重写空白字符并插入简单换行。 |
+| 文本与时间 | `timed`, `async_timed`, `get_current_time`, `parse_time` | 装饰器 / 函数 | `from mental1104 import ...` | 计时函数调用，并解析 / 格式化日期时间。 |
+| 随机与加密 | `random_pick`, `encrypt`, `decrypt`, `generate_salt` | 函数 | `from mental1104 import ...` | 随机选择 list/dict 条目，并运行 AES-CBC 辅助函数。 |
+| 环境变量 | `MissingEnvVarError`, `check_required_env_vars` | 异常 / 函数 | `from mental1104 import ...` | 校验必需环境变量。 |
+| 文件与路径 | `file_iterator`, `csv_writer`, `export_csv_from_database` | 函数 | `from mental1104 import ...` | 处理文件和 CSV 行。 |
+| 文件与路径 | `RenameOp`, `list_files`, `build_rename_plan`, `build_indexed_rename_plan`, `plan_directory_rename`, `plan_directory_rename_indexed`, `apply_rename_plan`, `rename_with_suffix`, `rename_with_regex_group`, `rename_with_index`, `validate_rename_plan` | dataclass / 函数 | `from mental1104.utils.batch_rename import ...` | 规划并执行避免冲突的批量文件重命名。 |
+| 应用辅助工具 | `extract_page_range` | 函数 | `from mental1104 import extract_page_range` | 从 PDF 中提取页面范围。 |
+| 应用辅助工具 | `AnkiApkgGenerator` | 类 | `from mental1104 import AnkiApkgGenerator` | 基于 JSON 输入构建简单的 Anki `.apkg` 卡组。 |
+| 上下文与 ASGI | `RequestCtx`, `ctx`, `set_ctx`, `reset_ctx`, `ctx_diag` | 类 / 函数 | `from mental1104 import ...` | 在 `ContextVar` 中保存请求上下文。 |
+| 上下文与 ASGI | `request_ctx_from_headers`, `RequestCtxMiddlewareFactory`, `RequestCtxContextVarMiddlewareFactory`, `register_request_ctx_middleware`, `register_all_request_ctx_middlewares` | 函数 / 类 | `from mental1104 import ...` | 从 FastAPI/Starlette 请求填充请求上下文。 |
+| 并发 | `CoroutinePool`, `GatherStrategy`, `AsCompletedStrategy`, `FirstSuccessfulStrategy`, `ThreadExecutorCoroutinePool`, `ProcessExecutorCoroutinePool`, `TaskExecutionStrategy` | 类 | `from mental1104 import ...` | 用可配置结果策略运行 async callable 批次。 |
+| 并发 | `ThreadWorkerPool`, `ProcessWorkerPool`, `MPStartMethod`, `delay`, `async_delay` | 类 / 枚举 / 函数 | `from mental1104 import ...` | 运行同步 worker pool 和简单延迟。 |
+| SQL 数据库 | `DBKind`, `ClickHouseProfile`, `ConnParams`, `SASettings`, `conn_params_from_env` | 枚举 / 类 / 函数 | `from mental1104.db import ...` | 构建数据库连接参数。 |
+| SQL 数据库 | `SQLAlchemyClient`, `AsyncSQLAlchemyClient`, `make_sqlalchemy_client`, `make_async_sqlalchemy_client` | 类 / 函数 | `from mental1104.db import ...` | 创建带 session scope 的 SQLAlchemy client。 |
+| SQL 数据库 | `DBRegistry`, `register_db`, `get_engine`, `get_async_engine`, `get_session_factory`, `get_async_session_factory`, `get_clickhouse_executor` | 类 / 函数 | `from mental1104.db import ...` | 注册并获取引擎 / session factory。 |
+| SQL 数据库 | `session_scope`, `tx_scope`, `async_session_scope`, `async_tx_scope`, `pg_session_scope`, `mysql_session_scope`, `sqlite_session_scope`, `ck_session_scope`, `pg_tx_scope`, `mysql_tx_scope`, `sqlite_tx_scope`, `ck_tx_scope` | 上下文管理器 | `from mental1104.db import ...` | 打开读 / 写数据库 session。 |
+| SQL 数据库 | `Base`, `TimestampMixin`, `SoftDeleteMixin`, `SessionAwareDAO`, `AutoSessionDAO`, `singleton_dao`, `make_async_dao`, `UnitOfWork`, `AsyncUnitOfWork` | 类 / 函数 | `from mental1104.db import ...` | 构建 ORM model、DAO 和服务事务作用域。 |
+| SQL 数据库 | `create_all`, `create_all_async`, `drop_all`, `drop_all_async`, `register_db_and_create`, `register_db_and_create_async`, `set_migration_handler`, `run_migrations` | 函数 | `from mental1104.db import ...` | 注册 schema 并运行迁移钩子。 |
+| ClickHouse | `ClickHouseExecutor`, `ClickHouseSessionAware`, `make_clickhouse_executor`, `clickhouse_session_scope`, `clickhouse_tx_scope`, `resolve_clickhouse_profile`, `apply_clickhouse_profile` | 类 / 函数 | `from mental1104.db import ...` | 通过已配置 executor 运行 ClickHouse 查询。 |
+| Redis | `RedisMode`, `RedisConnParams`, `redis_params_from_env`, `RedisConnection`, `RedisLock`, `RedisBloom`, `RedisSessionAware`, `RedisRegistry`, `register_redis`, `get_redis_client`, `redis_session_scope`, `redis_tx_scope`, `ctx_redis_client`, `require_ctx_redis_client` | 类 / 函数 | `from mental1104.db import ...` | 配置 Redis client、作用域、锁和 Bloom key。 |
+| MongoDB | `MongoConnParams`, `mongo_params_from_env`, `MongoConnection`, `AsyncMongoConnection`, `MongoSession`, `AsyncMongoSession`, `MongoSessionAware`, `AsyncMongoSessionAware`, `AutoMongoSessionDAO`, `MongoRegistry`, `register_mongo`, `get_mongo_client`, `get_async_mongo_client`, `mongo_session_scope`, `mongo_tx_scope`, `async_mongo_session_scope`, `async_mongo_tx_scope`, `ctx_mongo_session`, `ctx_async_mongo_session` | 类 / 函数 | `from mental1104.db import ...` 或 `from mental1104.db.nosql import ...` | 配置 Mongo client 和同步 / 异步作用域。 |
+| 消息队列 | `AbstractProducer`, `AbstractConsumer`, `AbstractMessageQueue` | 抽象类 | `from mental1104.mq import ...` | 定义 producer / consumer / message queue 契约。 |
+| 消息队列 | `PulsarEnvironment`, `PulsarConnector`, `PulsarMessageQueue`, `PulsarAdminHelper`, `AsyncPulsarAdminHelper`, `Producer`, `Consumer` | 类 / 枚举 | `from mental1104.mq.pulsar import ...` | 使用 Pulsar client、producer、consumer 和 admin 辅助工具。 |
+| 消息队列 | `KafkaEnvironment`, `KafkaConnector`, `KafkaMessageQueue`, `KafkaAdminHelper`, `Producer`, `Consumer` | 类 / 枚举 | `from mental1104.mq.kafka import ...` | 使用 Kafka client、producer、consumer 和 admin 辅助工具。 |
+| i18n | `I18n`, `FileMoProvider`, `I18nResourceProvider`, `get_locale`, `activate`, `reset_locale`, `locale_context`, `normalize_locale` | 类 / protocol / 函数 | `from mental1104.common.i18n import ...` | 加载 MO 资源并解析区域相关翻译。 |
+| i18n | `extract_placeholders`, `compare_placeholders`, `localize_json`, `I18nMiddleware`, `LocaleResolver`, `ChainResolver`, `QueryResolver`, `HeaderResolver`, `CookieResolver` | 函数 / 类 | `from mental1104.common.i18n import ...` 或子模块 | 校验占位符、本地化 JSON，并解析 FastAPI locale。 |
+| i18n 工具 | `PoEntry`, `parse_po`, `write_mo`, `po_text_to_mo_bytes`, `compile_po_tree`, `check_po_tree`, `main` | 类 / 函数 / CLI | `from mental1104.common.i18n.tools...` | 解析、编译并检查 PO/MO 树。 |
+| 绘图 | `BenchTestType`, `BenchmarkRecord`, `BenchmarkSuite`, `PytestBenchmarkSuite`, `GoogleBenchmarkSuite`, `load_benchmark_suite`, `BenchmarkPlotter`, `TrendPlotBase`, `TimeBasedTrendPlot` | 类 / 函数 | `from mental1104 import ...` | 加载基准测试 payload 并渲染图表。 |
+| 调试与网络 | `trace_if`, `deciprobe`, `fetch_status` | 装饰器 / 函数 | `from mental1104 import ...` | 条件式跟踪调用并获取 HTTP 状态码。 |
+| Schema 辅助工具 | `JsonSerializable` | 类 | `from mental1104 import JsonSerializable` | 将简单对象转换为 dict。 |
+| CLI 与脚本 | `python/tools/render_bench_plots.py`, `python/tools/assemble_bench_gallery.py`, `mental1104.common.i18n.tools.cli.main` | 脚本 / 函数 | 通过 Python 运行或导入 `main` | 渲染基准测试资源并运行 i18n 工具。 |
+| 候选或仅示例 API | `User`, `UserDAO`, `AsyncUserDAO`, `bootstrap`, `example_read`, `example_write`, `example_read_then_write`, `example_threads`, `example_chunk_read`, `example_async_read`, `example_async_write` | 示例类 / 函数 | `from mental1104.db.examples import ...` | 演示数据库注册、DAO 和作用域用法。 |
 
-## Details
+## 详情
 
-### JSON utilities
+### JSON 工具
 
-**Category:** Serialization and conversion  
-**Type:** enum, class, functions  
-**Defined in:** `python/mental1104/utils/parse_json.py`  
-**Import:** `from mental1104 import JsonParserType, JsonUtil, load_json, dump_json`  
-**Purpose:** Parse and dump JSON through available parser backends.
+- **类别：** 序列化与格式转换
+- **类型：** 枚举、类、函数
+- **定义位置：** `python/mental1104/utils/parse_json.py`
+- **导入：** `from mental1104 import JsonParserType, JsonUtil, load_json, dump_json`
+- **用途：** 通过可用解析后端解析和输出 JSON。
 
-**Basic usage:**
+**基础用法：**
 
 ```python
 from io import StringIO
@@ -93,7 +93,7 @@ buf = StringIO()
 dump_json({"name": "common"}, buf)
 ```
 
-**REPL usage:**
+**REPL 用法：**
 
 ```python
 >>> from mental1104 import JsonParserType, JsonUtil, dump_json, load_json
@@ -105,19 +105,19 @@ dump_json({"name": "common"}, buf)
 True
 ```
 
-**Notes:**
+**备注：**
 
-- Invalid JSON returns `None` and prints parse context where the backend exposes it.
+- 无效 JSON 会返回 `None`，并在后端提供上下文时打印解析上下文。
 
-### YAML utilities
+### YAML 工具
 
-**Category:** Serialization and conversion  
-**Type:** class and functions  
-**Defined in:** `python/mental1104/utils/parse_yaml.py`  
-**Import:** `from mental1104 import YamlUtil, parse_yaml, dump_yaml`  
-**Purpose:** Parse and dump YAML strings or streams.
+- **类别：** 序列化与格式转换
+- **类型：** 类和函数
+- **定义位置：** `python/mental1104/utils/parse_yaml.py`
+- **导入：** `from mental1104 import YamlUtil, parse_yaml, dump_yaml`
+- **用途：** 解析和输出 YAML 字符串或流。
 
-**Basic usage:**
+**基础用法：**
 
 ```python
 from io import StringIO
@@ -129,7 +129,7 @@ buf = StringIO()
 dump_yaml({"name": "common"}, buf)
 ```
 
-**REPL usage:**
+**REPL 用法：**
 
 ```python
 >>> from mental1104 import YamlUtil, dump_yaml, parse_yaml
@@ -139,15 +139,15 @@ dump_yaml({"name": "common"}, buf)
 True
 ```
 
-### Format conversion
+### 格式转换
 
-**Category:** Serialization and conversion  
-**Type:** functions  
-**Defined in:** `python/mental1104/app/convert.py`  
-**Import:** `from mental1104 import json_to_yaml, yaml_to_json`  
-**Purpose:** Convert JSON text/streams to YAML and YAML text/streams to JSON.
+- **类别：** 序列化与格式转换
+- **类型：** 函数
+- **定义位置：** `python/mental1104/app/convert.py`
+- **导入：** `from mental1104 import json_to_yaml, yaml_to_json`
+- **用途：** 将 JSON 文本 / 流转换为 YAML，或将 YAML 文本 / 流转换为 JSON。
 
-**Basic usage:**
+**基础用法：**
 
 ```python
 from mental1104 import json_to_yaml, yaml_to_json
@@ -156,7 +156,7 @@ yaml_text = json_to_yaml('{"name": "common"}', sort_keys=False)
 json_text = yaml_to_json("name: common\n", ensure_ascii=False)
 ```
 
-**REPL usage:**
+**REPL 用法：**
 
 ```python
 >>> from mental1104 import json_to_yaml, yaml_to_json
@@ -166,15 +166,15 @@ True
 '{"name": "common"}'
 ```
 
-### Text, time, random, environment, and encryption
+### 文本、时间、随机、环境和加密
 
-**Category:** Text, time, random, environment, and encryption  
-**Type:** functions, decorators, exception  
-**Defined in:** `python/mental1104/string`, `python/mental1104/timed.py`, `python/mental1104/utils`, `python/mental1104/env`  
-**Import:** `from mental1104 import ...`  
-**Purpose:** Common small helpers for strings, delays, timestamps, random selection, environment checks, and encryption.
+- **类别：** 文本、时间、随机、环境和加密
+- **类型：** 函数、装饰器、异常
+- **定义位置：** `python/mental1104/string`, `python/mental1104/timed.py`, `python/mental1104/utils`, `python/mental1104/env`
+- **导入：** `from mental1104 import ...`
+- **用途：** 提供字符串、延迟、时间戳、随机选择、环境检查和加密相关的小型通用辅助函数。
 
-**Basic usage:**
+**基础用法：**
 
 ```python
 import asyncio
@@ -221,7 +221,7 @@ async def async_work():
     return "ok"
 ```
 
-**REPL usage:**
+**REPL 用法：**
 
 ```python
 >>> from mental1104 import decrypt, encrypt, generate_salt, random_pick, replace_space_with
@@ -235,20 +235,20 @@ async def async_work():
 'a'
 ```
 
-**Notes:**
+**备注：**
 
-- `encrypt`/`decrypt` use AES-CBC and expect key/salt sizes accepted by the crypto backend.
-- `random_pick` supports `list` and `dict`; unsupported types raise `NotImplementedError`.
+- `encrypt`/`decrypt` 使用 AES-CBC，并要求 key/salt 长度被加密后端接受。
+- `random_pick` 支持 `list` 和 `dict`；不支持的类型会抛出 `NotImplementedError`。
 
-### File, CSV, and batch rename utilities
+### 文件、CSV 和批量重命名工具
 
-**Category:** File and path utilities  
-**Type:** dataclass and functions  
-**Defined in:** `python/mental1104/file`, `python/mental1104/utils/batch_rename.py`  
-**Import:** `from mental1104 import file_iterator, csv_writer, export_csv_from_database`; `from mental1104.utils.batch_rename import ...`  
-**Purpose:** Process files and build/apply safe rename plans.
+- **类别：** 文件与路径工具
+- **类型：** dataclass 和函数
+- **定义位置：** `python/mental1104/file`, `python/mental1104/utils/batch_rename.py`
+- **导入：** `from mental1104 import file_iterator, csv_writer, export_csv_from_database`; `from mental1104.utils.batch_rename import ...`
+- **用途：** 处理文件，并构建 / 应用安全的重命名计划。
 
-**Basic usage:**
+**基础用法：**
 
 ```python
 from pathlib import Path
@@ -273,7 +273,7 @@ manual = [RenameOp(src=Path("a.txt"), dst=Path("b.txt"))]
 validate_rename_plan(manual)
 ```
 
-**REPL usage:**
+**REPL 用法：**
 
 ```python
 >>> from pathlib import Path
@@ -282,20 +282,20 @@ validate_rename_plan(manual)
 [RenameOp(src=PosixPath('clip.wav'), dst=PosixPath('clip.m4a'))]
 ```
 
-**Notes:**
+**备注：**
 
-- `apply_rename_plan(..., dry_run=True)` returns the operations without touching files.
-- `export_csv_from_database` expects a DB query object compatible with its implementation.
+- `apply_rename_plan(..., dry_run=True)` 会返回操作列表，但不改动文件。
+- `export_csv_from_database` 需要传入与其实现兼容的数据库查询对象。
 
-### App helpers
+### 应用辅助工具
 
-**Category:** App helpers  
-**Type:** class and functions  
-**Defined in:** `python/mental1104/app`  
-**Import:** `from mental1104 import AnkiApkgGenerator, extract_page_range`  
-**Purpose:** Generate simple Anki packages and extract PDF page ranges.
+- **类别：** 应用辅助工具
+- **类型：** 类和函数
+- **定义位置：** `python/mental1104/app`
+- **导入：** `from mental1104 import AnkiApkgGenerator, extract_page_range`
+- **用途：** 生成简单 Anki 包并提取 PDF 页面范围。
 
-**Basic usage:**
+**基础用法：**
 
 ```python
 from mental1104 import AnkiApkgGenerator, extract_page_range
@@ -307,7 +307,7 @@ generator.save_to_file("demo.apkg")
 extract_page_range("source.pdf", "chapter.pdf", 1, 3)
 ```
 
-**REPL usage:**
+**REPL 用法：**
 
 ```python
 >>> from mental1104 import AnkiApkgGenerator
@@ -316,20 +316,20 @@ extract_page_range("source.pdf", "chapter.pdf", 1, 3)
 True
 ```
 
-**Notes:**
+**备注：**
 
-- `AnkiApkgGenerator` requires `genanki`; `extract_page_range` requires `pypdf`.
-- PDF examples require existing local files.
+- `AnkiApkgGenerator` 需要 `genanki`；`extract_page_range` 需要 `pypdf`。
+- PDF 示例需要本地已有文件。
 
-### Context and FastAPI helpers
+### 上下文和 FastAPI 辅助工具
 
-**Category:** Context, ASGI, and FastAPI  
-**Type:** class, factories, functions  
-**Defined in:** `python/mental1104/utils/context.py`, `python/mental1104/asgi/fastapi`  
-**Import:** `from mental1104 import RequestCtx, ctx, set_ctx, reset_ctx, request_ctx_from_headers, register_request_ctx_middleware`  
-**Purpose:** Store request metadata in context variables and wire it into FastAPI middleware.
+- **类别：** 上下文、ASGI 和 FastAPI
+- **类型：** 类、工厂、函数
+- **定义位置：** `python/mental1104/utils/context.py`, `python/mental1104/asgi/fastapi`
+- **导入：** `from mental1104 import RequestCtx, ctx, set_ctx, reset_ctx, request_ctx_from_headers, register_request_ctx_middleware`
+- **用途：** 在上下文变量中存储请求元数据，并接入 FastAPI 中间件。
 
-**Basic usage:**
+**基础用法：**
 
 ```python
 from fastapi import FastAPI
@@ -353,7 +353,7 @@ app = FastAPI()
 register_all_request_ctx_middlewares(app)
 ```
 
-**REPL usage:**
+**REPL 用法：**
 
 ```python
 >>> from mental1104 import RequestCtx, ctx, reset_ctx, set_ctx
@@ -363,19 +363,19 @@ register_all_request_ctx_middlewares(app)
 >>> reset_ctx(token)
 ```
 
-**Notes:**
+**备注：**
 
-- FastAPI helpers require FastAPI/Starlette request objects at runtime.
+- FastAPI 辅助工具在运行时需要 FastAPI/Starlette request 对象。
 
-### Concurrency helpers
+### 并发辅助工具
 
-**Category:** Concurrency  
-**Type:** classes, enum, functions  
-**Defined in:** `python/mental1104/concurrency`  
-**Import:** `from mental1104 import CoroutinePool, GatherStrategy, AsCompletedStrategy, FirstSuccessfulStrategy, ThreadExecutorCoroutinePool, ProcessExecutorCoroutinePool, ThreadWorkerPool, ProcessWorkerPool, MPStartMethod`  
-**Purpose:** Run async batches, executor-backed coroutine batches, and sync worker pools.
+- **类别：** 并发
+- **类型：** 类、枚举、函数
+- **定义位置：** `python/mental1104/concurrency`
+- **导入：** `from mental1104 import CoroutinePool, GatherStrategy, AsCompletedStrategy, FirstSuccessfulStrategy, ThreadExecutorCoroutinePool, ProcessExecutorCoroutinePool, ThreadWorkerPool, ProcessWorkerPool, MPStartMethod`
+- **用途：** 运行 async 批任务、基于 executor 的 coroutine 批任务和同步 worker pool。
 
-**Basic usage:**
+**基础用法：**
 
 ```python
 import asyncio
@@ -392,7 +392,7 @@ result = loop.run_until_complete(pool.run_task_batch(partials, GatherStrategy())
 loop.close()
 ```
 
-**REPL usage:**
+**REPL 用法：**
 
 ```python
 >>> from mental1104 import GatherStrategy, MPStartMethod
@@ -402,19 +402,19 @@ True
 'spawn'
 ```
 
-**Notes:**
+**备注：**
 
-- `ProcessExecutorCoroutinePool` and `ProcessWorkerPool` need callables that can be pickled.
+- `ProcessExecutorCoroutinePool` 和 `ProcessWorkerPool` 需要可被 pickle 的 callable。
 
-### SQL database registry, scopes, DAO, and unit of work
+### SQL 数据库注册表、作用域、DAO 和工作单元
 
-**Category:** SQL database, DAO, and unit of work  
-**Type:** classes, enums, context managers, functions  
-**Defined in:** `python/mental1104/db`  
-**Import:** `from mental1104.db import ...`  
-**Purpose:** Register database clients and open sync/async read/write scopes.
+- **类别：** SQL 数据库、DAO 和工作单元
+- **类型：** 类、枚举、上下文管理器、函数
+- **定义位置：** `python/mental1104/db`
+- **导入：** `from mental1104.db import ...`
+- **用途：** 注册数据库 client，并打开同步 / 异步读写作用域。
 
-**Basic usage:**
+**基础用法：**
 
 ```python
 from mental1104.db import (
@@ -445,7 +445,7 @@ with tx_scope(DBKind.SQLITE, "demo") as session:
     session.execute(text("SELECT 1"))
 ```
 
-**REPL usage:**
+**REPL 用法：**
 
 ```python
 >>> from mental1104.db import DBKind, ConnParams, conn_params_from_env
@@ -455,20 +455,20 @@ with tx_scope(DBKind.SQLITE, "demo") as session:
 ':memory:'
 ```
 
-**Notes:**
+**备注：**
 
-- See [mental1104/db/README.md](./mental1104/db/README.md) for DB-specific examples.
-- SQLAlchemy scopes require the relevant driver packages and reachable databases.
+- 数据库专用示例见 [mental1104/db/README.md](./mental1104/db/README.md)。
+- SQLAlchemy 作用域需要相关驱动包和可访问的数据库。
 
-### ClickHouse helpers
+### ClickHouse 辅助工具
 
-**Category:** SQL database  
-**Type:** classes and functions  
-**Defined in:** `python/mental1104/db/clickhouse_adapter.py`, `python/mental1104/db/clickhouse_profiles.py`  
-**Import:** `from mental1104.db import ClickHouseExecutor, make_clickhouse_executor, clickhouse_session_scope`  
-**Purpose:** Execute ClickHouse statements through a lightweight executor and session-aware helpers.
+- **类别：** SQL 数据库
+- **类型：** 类和函数
+- **定义位置：** `python/mental1104/db/clickhouse_adapter.py`, `python/mental1104/db/clickhouse_profiles.py`
+- **导入：** `from mental1104.db import ClickHouseExecutor, make_clickhouse_executor, clickhouse_session_scope`
+- **用途：** 通过轻量 executor 和 session-aware 辅助工具执行 ClickHouse 语句。
 
-**Basic usage:**
+**基础用法：**
 
 ```python
 from mental1104.db import make_clickhouse_executor, clickhouse_session_scope
@@ -478,7 +478,7 @@ with clickhouse_session_scope(executor) as ch:
     rows = ch.select("SELECT 1")
 ```
 
-**REPL usage:**
+**REPL 用法：**
 
 ```python
 >>> from mental1104.db import ClickHouseProfile
@@ -486,19 +486,19 @@ with clickhouse_session_scope(executor) as ch:
 'distributed'
 ```
 
-**Notes:**
+**备注：**
 
-- Requires a ClickHouse client dependency and a reachable ClickHouse service.
+- 需要 ClickHouse client 依赖和可访问的 ClickHouse 服务。
 
-### Redis helpers
+### Redis 辅助工具
 
-**Category:** Redis  
-**Type:** classes, enum, functions, context managers  
-**Defined in:** `python/mental1104/db/redis`  
-**Import:** `from mental1104.db import register_redis, redis_params_from_env, redis_session_scope, RedisLock, RedisBloom`  
-**Purpose:** Configure Redis clients and use session scopes, lock helpers, and Bloom key helpers.
+- **类别：** Redis
+- **类型：** 类、枚举、函数、上下文管理器
+- **定义位置：** `python/mental1104/db/redis`
+- **导入：** `from mental1104.db import register_redis, redis_params_from_env, redis_session_scope, RedisLock, RedisBloom`
+- **用途：** 配置 Redis client，并使用 session 作用域、锁辅助工具和 Bloom key 辅助工具。
 
-**Basic usage:**
+**基础用法：**
 
 ```python
 from mental1104.db import (
@@ -523,7 +523,7 @@ bloom.add("alice")
 bloom.exists("alice")
 ```
 
-**REPL usage:**
+**REPL 用法：**
 
 ```python
 >>> from mental1104.db import RedisMode, RedisConnParams
@@ -533,19 +533,19 @@ bloom.exists("alice")
 'localhost'
 ```
 
-**Notes:**
+**备注：**
 
-- Requires `redis` dependencies and a reachable Redis service for live calls.
+- 实际调用需要 `redis` 依赖和可访问的 Redis 服务。
 
-### MongoDB helpers
+### MongoDB 辅助工具
 
-**Category:** MongoDB  
-**Type:** classes, functions, context managers  
-**Defined in:** `python/mental1104/db/nosql`  
-**Import:** `from mental1104.db import register_mongo, mongo_params_from_env, mongo_session_scope, async_mongo_session_scope`  
-**Purpose:** Configure sync/async Mongo clients and inject current sessions through context variables.
+- **类别：** MongoDB
+- **类型：** 类、函数、上下文管理器
+- **定义位置：** `python/mental1104/db/nosql`
+- **导入：** `from mental1104.db import register_mongo, mongo_params_from_env, mongo_session_scope, async_mongo_session_scope`
+- **用途：** 配置同步 / 异步 Mongo client，并通过上下文变量注入当前 session。
 
-**Basic usage:**
+**基础用法：**
 
 ```python
 from mental1104.db import mongo_params_from_env, mongo_session_scope, register_mongo
@@ -556,7 +556,7 @@ with mongo_session_scope() as mongo:
     collection.insert_one({"name": "alice"})
 ```
 
-**REPL usage:**
+**REPL 用法：**
 
 ```python
 >>> from mental1104.db import MongoConnParams
@@ -564,20 +564,20 @@ with mongo_session_scope() as mongo:
 'localhost'
 ```
 
-**Notes:**
+**备注：**
 
-- Requires MongoDB dependencies and a reachable MongoDB service for live calls.
-- Transaction scopes require MongoDB replica set or sharded transaction support.
+- 实际调用需要 MongoDB 依赖和可访问的 MongoDB 服务。
+- 事务作用域需要 MongoDB 副本集或分片事务支持。
 
-### Messaging helpers
+### 消息队列辅助工具
 
-**Category:** Messaging  
-**Type:** abstract classes, connectors, producers, consumers, admin helpers  
-**Defined in:** `python/mental1104/mq`  
-**Import:** `from mental1104.mq import AbstractMessageQueue`; `from mental1104.mq.pulsar import PulsarMessageQueue`; `from mental1104.mq.kafka import KafkaMessageQueue`  
-**Purpose:** Create producers/consumers and use admin helpers for Kafka or Pulsar.
+- **类别：** 消息队列
+- **类型：** 抽象类、connector、producer、consumer、admin 辅助工具
+- **定义位置：** `python/mental1104/mq`
+- **导入：** `from mental1104.mq import AbstractMessageQueue`; `from mental1104.mq.pulsar import PulsarMessageQueue`; `from mental1104.mq.kafka import KafkaMessageQueue`
+- **用途：** 创建 producer / consumer，并使用 Kafka 或 Pulsar 的 admin 辅助工具。
 
-**Basic usage:**
+**基础用法：**
 
 ```python
 from mental1104.mq.pulsar import PulsarConnector, PulsarMessageQueue
@@ -591,7 +591,7 @@ kafka_queue = KafkaMessageQueue(
 )
 ```
 
-**REPL usage:**
+**REPL 用法：**
 
 ```python
 >>> from mental1104.mq.pulsar import PulsarEnvironment
@@ -599,20 +599,20 @@ kafka_queue = KafkaMessageQueue(
 'PULSAR_HOST'
 ```
 
-**Notes:**
+**备注：**
 
-- Requires the corresponding client libraries and reachable brokers.
-- `Producer` and `Consumer` names exist in both Kafka and Pulsar modules; import from the specific module.
+- 需要对应 client 库和可访问的 broker。
+- Kafka 和 Pulsar 模块中都存在 `Producer` 与 `Consumer` 名称，请从具体模块导入。
 
-### i18n runtime and tools
+### i18n 运行时和工具
 
-**Category:** i18n  
-**Type:** classes, protocols, functions, CLI entry  
-**Defined in:** `python/mental1104/common/i18n`  
-**Import:** `from mental1104.common.i18n import I18n, FileMoProvider, locale_context`; tools under `mental1104.common.i18n.tools`  
-**Purpose:** Resolve locale-aware MO translations and compile/check PO trees.
+- **类别：** i18n
+- **类型：** 类、protocol、函数、CLI 入口
+- **定义位置：** `python/mental1104/common/i18n`
+- **导入：** `from mental1104.common.i18n import I18n, FileMoProvider, locale_context`; 工具位于 `mental1104.common.i18n.tools`
+- **用途：** 解析区域相关的 MO 翻译，并编译 / 检查 PO 树。
 
-**Basic usage:**
+**基础用法：**
 
 ```python
 from mental1104.common.i18n import FileMoProvider, I18n, locale_context
@@ -628,7 +628,7 @@ with locale_context("en-US"):
 missing, extra = compare_placeholders("Hello {name}", "Hi {name}")
 ```
 
-**REPL usage:**
+**REPL 用法：**
 
 ```python
 >>> from mental1104.common.i18n import normalize_locale
@@ -639,20 +639,20 @@ missing, extra = compare_placeholders("Hello {name}", "Hi {name}")
 {'name'}
 ```
 
-**Notes:**
+**备注：**
 
-- Runtime translation uses compiled MO files.
-- FastAPI middleware and resolvers require request objects from FastAPI/Starlette.
+- 运行时翻译使用已编译的 MO 文件。
+- FastAPI 中间件和 resolver 需要 FastAPI/Starlette request 对象。
 
-### Plotting and benchmark reports
+### 绘图和基准报告
 
-**Category:** Plotting and benchmark reports  
-**Type:** classes and functions  
-**Defined in:** `python/mental1104/plot`, `python/tools`  
-**Import:** `from mental1104 import BenchmarkPlotter, load_benchmark_suite, TrendPlotBase, TimeBasedTrendPlot`  
-**Purpose:** Load benchmark payloads and render comparison/ranking/trend plots.
+- **类别：** 绘图与基准报告
+- **类型：** 类和函数
+- **定义位置：** `python/mental1104/plot`, `python/tools`
+- **导入：** `from mental1104 import BenchmarkPlotter, load_benchmark_suite, TrendPlotBase, TimeBasedTrendPlot`
+- **用途：** 加载基准测试 payload，并渲染对比、排名和趋势图。
 
-**Basic usage:**
+**基础用法：**
 
 ```python
 from mental1104 import BenchmarkPlotter, BenchTestType, load_benchmark_suite
@@ -662,7 +662,7 @@ plotter = BenchmarkPlotter(suite)
 metrics = plotter.available_metrics()
 ```
 
-**REPL usage:**
+**REPL 用法：**
 
 ```python
 >>> from mental1104 import BenchTestType
@@ -670,19 +670,19 @@ metrics = plotter.available_metrics()
 'pytest-benchmark'
 ```
 
-**Notes:**
+**备注：**
 
-- Real plotting calls require benchmark payloads and plotting dependencies.
+- 实际绘图调用需要基准测试 payload 和绘图依赖。
 
-### Debugging, networking, and schema helpers
+### 调试、网络和 schema 辅助工具
 
-**Category:** Debugging, networking, schema helpers  
-**Type:** decorators, async function, base class  
-**Defined in:** `python/mental1104/debug`, `python/mental1104/network`, `python/mental1104/schema`  
-**Import:** `from mental1104 import deciprobe, trace_if, fetch_status, JsonSerializable`  
-**Purpose:** Trace calls, fetch HTTP status through aiohttp, and convert simple objects to dictionaries.
+- **类别：** 调试、网络、schema 辅助工具
+- **类型：** 装饰器、异步函数、基类
+- **定义位置：** `python/mental1104/debug`, `python/mental1104/network`, `python/mental1104/schema`
+- **导入：** `from mental1104 import deciprobe, trace_if, fetch_status, JsonSerializable`
+- **用途：** 跟踪调用、通过 aiohttp 获取 HTTP 状态，并将简单对象转换为字典。
 
-**Basic usage:**
+**基础用法：**
 
 ```python
 from mental1104 import JsonSerializable, deciprobe, trace_if
@@ -696,7 +696,7 @@ def build():
     return Item("common").to_dict()
 ```
 
-**REPL usage:**
+**REPL 用法：**
 
 ```python
 >>> from mental1104 import JsonSerializable
@@ -707,19 +707,19 @@ def build():
 {'name': 'common'}
 ```
 
-**Notes:**
+**备注：**
 
-- `fetch_status` requires an `aiohttp.ClientSession`.
+- `fetch_status` 需要 `aiohttp.ClientSession`。
 
-### CLI and scripts
+### CLI 和脚本
 
-**Category:** CLI and scripts  
-**Type:** script entry points  
-**Defined in:** `python/tools`, `python/mental1104/common/i18n/tools/cli.py`  
-**Import / Path:** run scripts directly or import `main`  
-**Purpose:** Render benchmark plots, assemble benchmark galleries, and run i18n tooling.
+- **类别：** CLI 与脚本
+- **类型：** 脚本入口
+- **定义位置：** `python/tools`, `python/mental1104/common/i18n/tools/cli.py`
+- **导入 / 路径：** 直接运行脚本或导入 `main`
+- **用途：** 渲染基准测试图表、组装基准测试 gallery，并运行 i18n 工具。
 
-**Basic usage:**
+**基础用法：**
 
 ```bash
 python python/tools/render_bench_plots.py --help
@@ -727,7 +727,7 @@ python python/tools/assemble_bench_gallery.py --help
 python -m mental1104.common.i18n.tools --help
 ```
 
-**REPL usage:**
+**REPL 用法：**
 
 ```python
 >>> from mental1104.common.i18n.tools.cli import main
@@ -735,15 +735,15 @@ python -m mental1104.common.i18n.tools --help
 True
 ```
 
-### Candidate or example-only DB APIs
+### 候选或仅示例 DB API
 
-**Category:** Candidate or example-only APIs  
-**Type:** classes and functions  
-**Defined in:** `python/mental1104/db/examples.py`  
-**Import:** `from mental1104.db.examples import User, UserDAO, AsyncUserDAO, bootstrap, example_read`  
-**Purpose:** Demonstrate ORM, DAO, sync scopes, async scopes, and threaded usage.
+- **类别：** 候选或仅示例 API
+- **类型：** 类和函数
+- **定义位置：** `python/mental1104/db/examples.py`
+- **导入：** `from mental1104.db.examples import User, UserDAO, AsyncUserDAO, bootstrap, example_read`
+- **用途：** 演示 ORM、DAO、同步作用域、异步作用域和多线程用法。
 
-**Basic usage:**
+**基础用法：**
 
 ```python
 from mental1104.db.examples import bootstrap, example_read, example_write
@@ -753,7 +753,7 @@ example_write("alice")
 rows = example_read()
 ```
 
-**REPL usage:**
+**REPL 用法：**
 
 ```python
 >>> from mental1104.db.examples import User
@@ -761,13 +761,13 @@ rows = example_read()
 'users'
 ```
 
-**Notes:**
+**备注：**
 
-- Needs review: these are public exports but appear to be examples rather than stable reusable APIs.
+- 待复核：这些是公共导出，但看起来更像示例而非稳定的可复用 API。
 
-## Dev commands
+## 开发命令
 
-From the repository root:
+在仓库根目录运行：
 
 ```bash
 ./dev setup-python
@@ -780,4 +780,4 @@ From the repository root:
 ./dev install-python
 ```
 
-The older package note still applies: after adding new top-level exports, regenerate `python/mental1104/__init__.py` with the repository's init generation workflow before packaging.
+旧版包说明仍然适用：新增顶层导出后，请在打包前使用仓库的 init 生成流程重新生成 `python/mental1104/__init__.py`。

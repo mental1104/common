@@ -1,39 +1,39 @@
-# Rust utilities
+# Rust 工具库
 
-Crate name: `mental1104`.
+Crate 名称：`mental1104`。
 
-## Maintenance rule
+## 维护规则
 
-When adding a public function, struct, enum, trait, type alias, module, prelude export, or reusable example, update this README with its category, path, purpose, minimal usage example, and notes. If the API is public but not clearly stable, mark it `Needs review`.
+新增公共函数、结构体、枚举、trait、类型别名、模块、prelude 导出或可复用示例时，必须更新此 README，写明类别、路径、用途、最小用法示例和备注。如果 API 是公开的但稳定性尚不明确，请标记为 `待复核`。
 
-## Categories
+## 分类
 
-- Collection containment
-- Error handling
-- Prelude and feature exports
+- 集合包含判断
+- 错误处理
+- Prelude 与 feature 导出
 
-## Usage index
+## 用法索引
 
-| Category | Name | Type | Use path | Purpose |
+| 类别 | 名称 | 类型 | 使用路径 | 用途 |
 |---|---|---|---|---|
-| Collection containment | `contains` | function | `mental1104::collections::contains` or `mental1104::prelude::contains` | Check whether a supported container contains a key/value. |
-| Collection containment | `HasKey` | trait | `mental1104::collections::HasKey` | Trait implemented by containers accepted by `contains`. |
-| Collection containment | `SortedSlice` | struct | `mental1104::collections::SortedSlice` or `mental1104::prelude::SortedSlice` | Mark an already-sorted slice for sorted lookup semantics. |
-| Error handling | `MentalError` | enum | `mental1104::error::MentalError` | Common error enum for reusable modules. |
-| Error handling | `Result<T>` | type alias | `mental1104::error::Result` | Repository result alias using `MentalError`. |
-| Prelude and feature exports | `prelude`, `FastHashMap`, `FastHashSet` | module/type re-exports | `mental1104::prelude::*`, `mental1104::FastHashMap` | Convenient imports and optional fast hash map/set aliases. |
+| 集合包含判断 | `contains` | 函数 | `mental1104::collections::contains` 或 `mental1104::prelude::contains` | 检查受支持容器是否包含指定键 / 值。 |
+| 集合包含判断 | `HasKey` | trait | `mental1104::collections::HasKey` | 供 `contains` 接受的容器实现的 trait。 |
+| 集合包含判断 | `SortedSlice` | 结构体 | `mental1104::collections::SortedSlice` 或 `mental1104::prelude::SortedSlice` | 标记一个已排序切片，使其使用有序查找语义。 |
+| 错误处理 | `MentalError` | 枚举 | `mental1104::error::MentalError` | 供可复用模块共享的通用错误枚举。 |
+| 错误处理 | `Result<T>` | 类型别名 | `mental1104::error::Result` | 使用 `MentalError` 的仓库级结果别名。 |
+| Prelude 与 feature 导出 | `prelude`, `FastHashMap`, `FastHashSet` | 模块 / 类型重导出 | `mental1104::prelude::*`, `mental1104::FastHashMap` | 便捷导入，以及可选的快速哈希 map/set 别名。 |
 
-## Details
+## 详情
 
 ### `contains`
 
-**Category:** Collection containment  
-**Type:** function  
-**Defined in:** `rust/mental1104/src/collections/contains.rs`  
-**Use:** `use mental1104::collections::contains;`  
-**Purpose:** Check containment through a single function for supported containers.
+- **类别：** 集合包含判断
+- **类型：** 函数
+- **定义位置：** `rust/mental1104/src/collections/contains.rs`
+- **使用：** `use mental1104::collections::contains;`
+- **用途：** 用单个函数为受支持容器执行包含判断。
 
-**Basic usage:**
+**基础用法：**
 
 ```rust
 use mental1104::collections::contains;
@@ -49,19 +49,25 @@ fn main() {
 }
 ```
 
-**Notes:**
+**示例结果：**
 
-- Use `SortedSlice` when the slice is already sorted and you want sorted lookup behavior.
+```text
+无标准输出；contains(values.as_slice(), &2) 返回 true，contains(&names, "alice") 返回 true。
+```
+
+**备注：**
+
+- 当切片已经排序且希望使用有序查找行为时，使用 `SortedSlice`。
 
 ### `HasKey`
 
-**Category:** Collection containment  
-**Type:** trait  
-**Defined in:** `rust/mental1104/src/collections/contains.rs`  
-**Use:** `use mental1104::collections::HasKey;`  
-**Purpose:** Let custom container wrappers participate in `contains`.
+- **类别：** 集合包含判断
+- **类型：** trait
+- **定义位置：** `rust/mental1104/src/collections/contains.rs`
+- **使用：** `use mental1104::collections::HasKey;`
+- **用途：** 让自定义容器包装类型参与 `contains` 判断。
 
-**Basic usage:**
+**基础用法：**
 
 ```rust
 use mental1104::collections::{contains, HasKey};
@@ -80,15 +86,21 @@ fn main() {
 }
 ```
 
+**示例结果：**
+
+```text
+无标准输出；contains(&bag, &2) 返回 true。
+```
+
 ### `SortedSlice`
 
-**Category:** Collection containment  
-**Type:** struct  
-**Defined in:** `rust/mental1104/src/collections/contains.rs`  
-**Use:** `use mental1104::collections::SortedSlice;`  
-**Purpose:** Wrap a sorted slice for containment checks.
+- **类别：** 集合包含判断
+- **类型：** 结构体
+- **定义位置：** `rust/mental1104/src/collections/contains.rs`
+- **使用：** `use mental1104::collections::SortedSlice;`
+- **用途：** 包装已排序切片，用于包含判断。
 
-**Basic usage:**
+**基础用法：**
 
 ```rust
 use mental1104::collections::{contains, SortedSlice};
@@ -99,19 +111,25 @@ fn main() {
 }
 ```
 
-**Notes:**
+**示例结果：**
 
-- The caller is responsible for passing a sorted slice.
+```text
+无标准输出；contains(SortedSlice(&values), &5) 返回 true。
+```
+
+**备注：**
+
+- 调用方负责确保传入的切片已经排序。
 
 ### `MentalError` and `Result<T>`
 
-**Category:** Error handling  
-**Type:** enum and type alias  
-**Defined in:** `rust/mental1104/src/error/mod.rs`  
-**Use:** `use mental1104::error::{MentalError, Result};`  
-**Purpose:** Share common error/result types across crate modules.
+- **类别：** 错误处理
+- **类型：** 枚举和类型别名
+- **定义位置：** `rust/mental1104/src/error/mod.rs`
+- **使用：** `use mental1104::error::{MentalError, Result};`
+- **用途：** 在 crate 模块之间共享通用错误 / 结果类型。
 
-**Basic usage:**
+**基础用法：**
 
 ```rust
 use mental1104::error::{MentalError, Result};
@@ -128,15 +146,22 @@ fn main() {
 }
 ```
 
-### Prelude and optional hash aliases
+**示例返回值：**
 
-**Category:** Prelude and feature exports  
-**Type:** module and re-exported type aliases  
-**Defined in:** `rust/mental1104/src/prelude.rs`, `rust/mental1104/src/lib.rs`  
-**Use:** `use mental1104::prelude::*;`  
-**Purpose:** Import common collection helpers; when the `fast-hash` feature is enabled, use `FastHashMap` and `FastHashSet`.
+```text
+require_name("common") => Ok("common")
+require_name("") => Err(MentalError::InvalidInput("name is empty"))
+```
 
-**Basic usage:**
+### Prelude 和可选哈希别名
+
+- **类别：** Prelude 与 feature 导出
+- **类型：** 模块和重导出的类型别名
+- **定义位置：** `rust/mental1104/src/prelude.rs`, `rust/mental1104/src/lib.rs`
+- **使用：** `use mental1104::prelude::*;`
+- **用途：** 导入常用集合辅助函数；启用 `fast-hash` feature 时，可使用 `FastHashMap` 和 `FastHashSet`。
+
+**基础用法：**
 
 ```rust
 use mental1104::prelude::*;
@@ -147,6 +172,12 @@ fn main() {
 }
 ```
 
-**Notes:**
+**示例结果：**
 
-- `FastHashMap` and `FastHashSet` require the `fast-hash` feature.
+```text
+无标准输出；contains(values.as_slice(), &2) 返回 true。
+```
+
+**备注：**
+
+- `FastHashMap` 和 `FastHashSet` 需要启用 `fast-hash` feature。

@@ -2,8 +2,11 @@ from __future__ import annotations
 
 import os
 import platform
+import re
 import shlex
 import shutil
+import subprocess
+from importlib import metadata as importlib_metadata
 from pathlib import Path
 from typing import Iterable, Mapping
 
@@ -130,6 +133,41 @@ def _install_requirements(env: Mapping[str, str]) -> None:
             tmp_req.unlink(missing_ok=True)
 
 
+_REQ_NAME_RE = re.compile(r"^\s*([A-Za-z0-9_.-]+)")
+
+
+def _requirement_name(line: str) -> str | None:
+    stripped = line.split("#", 1)[0].strip()
+    if not stripped or stripped.startswith("-"):
+        return None
+    stripped = stripped.split(";", 1)[0].strip()
+    match = _REQ_NAME_RE.match(stripped)
+    if not match:
+        return None
+    return match.group(1).replace("_", "-").lower()
+
+
+def _installed_without_pip_uninstall_metadata(name: str) -> bool:
+    try:
+        dist = importlib_metadata.distribution(name)
+    except importlib_metadata.PackageNotFoundError:
+        return False
+    return dist.read_text("RECORD") is None and dist.read_text("installed-files.txt") is None
+
+
+def _requirements_need_ignore_installed(lines: Iterable[str]) -> list[str]:
+    unsafe = []
+    seen = set()
+    for line in lines:
+        name = _requirement_name(line)
+        if not name or name in seen:
+            continue
+        seen.add(name)
+        if _installed_without_pip_uninstall_metadata(name):
+            unsafe.append(name)
+    return unsafe
+
+
 def _install_requirements_system(env: Mapping[str, str], pip_cmd: Iterable[str]) -> None:
     req_file = PY_DIR / "requirements.txt"
     export_dir = Path("export/python")
@@ -159,20 +197,42 @@ def _install_requirements_system(env: Mapping[str, str], pip_cmd: Iterable[str])
         content = content.replace("file://../export/python", export_url)
     tmp_req = req_file.with_suffix(req_file.suffix + ".sys.tmp")
     tmp_req.write_text(content)
-    try:
-        run(
-            [
-                *pip_cmd,
-                "install",
-                "--no-build-isolation",
-                *_pip_mirror_args(env),
-                "-r",
-                str(tmp_req),
-                *env.get("BREAK_FLAG", "").split(),
-            ],
-            env=env,
-            cwd=PY_DIR,
+    unsafe_installed = _requirements_need_ignore_installed(filtered)
+    ignore_installed_args = ["--ignore-installed"] if unsafe_installed else []
+    if unsafe_installed:
+        preview = ", ".join(unsafe_installed[:5])
+        suffix = "" if len(unsafe_installed) <= 5 else ", ..."
+        print(
+            "[warn] system Python has OS-managed packages without pip uninstall metadata "
+            f"({preview}{suffix}); installing requirements with --ignore-installed"
         )
+    install_args = [
+        *pip_cmd,
+        "install",
+        "--no-build-isolation",
+        *ignore_installed_args,
+        *_pip_mirror_args(env),
+        "-r",
+        str(tmp_req),
+        *env.get("BREAK_FLAG", "").split(),
+    ]
+    try:
+        run(install_args, env=env, cwd=PY_DIR)
+    except subprocess.CalledProcessError:
+        if unsafe_installed:
+            raise
+        print("[warn] system requirements install failed; retrying with --ignore-installed")
+        retry_args = [
+            *pip_cmd,
+            "install",
+            "--no-build-isolation",
+            "--ignore-installed",
+            *_pip_mirror_args(env),
+            "-r",
+            str(tmp_req),
+            *env.get("BREAK_FLAG", "").split(),
+        ]
+        run(retry_args, env=env, cwd=PY_DIR)
     finally:
         tmp_req.unlink(missing_ok=True)
 
