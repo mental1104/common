@@ -70,6 +70,58 @@ TEST(EpollServerTest, WriteEndIsWritable) {
   ::close(rfd);
 }
 
+TEST(EpollServerTest, AddNewFdRequiresCallback) {
+  EpollServer srv;
+
+  EXPECT_THROW(srv.add_fd(123456, EPOLLIN), std::runtime_error);
+}
+
+TEST(EpollServerTest, AddExistingFdWithoutCallbackUpdatesEvents) {
+  int fds[2];
+  ASSERT_EQ(::pipe(fds), 0);
+  int rfd = fds[0], wfd = fds[1];
+
+  EpollServer srv;
+  std::atomic<int> called{0};
+
+  srv.add_fd(wfd, EPOLLIN,
+             [&](int) { called.fetch_add(1, std::memory_order_relaxed); });
+  srv.add_fd(wfd, EPOLLOUT); // 已注册 fd 允许省略 cb：只修改 events，保留原回调
+
+  int n = srv.dispatch_once(200);
+  EXPECT_GE(n, 1);
+  EXPECT_GE(called.load(std::memory_order_relaxed), 1);
+
+  srv.remove_fd(wfd);
+  ::close(wfd);
+  ::close(rfd);
+}
+
+TEST(EpollServerTest, SetCallbackUpdatesCallbackOnly) {
+  int fds[2];
+  ASSERT_EQ(::pipe(fds), 0);
+  int rfd = fds[0], wfd = fds[1];
+
+  EpollServer srv;
+  std::atomic<int> old_called{0};
+  std::atomic<int> new_called{0};
+
+  srv.add_fd(wfd, EPOLLOUT,
+             [&](int) { old_called.fetch_add(1, std::memory_order_relaxed); });
+  srv.set_callback(wfd, [&](int) {
+    new_called.fetch_add(1, std::memory_order_relaxed);
+  });
+
+  int n = srv.dispatch_once(200);
+  EXPECT_GE(n, 1);
+  EXPECT_EQ(old_called.load(std::memory_order_relaxed), 0);
+  EXPECT_GE(new_called.load(std::memory_order_relaxed), 1);
+
+  srv.remove_fd(wfd);
+  ::close(wfd);
+  ::close(rfd);
+}
+
 TEST(EpollServerTest, RemoveClosedFdDoesNotThrow) {
   int fds[2];
   ASSERT_EQ(::pipe(fds), 0);
