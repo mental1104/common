@@ -313,6 +313,7 @@ template <typename V, typename SourceLocation>
 void format_map_value(const V &value, int indent_level, std::ostream &out,
                       SourceLocation, int indent_width, std::false_type) {
   (void)indent_level;
+  (void)indent_width;
   out << "\"" << value << "\"";
 }
 
@@ -352,7 +353,8 @@ void format_map_like(const std::unordered_map<K, V> &m, bool show_info,
   for (const auto &kv : m)
     items.emplace_back(kv.first, &kv.second);
   std::sort(items.begin(), items.end(),
-            [](const auto &a, const auto &b) { return a.first < b.first; });
+            [](const std::pair<K, const V *> &a,
+               const std::pair<K, const V *> &b) { return a.first < b.first; });
   bool first = true;
   for (const auto &kv : items) {
     format_map_entry(kv.first, *kv.second, first, 1, out, loc, indent_width);
