@@ -61,8 +61,17 @@ public:
 
   std::chrono::milliseconds next() {
     auto delay = current_;
-    auto next_delay = std::chrono::milliseconds(current_.count() * factor_);
-    current_ = std::min(next_delay, max_);
+    const auto count = current_.count();
+    const auto max_count = max_.count();
+
+    // 先用除法判断是否会到达或超过上限，避免 count * factor_
+    // 在接近 milliseconds::max() 时先发生有符号整数溢出。
+    if (factor_ > 1 && count > max_count / factor_) {
+      current_ = max_;
+    } else {
+      auto next_delay = std::chrono::milliseconds(count * factor_);
+      current_ = std::min(next_delay, max_);
+    }
     return delay;
   }
 

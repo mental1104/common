@@ -92,6 +92,8 @@ int main() {
 **备注：**
 
 - 对 map 使用时，`contains` 检查键是否存在。
+- `ExponentialBackoff` 推进下一次延迟时会先判断是否应封顶，避免接近
+  `std::chrono::milliseconds::max()` 时先发生乘法溢出。
 
 ### `LRUCache`、`LFUCache` 和缓存工厂
 

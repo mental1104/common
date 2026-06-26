@@ -69,3 +69,13 @@ TEST(ExponentialBackoffTest, IntegralCtorDefaultsAndCap) {
   mental1104::ExponentialBackoff backoff_default; // 使用默认参数 10,200,2
   EXPECT_EQ(backoff_default.next(), std::chrono::milliseconds(10));
 }
+
+TEST(ExponentialBackoffTest, SaturatesBeforeMultiplicationOverflow) {
+  const auto max_delay = std::chrono::milliseconds::max();
+  const auto near_overflow = max_delay / 2 + std::chrono::milliseconds(1);
+
+  mental1104::ExponentialBackoff backoff(near_overflow, max_delay, 2);
+  EXPECT_EQ(backoff.next(), near_overflow);
+  EXPECT_EQ(backoff.next(), max_delay);
+  EXPECT_EQ(backoff.next(), max_delay);
+}
