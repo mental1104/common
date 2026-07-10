@@ -1,0 +1,639 @@
+name: Python
+
+on:
+  workflow_call:
+    inputs:
+      enable_python_314:
+        description: "Run Python 3.14 jobs (pre-release)"
+        type: boolean
+        default: true
+      verbose_logs:
+        description: "Enable verbose test output"
+        type: boolean
+        default: true
+  pull_request:
+    paths:
+      - "python/**"
+      - "devops/**"
+      - "tools/ci/**"
+      - ".github/workflows/python.yml"
+  workflow_dispatch:
+    inputs:
+      enable_python_314:
+        description: "Run Python 3.14 jobs (pre-release)"
+        type: boolean
+        default: true
+      verbose_logs:
+        description: "Enable verbose test output"
+        type: boolean
+        default: true
+
+env:
+  PYTEST_ADDOPTS: ${{ (vars.CI_VERBOSE_LOGS == 'false' || (github.event_name == 'workflow_dispatch' && (github.event.inputs.verbose_logs == false || github.event.inputs.verbose_logs == 'false')) || (github.event_name == 'workflow_call' && (inputs.verbose_logs == false || inputs.verbose_logs == 'false'))) && '' || '-s -vv' }}
+  PYTHONUNBUFFERED: ${{ (vars.CI_VERBOSE_LOGS == 'false' || (github.event_name == 'workflow_dispatch' && (github.event.inputs.verbose_logs == false || github.event.inputs.verbose_logs == 'false')) || (github.event_name == 'workflow_call' && (inputs.verbose_logs == false || inputs.verbose_logs == 'false'))) && '' || '1' }}
+
+jobs:
+  linux:
+    name: Linux / Python ${{ matrix.python }}
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: app
+        ports:
+          - "5432:5432"
+        options: >-
+          --health-cmd="pg_isready -U test"
+          --health-interval=5s --health-timeout=5s --health-retries=5
+      redis:
+        image: redis/redis-stack-server:7.2.0-v7
+        ports:
+          - "6379:6379"
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=5s --health-timeout=3s --health-retries=5
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: test
+          MYSQL_DATABASE: app
+          MYSQL_USER: test
+          MYSQL_PASSWORD: test
+        ports:
+          - "3306:3306"
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -u root -ptest"
+          --health-interval=5s --health-timeout=5s --health-retries=10
+      mongo:
+        image: mongo:7.0
+        ports:
+          - "27017:27017"
+        options: >-
+          --health-cmd="mongosh --quiet --eval 'db.runCommand({ ping: 1 })'"
+          --health-interval=5s --health-timeout=5s --health-retries=10
+      clickhouse:
+        image: clickhouse/clickhouse-server:24.3
+        env:
+          CLICKHOUSE_USER: test
+          CLICKHOUSE_PASSWORD: test
+          CLICKHOUSE_DB: default
+        ports:
+          - "8123:8123"
+          - "9000:9000"
+        options: >-
+          --health-cmd="clickhouse-client --host 127.0.0.1 --query 'SELECT 1'"
+          --health-interval=5s --health-timeout=5s --health-retries=10
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { python: "3.8",  python_spec: "3.8",      prerelease: false }
+          - { python: "3.9",  python_spec: "3.9",      prerelease: false }
+          - { python: "3.10", python_spec: "3.10",     prerelease: false }
+          - { python: "3.11", python_spec: "3.11",     prerelease: false }
+          - { python: "3.12", python_spec: "3.12",     prerelease: false }
+          - { python: "3.13", python_spec: "3.13",     prerelease: false }
+          - { python: "3.14", python_spec: "3.14-dev", prerelease: true }
+
+    env:
+      PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/devops
+      DATABASE_URL: postgresql://test:test@localhost:5432/app
+      REDIS_URL: redis://localhost:6379/0
+      PGUSER: test
+      PGPASSWORD: test
+      PGDATABASE: app
+      PGHOST: localhost
+      PGPORT: "5432"
+      REDIS_HOST: localhost
+      REDIS_PORT: "6379"
+      PULSAR_HOST: localhost
+      PULSAR_BROKER_PORT: "6650"
+      PULSAR_ADMIN_PORT: "8080"
+      PULSAR_TOKEN: ""
+      PULSAR_SCHEMA_PATH: "/tmp/pulsar/schema"
+      PULSAR_DATA_PATH: "/tmp/pulsar/data"
+      KAFKA_PORT: "9092"
+      KAFKA_EXTERNAL_PORT: "29092"
+      KAFKA_CONTROLLER_PORT: "9093"
+      KAFKA_ADVERTISED_HOST: localhost
+      MYSQL_HOST: localhost
+      MYSQL_PORT: "3306"
+      MYSQL_USER: test
+      MYSQL_PASSWORD: test
+      MYSQL_DATABASE: app
+      MONGO_HOST: localhost
+      MONGO_PORT: "27017"
+      MONGO_DATABASE: test
+      CLICKHOUSE_HOST: localhost
+      CLICKHOUSE_HTTP_PORT: "8123"
+      CLICKHOUSE_DATABASE: default
+      CLICKHOUSE_USER: test
+      CLICKHOUSE_PASSWORD: test
+      CLICKHOUSE_SCHEME: clickhouse+http
+
+    defaults:
+      run:
+        shell: bash
+        working-directory: ${{ github.workspace }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: false
+          fetch-depth: 0
+
+      - name: Gate prerelease (3.14) by input/vars
+        id: gate
+        run: |
+          set -euo pipefail
+          enable="true"
+
+          if [ "${{ matrix.prerelease }}" = "true" ]; then
+            if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+              if [ "${{ github.event.inputs.enable_python_314 }}" = "false" ]; then
+                enable="false"
+              fi
+            elif [ "${{ github.event_name }}" = "workflow_call" ]; then
+              if [ "${{ inputs.enable_python_314 }}" = "false" ]; then
+                enable="false"
+              fi
+            else
+              if [ "${{ vars.CI_ENABLE_PYTHON_314 }}" = "false" ]; then
+                enable="false"
+              fi
+            fi
+          fi
+
+          echo "enable=${enable}" >> "$GITHUB_OUTPUT"
+
+      - name: Stop early if prerelease disabled
+        if: ${{ steps.gate.outputs.enable != 'true' }}
+        run: |
+          echo "Python ${{ matrix.python }} is disabled by policy; skipping."
+          exit 0
+
+      - name: Init submodules (sparse Boost)
+        continue-on-error: true
+        run: python3 -c "import sys;from devtool.commands.common import base_env;from devtool.commands.ops import cpp as cpp_ops;sys.exit(cpp_ops.git_submodules(base_env()) or 0)"
+
+      - name: Start Pulsar (standalone -nss)
+        continue-on-error: true
+        run: |
+          docker rm -f pulsar || true
+          docker run -d --name pulsar \
+            -p ${PULSAR_BROKER_PORT}:${PULSAR_BROKER_PORT} -p ${PULSAR_ADMIN_PORT}:${PULSAR_ADMIN_PORT} \
+            apachepulsar/pulsar:3.2.0 \
+            bin/pulsar standalone -nss
+
+      - name: Start Kafka (KRaft)
+        continue-on-error: true
+        run: |
+          docker rm -f kafka || true
+          docker run -d --name kafka \
+            -p ${KAFKA_PORT}:${KAFKA_PORT} -p ${KAFKA_EXTERNAL_PORT}:${KAFKA_EXTERNAL_PORT} \
+            -e KAFKA_CFG_NODE_ID=1 \
+            -e KAFKA_CFG_PROCESS_ROLES=broker,controller \
+            -e KAFKA_CFG_CONTROLLER_LISTENER_NAMES=CONTROLLER \
+            -e KAFKA_CFG_LISTENERS=PLAINTEXT://:${KAFKA_PORT},CONTROLLER://:${KAFKA_CONTROLLER_PORT},EXTERNAL://:${KAFKA_EXTERNAL_PORT} \
+            -e KAFKA_CFG_ADVERTISED_LISTENERS=PLAINTEXT://${KAFKA_ADVERTISED_HOST}:${KAFKA_PORT},EXTERNAL://${KAFKA_ADVERTISED_HOST}:${KAFKA_EXTERNAL_PORT} \
+            -e KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP=CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,EXTERNAL:PLAINTEXT \
+            -e KAFKA_CFG_CONTROLLER_QUORUM_VOTERS=1@${KAFKA_ADVERTISED_HOST}:${KAFKA_CONTROLLER_PORT} \
+            -e KAFKA_CFG_INTER_BROKER_LISTENER_NAME=PLAINTEXT \
+            -e ALLOW_PLAINTEXT_LISTENER=yes \
+            bitnamilegacy/kafka:4.0.0-debian-12-r10
+
+      - name: Wait for postgres/redis/mysql/mongo/clickhouse/pulsar/kafka
+        continue-on-error: true
+        run: |
+          ports=(
+            "${PGPORT}"
+            "${REDIS_PORT}"
+            "${MYSQL_PORT}"
+            "${MONGO_PORT}"
+            "${CLICKHOUSE_HTTP_PORT}"
+            "${PULSAR_BROKER_PORT}"
+            "${PULSAR_ADMIN_PORT}"
+            "${KAFKA_EXTERNAL_PORT}"
+          )
+          for i in {1..40}; do
+            ready=true
+            for port in "${ports[@]}"; do
+              if ! (echo > /dev/tcp/127.0.0.1/${port}) >/dev/null 2>&1; then
+                ready=false
+                break
+              fi
+            done
+            if [ "${ready}" = "true" ]; then
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "services not ready" >&2
+          exit 1
+
+      - name: Configure MySQL auth plugin
+        run: |
+          docker exec ${{ job.services.mysql.id }} \
+            mysql -uroot -ptest \
+            -e "ALTER USER 'test'@'%' IDENTIFIED WITH mysql_native_password BY 'test'; FLUSH PRIVILEGES;"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python_spec }}
+          allow-prereleases: ${{ matrix.prerelease }}
+
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: pip-${{ runner.os }}-${{ hashFiles('python/requirements.txt') }}
+          restore-keys: |
+            pip-${{ runner.os }}-
+
+      - name: Setup Python
+        id: setup_env
+        run: ./dev setup-python
+
+      - name: Build Python
+        id: build_env
+        run: ./dev build-python
+
+      - name: Coverage Python
+        id: cov_env
+        run: ./dev coverage-python
+
+      - name: Export coverage.xml + cov.json (never fail)
+        if: always()
+        continue-on-error: true
+        run: |
+          set +e
+          mkdir -p python
+          (cd python && python3 -m coverage xml -o coverage.xml) || true
+          python3 tools/ci/extract_coverage_python.py --os linux --python "${{ matrix.python }}" --xml python/coverage.xml --out cov.json || true
+          test -f cov.json || python3 -c "import json,os;obj={'lang':'python','os':'linux','python':'${{ matrix.python }}','line_pct':0.0,'status':'placeholder','sha':os.getenv('GITHUB_SHA',''),'run_id':os.getenv('GITHUB_RUN_ID',''),'source':'coverage.xml','src':'python/coverage.xml'};json.dump(obj,open('cov.json','w',encoding='utf-8'),ensure_ascii=False,indent=2)"
+
+      - name: Stash coverage files (unique path)
+        if: always()
+        continue-on-error: true
+        run: |
+          set +e
+          pykey="$(echo "${{ matrix.python }}" | tr -d '.')"
+          key="linux-py${pykey}"
+          mkdir -p "_cov/python/${key}"
+          cp -f cov.json "_cov/python/${key}/cov.json" 2>/dev/null || true
+          cp -f python/coverage.xml "_cov/python/${key}/coverage.xml" 2>/dev/null || true
+
+      - name: Compute pykey
+        if: always()
+        id: pykey
+        run: |
+          pykey="$(echo "${{ matrix.python }}" | tr -d '.')"
+          echo "pykey=$pykey" >> "$GITHUB_OUTPUT"
+
+      - name: Upload coverage artifacts (unique)
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: py-cov-linux-py${{ steps.pykey.outputs.pykey }}
+          path: _cov
+          retention-days: 7
+          if-no-files-found: warn
+
+      - name: install-python
+        if: ${{ steps.gate.outputs.enable == 'true' }}
+        run: ./dev install-python
+
+      - name: verify-install-python
+        if: ${{ steps.gate.outputs.enable == 'true' }}
+        run: ./dev verify-install python
+
+      - name: uninstall-python
+        if: ${{ steps.gate.outputs.enable == 'true' }}
+        run: ./dev uninstall-python
+
+      - name: verify-uninstall-python (expect failure)
+        if: ${{ steps.gate.outputs.enable == 'true' }}
+        env:
+          VERIFY_REQUIRE_INSTALL: "1"
+        run: |
+          set +e
+          ./dev verify-install python
+          status=$?
+          if [ $status -eq 0 ]; then
+            echo "verify-install succeeded after uninstall; expected failure"
+            exit 1
+          fi
+
+  macos:
+    name: macOS / Python ${{ matrix.python }}
+    runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { python: "3.8",  python_spec: "3.8",      prerelease: false }
+          - { python: "3.9",  python_spec: "3.9",      prerelease: false }
+          - { python: "3.10", python_spec: "3.10",     prerelease: false }
+          - { python: "3.11", python_spec: "3.11",     prerelease: false }
+          - { python: "3.12", python_spec: "3.12",     prerelease: false }
+          - { python: "3.13", python_spec: "3.13",     prerelease: false }
+          - { python: "3.14", python_spec: "3.14-dev", prerelease: true }
+
+    env:
+      PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/devops
+
+    defaults:
+      run:
+        shell: bash
+        working-directory: ${{ github.workspace }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: false
+          fetch-depth: 0
+
+      - name: Gate prerelease (3.14) by input/vars
+        id: gate
+        run: |
+          set -euo pipefail
+          enable="true"
+
+          if [ "${{ matrix.prerelease }}" = "true" ]; then
+            if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+              if [ "${{ github.event.inputs.enable_python_314 }}" = "false" ]; then
+                enable="false"
+              fi
+            elif [ "${{ github.event_name }}" = "workflow_call" ]; then
+              if [ "${{ inputs.enable_python_314 }}" = "false" ]; then
+                enable="false"
+              fi
+            else
+              if [ "${{ vars.CI_ENABLE_PYTHON_314 }}" = "false" ]; then
+                enable="false"
+              fi
+            fi
+          fi
+
+          echo "enable=${enable}" >> "$GITHUB_OUTPUT"
+
+      - name: Stop early if prerelease disabled
+        if: ${{ steps.gate.outputs.enable != 'true' }}
+        run: |
+          echo "Python ${{ matrix.python }} is disabled by policy; skipping."
+          exit 0
+
+      - name: Init submodules (sparse Boost)
+        continue-on-error: true
+        run: python3 -c "import sys;from devtool.commands.common import base_env;from devtool.commands.ops import cpp as cpp_ops;sys.exit(cpp_ops.git_submodules(base_env()) or 0)"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python_spec }}
+          allow-prereleases: ${{ matrix.prerelease }}
+
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/Library/Caches/pip
+          key: pip-${{ runner.os }}-${{ hashFiles('python/requirements.txt') }}
+          restore-keys: |
+            pip-${{ runner.os }}-
+
+      - name: Setup Python
+        id: setup_env
+        run: ./dev setup-python
+
+      - name: Build Python
+        id: build_env
+        run: ./dev build-python
+
+      - name: Coverage Python
+        id: cov_env
+        run: ./dev coverage-python
+
+      - name: Export coverage.xml + cov.json (never fail)
+        if: always()
+        continue-on-error: true
+        run: |
+          set +e
+          mkdir -p python
+          (cd python && python3 -m coverage xml -o coverage.xml) || true
+          python3 tools/ci/extract_coverage_python.py --os macos --python "${{ matrix.python }}" --xml python/coverage.xml --out cov.json || true
+          test -f cov.json || python3 -c "import json,os;obj={'lang':'python','os':'macos','python':'${{ matrix.python }}','line_pct':0.0,'status':'placeholder','sha':os.getenv('GITHUB_SHA',''),'run_id':os.getenv('GITHUB_RUN_ID',''),'source':'coverage.xml','src':'python/coverage.xml'};json.dump(obj,open('cov.json','w',encoding='utf-8'),ensure_ascii=False,indent=2)"
+
+      - name: Stash coverage files (unique path)
+        if: always()
+        continue-on-error: true
+        run: |
+          set +e
+          pykey="$(echo "${{ matrix.python }}" | tr -d '.')"
+          key="macos-py${pykey}"
+          mkdir -p "_cov/python/${key}"
+          cp -f cov.json "_cov/python/${key}/cov.json" 2>/dev/null || true
+          cp -f python/coverage.xml "_cov/python/${key}/coverage.xml" 2>/dev/null || true
+
+      - name: Compute pykey
+        if: always()
+        id: pykey
+        run: |
+          pykey="$(echo "${{ matrix.python }}" | tr -d '.')"
+          echo "pykey=$pykey" >> "$GITHUB_OUTPUT"
+
+      - name: Upload coverage artifacts (unique)
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: py-cov-macos-py${{ steps.pykey.outputs.pykey }}
+          path: _cov
+          retention-days: 7
+          if-no-files-found: warn
+
+      - name: install-python
+        if: ${{ steps.gate.outputs.enable == 'true' }}
+        run: ./dev install-python
+
+      - name: verify-install-python
+        if: ${{ steps.gate.outputs.enable == 'true' }}
+        run: ./dev verify-install python
+
+      - name: uninstall-python
+        if: ${{ steps.gate.outputs.enable == 'true' }}
+        run: ./dev uninstall-python
+
+      - name: verify-uninstall-python (expect failure)
+        if: ${{ steps.gate.outputs.enable == 'true' }}
+        env:
+          VERIFY_REQUIRE_INSTALL: "1"
+        run: |
+          set +e
+          ./dev verify-install python
+          status=$?
+          if [ $status -eq 0 ]; then
+            echo "verify-install succeeded after uninstall; expected failure"
+            exit 1
+          fi
+
+  windows:
+    name: Windows / Python ${{ matrix.python }}
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { python: "3.8",  python_spec: "3.8",      prerelease: false }
+          - { python: "3.9",  python_spec: "3.9",      prerelease: false }
+          - { python: "3.10", python_spec: "3.10",     prerelease: false }
+          - { python: "3.11", python_spec: "3.11",     prerelease: false }
+          - { python: "3.12", python_spec: "3.12",     prerelease: false }
+          - { python: "3.13", python_spec: "3.13",     prerelease: false }
+          - { python: "3.14", python_spec: "3.14-dev", prerelease: true }
+
+    env:
+      PYTHON: python
+      PYTHONPATH: ${{ github.workspace }};${{ github.workspace }}/devops
+      PYTHONUTF8: "1"
+      PYTHONIOENCODING: "utf-8"
+
+    defaults:
+      run:
+        shell: pwsh
+        working-directory: ${{ github.workspace }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: false
+          fetch-depth: 0
+
+      - name: Gate prerelease (3.14) by input/vars
+        id: gate
+        run: |
+          $enable = "true"
+          if ("${{ matrix.prerelease }}" -eq "true") {
+            if ("${{ github.event_name }}" -eq "workflow_dispatch") {
+              if ("${{ github.event.inputs.enable_python_314 }}" -eq "false") { $enable = "false" }
+            } elseif ("${{ github.event_name }}" -eq "workflow_call") {
+              if ("${{ inputs.enable_python_314 }}" -eq "false") { $enable = "false" }
+            } else {
+              if ("${{ vars.CI_ENABLE_PYTHON_314 }}" -eq "false") { $enable = "false" }
+            }
+          }
+          "enable=$enable" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+
+      - name: Stop early if prerelease disabled
+        if: ${{ steps.gate.outputs.enable != 'true' }}
+        run: |
+          Write-Host "Python ${{ matrix.python }} is disabled by policy; skipping."
+          exit 0
+
+      - name: Init submodules (sparse Boost)
+        continue-on-error: true
+        run: python -c "import sys;from devtool.commands.common import base_env;from devtool.commands.ops import cpp as cpp_ops;sys.exit(cpp_ops.git_submodules(base_env()) or 0)"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python_spec }}
+          allow-prereleases: ${{ matrix.prerelease }}
+
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~\AppData\Local\pip\Cache
+          key: pip-${{ runner.os }}-${{ hashFiles('python/requirements.txt') }}
+          restore-keys: |
+            pip-${{ runner.os }}-
+
+      - name: Setup Python
+        id: setup_env
+        run: python -m devtool.cli setup-python
+
+      - name: Build Python
+        id: build_env
+        run: python -m devtool.cli build-python
+
+      - name: Coverage Python
+        id: cov_env
+        run: python -m devtool.cli coverage-python
+
+      - name: Export coverage.xml + cov.json (never fail)
+        if: always()
+        continue-on-error: true
+        run: |
+          New-Item -ItemType Directory -Force -Path python | Out-Null
+          Push-Location python
+          python -m coverage xml -o coverage.xml
+          Pop-Location
+
+          python tools/ci/extract_coverage_python.py `
+            --os windows `
+            --python "${{ matrix.python }}" `
+            --xml python/coverage.xml `
+            --out cov.json
+
+          if (-not (Test-Path cov.json)) {
+            python -c "import json,os;obj={'lang':'python','os':'windows','python':'${{ matrix.python }}','line_pct':0.0,'status':'placeholder','sha':os.getenv('GITHUB_SHA',''),'run_id':os.getenv('GITHUB_RUN_ID',''),'source':'coverage.xml','src':'python/coverage.xml'};json.dump(obj,open('cov.json','w',encoding='utf-8'),ensure_ascii=False,indent=2)"
+          }
+
+      - name: Stash coverage files (unique path)
+        if: always()
+        continue-on-error: true
+        run: |
+          $pykey = "${{ matrix.python }}".Replace(".","")
+          $key = "windows-py$pykey"
+          New-Item -ItemType Directory -Force -Path "_cov/python/$key" | Out-Null
+          Copy-Item -Force cov.json "_cov/python/$key/cov.json" -ErrorAction SilentlyContinue
+          Copy-Item -Force python/coverage.xml "_cov/python/$key/coverage.xml" -ErrorAction SilentlyContinue
+
+      - name: Compute pykey
+        if: always()
+        id: pykey
+        run: |
+          $pykey = "${{ matrix.python }}".Replace(".","")
+          "pykey=$pykey" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+
+      - name: Upload coverage artifacts (unique)
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: py-cov-windows-py${{ steps.pykey.outputs.pykey }}
+          path: _cov
+          retention-days: 7
+          if-no-files-found: warn
+
+      - name: install-python
+        if: ${{ steps.gate.outputs.enable == 'true' }}
+        run: python -m devtool.cli install-python
+
+      - name: verify-install-python
+        if: ${{ steps.gate.outputs.enable == 'true' }}
+        run: python -m devtool.cli verify-install python
+
+      - name: uninstall-python
+        if: ${{ steps.gate.outputs.enable == 'true' }}
+        run: python -m devtool.cli uninstall-python
+
+      - name: verify-uninstall-python (expect failure)
+        if: ${{ steps.gate.outputs.enable == 'true' }}
+        id: verify_uninstall_python
+        continue-on-error: true
+        env:
+          VERIFY_REQUIRE_INSTALL: "1"
+        run: python -m devtool.cli verify-install python
+
+      - name: assert-verify-uninstall-python failed
+        if: ${{ steps.gate.outputs.enable == 'true' && steps.verify_uninstall_python.outcome != 'failure' }}
+        run: |
+          throw "verify-install succeeded after uninstall; expected failure"
