@@ -7,14 +7,6 @@ on:
         description: "Enable verbose test output"
         type: boolean
         default: true
-  push:
-    branches-ignore:
-      - main
-    paths:
-      - "java/**"
-      - "devops/**"
-      - "tools/ci/**"
-      - ".github/workflows/java.yml"
   pull_request:
     paths:
       - "java/**"
