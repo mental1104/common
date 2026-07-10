@@ -1,0 +1,40 @@
+name: CI Main
+
+on:
+  workflow_dispatch:
+
+jobs:
+  cpp:
+    uses: ./.github/workflows/cpp.yml
+    secrets: inherit
+
+  python:
+    uses: ./.github/workflows/python.yml
+    secrets: inherit
+
+  rust:
+    uses: ./.github/workflows/rust.yml
+    secrets: inherit
+
+  dotnet:
+    uses: ./.github/workflows/dotnet.yml
+    secrets: inherit
+
+  golang:
+    uses: ./.github/workflows/golang.yml
+    secrets: inherit
+
+  java:
+    uses: ./.github/workflows/java.yml
+    secrets: inherit
+
+  pages:
+    needs: [cpp, python, rust, dotnet, golang, java]
+    if: always()
+    uses: ./.github/workflows/walkthrough-pages.yml
+    secrets: inherit
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+      actions: read
