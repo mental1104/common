@@ -5,7 +5,7 @@ on:
     types: [opened, synchronize, reopened]
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   migrate:
@@ -18,13 +18,19 @@ jobs:
           ref: ${{ github.head_ref }}
           fetch-depth: 0
 
-      - name: Remove push triggers
+      - name: Stage migrated workflows
         run: |
           python3 - <<'PY'
           from pathlib import Path
+          import shutil
 
           workflows = Path('.github/workflows')
-          temporary = workflows / 'apply-pr-only-migration.yml'
+          staging = Path('.ci-migrated')
+          temporary_name = 'apply-pr-only-migration.yml'
+
+          if staging.exists():
+              shutil.rmtree(staging)
+          staging.mkdir()
 
           def remove_push_event(text: str) -> str:
               lines = text.splitlines(keepends=True)
@@ -59,11 +65,10 @@ jobs:
               return ''.join(result)
 
           for path in sorted(workflows.glob('*.yml')):
-              if path == temporary:
+              if path.name == temporary_name:
                   continue
 
-              original = path.read_text(encoding='utf-8')
-              updated = remove_push_event(original)
+              updated = remove_push_event(path.read_text(encoding='utf-8'))
 
               if path.name == 'ci-main.yml':
                   marker = 'on:\n\njobs:'
@@ -74,16 +79,18 @@ jobs:
                           1,
                       )
 
-              if updated != original:
-                  path.write_text(updated, encoding='utf-8')
-
-          temporary.unlink()
+              (staging / path.name).write_text(updated, encoding='utf-8')
           PY
 
-      - name: Upload migrated workflows
-        uses: actions/upload-artifact@v4
-        with:
-          name: pr-only-workflows
-          path: .github/workflows
-          if-no-files-found: error
-          retention-days: 1
+      - name: Commit staged blobs
+        run: |
+          if git diff --quiet -- .ci-migrated && ! git ls-files --others --exclude-standard .ci-migrated | grep -q .; then
+            echo 'Staged workflow blobs are already current.'
+            exit 0
+          fi
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add .ci-migrated
+          git commit -m 'ci: stage PR-only workflow blobs'
+          git push origin "HEAD:${{ github.head_ref }}"
