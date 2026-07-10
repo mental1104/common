@@ -1,0 +1,94 @@
+name: Apply PR-only workflow migration
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: write
+
+jobs:
+  migrate:
+    if: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout PR branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+          fetch-depth: 0
+
+      - name: Remove push triggers
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          workflows = Path('.github/workflows')
+          temporary = workflows / 'apply-pr-only-migration.yml'
+
+          def remove_push_event(text: str) -> str:
+              lines = text.splitlines(keepends=True)
+              result: list[str] = []
+              in_on = False
+              skipping_push = False
+
+              for line in lines:
+                  stripped = line.strip()
+                  indent = len(line) - len(line.lstrip(' '))
+
+                  if indent == 0 and stripped == 'on:':
+                      in_on = True
+                      result.append(line)
+                      continue
+
+                  if in_on and indent == 0 and stripped and not stripped.startswith('#'):
+                      in_on = False
+
+                  if in_on and indent == 2 and stripped == 'push:':
+                      skipping_push = True
+                      continue
+
+                  if skipping_push:
+                      if indent <= 2 and stripped:
+                          skipping_push = False
+                      else:
+                          continue
+
+                  result.append(line)
+
+              return ''.join(result)
+
+          for path in sorted(workflows.glob('*.yml')):
+              if path == temporary:
+                  continue
+
+              original = path.read_text(encoding='utf-8')
+              updated = remove_push_event(original)
+
+              if path.name == 'ci-main.yml':
+                  marker = 'on:\n\njobs:'
+                  if marker in updated:
+                      updated = updated.replace(
+                          marker,
+                          'on:\n  workflow_dispatch:\n\njobs:',
+                          1,
+                      )
+
+              if updated != original:
+                  path.write_text(updated, encoding='utf-8')
+
+          temporary.unlink()
+          PY
+
+      - name: Commit migration
+        run: |
+          if git diff --quiet; then
+            echo 'No workflow trigger changes needed.'
+            exit 0
+          fi
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add .github/workflows
+          git commit -m 'ci: trigger automatic workflows only for pull requests'
+          git push origin "HEAD:${{ github.head_ref }}"
