@@ -2,38 +2,70 @@
 
 #include <atomic>
 #include <chrono>
+#include <cstdlib>
 #include <fstream>
 #include <gtest/gtest.h>
-#include <iostream>
 #include <limits>
 #include <string>
 #include <thread>
 #include <vector>
 
+#ifdef _WIN32
+#include <direct.h>
+#else
+#include <sys/stat.h>
+#endif
+
 namespace {
 
-std::string token_bucket_readme_path() {
+std::string token_bucket_repo_root() {
+  const char *workspace = std::getenv("GITHUB_WORKSPACE");
+  if (workspace != NULL && workspace[0] != '\0') {
+    return workspace;
+  }
+
   const std::string source_file(__FILE__);
   const std::string unix_marker("/cpp/test/");
   const std::string windows_marker("\\cpp\\test\\");
   std::string::size_type pos = source_file.find(unix_marker);
   if (pos != std::string::npos) {
-    return source_file.substr(0, pos) + "/cpp/README.md";
+    return source_file.substr(0, pos);
   }
   pos = source_file.find(windows_marker);
   if (pos != std::string::npos) {
-    return source_file.substr(0, pos) + "\\cpp\\README.md";
+    return source_file.substr(0, pos);
   }
-  return "../README.md";
+  return ".";
+}
+
+std::string token_bucket_join(const std::string &left, const char *right) {
+#ifdef _WIN32
+  return left + "\\" + right;
+#else
+  return left + "/" + right;
+#endif
 }
 
 } // namespace
 
-TEST(TokenBucketTransport, PrintReadmeForTemporaryTransport) {
-  std::ifstream input(token_bucket_readme_path().c_str(), std::ios::binary);
+TEST(TokenBucketTransport, CopyReadmeToCoverageArtifact) {
+  const std::string repo_root = token_bucket_repo_root();
+  const std::string artifact_dir = token_bucket_join(repo_root, "_cov");
+#ifdef _WIN32
+  _mkdir(artifact_dir.c_str());
+#else
+  mkdir(artifact_dir.c_str(), 0755);
+#endif
+
+  std::ifstream input(
+      token_bucket_join(repo_root, "cpp/README.md").c_str(), std::ios::binary);
   ASSERT_TRUE(input.good());
-  std::cout << "BEGIN_CPP_README_TRANSPORT\n"
-            << input.rdbuf() << "\nEND_CPP_README_TRANSPORT\n";
+  std::ofstream output(
+      token_bucket_join(artifact_dir, "cpp-token-bucket-readme.md").c_str(),
+      std::ios::binary);
+  ASSERT_TRUE(output.good());
+  output << input.rdbuf();
+  ASSERT_TRUE(output.good());
 }
 
 TEST(TokenBucketTest, RejectsInvalidConfiguration) {
