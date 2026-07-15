@@ -6,13 +6,16 @@ on:
       - feature/python-token-bucket
     paths:
       - .github/workflows/append-python-token-bucket-docs.yml
+  pull_request:
+    branches:
+      - main
 
 permissions:
   contents: write
 
 jobs:
   append-docs:
-    if: github.actor != 'github-actions[bot]'
+    if: github.actor != 'github-actions[bot]' && (github.event_name == 'push' || github.head_ref == 'feature/python-token-bucket')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
