@@ -1,21 +1,15 @@
 name: Append C++ token bucket docs
 
 on:
-  push:
-    branches:
-      - feature/cpp-token-bucket
-    paths:
-      - .github/workflows/append-cpp-token-bucket-docs.yml
   pull_request:
     branches:
-      - main
+      - feature/cpp-token-bucket
 
 permissions:
   contents: write
 
 jobs:
   append-docs:
-    if: github.actor != 'github-actions[bot]' && (github.event_name == 'push' || github.head_ref == 'feature/cpp-token-bucket')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
