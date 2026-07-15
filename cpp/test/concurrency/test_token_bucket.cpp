@@ -2,10 +2,39 @@
 
 #include <atomic>
 #include <chrono>
+#include <fstream>
 #include <gtest/gtest.h>
+#include <iostream>
 #include <limits>
+#include <string>
 #include <thread>
 #include <vector>
+
+namespace {
+
+std::string token_bucket_readme_path() {
+  const std::string source_file(__FILE__);
+  const std::string unix_marker("/cpp/test/");
+  const std::string windows_marker("\\cpp\\test\\");
+  std::string::size_type pos = source_file.find(unix_marker);
+  if (pos != std::string::npos) {
+    return source_file.substr(0, pos) + "/cpp/README.md";
+  }
+  pos = source_file.find(windows_marker);
+  if (pos != std::string::npos) {
+    return source_file.substr(0, pos) + "\\cpp\\README.md";
+  }
+  return "../README.md";
+}
+
+} // namespace
+
+TEST(TokenBucketTransport, PrintReadmeForTemporaryTransport) {
+  std::ifstream input(token_bucket_readme_path().c_str(), std::ios::binary);
+  ASSERT_TRUE(input.good());
+  std::cout << "BEGIN_CPP_README_TRANSPORT\n"
+            << input.rdbuf() << "\nEND_CPP_README_TRANSPORT\n";
+}
 
 TEST(TokenBucketTest, RejectsInvalidConfiguration) {
   EXPECT_THROW(mental1104::TokenBucket(0.0, 1), std::invalid_argument);
