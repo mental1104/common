@@ -1,0 +1,74 @@
+name: Append Python token bucket docs
+
+on:
+  push:
+    branches:
+      - feature/python-token-bucket
+    paths:
+      - .github/workflows/append-python-token-bucket-docs.yml
+
+permissions:
+  contents: write
+
+jobs:
+  append-docs:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/python-token-bucket
+          fetch-depth: 0
+      - name: Append README entry and remove temporary workflow
+        shell: bash
+        run: |
+          cat >> python/README.md <<'EOF'
+
+### `TokenBucket` 和 `AcquireCancelledError`
+
+- **类别：** 并发与限流
+- **类型：** 类和异常
+- **定义位置：** `python/mental1104/concurrency/token_bucket.py`
+- **导入：** `from mental1104.concurrency.token_bucket import AcquireCancelledError, TokenBucket`
+- **用途：** 在单个 Python 进程内按长期速率和突发容量阻塞获取执行资格；等待过程可通过 `threading.Event` 取消。
+
+**基础用法：**
+
+```python
+import threading
+
+from mental1104.concurrency.token_bucket import TokenBucket
+
+bucket = TokenBucket(rate=20, capacity=3)
+cancel_event = threading.Event()
+
+bucket.acquire(cancel_event)
+try:
+    # 执行受限操作
+    pass
+finally:
+    bucket.release()
+```
+
+**REPL 用法：**
+
+```python
+>>> from mental1104.concurrency.token_bucket import TokenBucket
+>>> bucket = TokenBucket(rate=20, capacity=3)
+>>> bucket.acquire()
+>>> bucket.release()  # 空操作，不归还令牌
+```
+
+**备注：**
+
+- 创建时为满桶；`acquire` 每次消费一个令牌，令牌通过 `time.monotonic()` 按需补充，不创建后台线程。
+- `release` 是空操作，完成任务后不会归还速率额度。
+- `cancel_event` 被设置时抛出 `AcquireCancelledError`，且不消费令牌。
+- 状态仅在单进程内有效；不保证等待线程严格公平，也不提供 `try_acquire`、批量获取或指标。
+EOF
+          git rm .github/workflows/append-python-token-bucket-docs.yml
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add python/README.md
+          git commit -m "docs(python): document token bucket limiter"
+          git push origin HEAD:feature/python-token-bucket
