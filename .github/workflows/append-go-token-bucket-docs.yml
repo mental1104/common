@@ -1,0 +1,71 @@
+name: Append Go token bucket docs
+
+on:
+  push:
+    branches:
+      - feature/go-token-bucket
+    paths:
+      - .github/workflows/append-go-token-bucket-docs.yml
+
+permissions:
+  contents: write
+
+jobs:
+  append-docs:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/go-token-bucket
+          fetch-depth: 0
+      - name: Append README entry and remove temporary workflow
+        shell: bash
+        run: |
+          cat >> golang/README.md <<'EOF'
+
+### `TokenBucket`
+
+- **类别：** 并发与限流
+- **类型：** 结构体、构造函数、方法、错误值
+- **定义位置：** `golang/mental1104/token_bucket.go`
+- **导入：** `mental1104 "github.com/mental1104/common/golang"`
+- **用途：** 在单个 Go 进程内按长期速率和突发容量阻塞获取执行资格；等待过程支持 `context.Context` 取消。
+
+**基础用法：**
+
+```go
+package main
+
+import (
+    "context"
+
+    mental1104 "github.com/mental1104/common/golang"
+)
+
+func main() {
+    bucket, err := mental1104.NewTokenBucket(20, 3)
+    if err != nil {
+        panic(err)
+    }
+
+    if err := bucket.Acquire(context.Background()); err != nil {
+        panic(err)
+    }
+    bucket.Release()
+}
+```
+
+**备注：**
+
+- 创建时为满桶；`Acquire` 每次消费一个令牌，令牌通过单调时间按需补充，不创建后台 goroutine。
+- `Release` 是空操作，完成任务后不会归还速率额度。
+- `nil` Context 返回 `ErrNilContext`；取消返回 `context.Canceled` 或 `context.DeadlineExceeded`，且不消费令牌。
+- 状态仅在单进程内有效；每个等待者拥有独立 Timer，不保证严格公平，也不提供 `TryAcquire`、批量获取或指标。
+EOF
+          git rm .github/workflows/append-go-token-bucket-docs.yml
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add golang/README.md
+          git commit -m "docs(go): document token bucket limiter"
+          git push origin HEAD:feature/go-token-bucket
