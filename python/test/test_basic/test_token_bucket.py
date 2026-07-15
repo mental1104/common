@@ -8,12 +8,16 @@ import pytest
 from mental1104.concurrency.token_bucket import AcquireCancelledError, TokenBucket
 
 
-# Temporary transport for preserving the existing large README through CI logs.
+# Temporary transport for preserving the existing large README through CI artifacts.
 # This block is removed before the PR is left for review.
-_README = Path(__file__).resolve().parents[2] / "README.md"
-print("BEGIN_PYTHON_README_TRANSPORT")
-print(_README.read_text(encoding="utf-8"))
-print("END_PYTHON_README_TRANSPORT")
+_REPO_ROOT = Path(__file__).resolve().parents[3]
+_README = _REPO_ROOT / "python" / "README.md"
+_ARTIFACT_DIR = _REPO_ROOT / "_cov"
+_ARTIFACT_DIR.mkdir(exist_ok=True)
+(_ARTIFACT_DIR / "python-token-bucket-readme.md").write_text(
+    _README.read_text(encoding="utf-8"),
+    encoding="utf-8",
+)
 
 
 def test_rejects_invalid_configuration():
