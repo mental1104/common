@@ -1,16 +1,16 @@
 name: Apply Go circuit breaker
 
 on:
-  push:
+  pull_request:
     branches:
-      - feature/golang-circuit-breaker
+      - main
 
 permissions:
   contents: write
 
 jobs:
   apply:
-    if: github.actor != 'github-actions[bot]'
+    if: github.head_ref == 'feature/golang-circuit-breaker'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -28,5 +28,5 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add golang/README.md golang/mental1104/circuit_breaker.go golang/mental1104/circuit_breaker_test.go
-          git commit -m "feat(go): add local circuit breaker"
+          git commit -m "docs(go): document local circuit breaker"
           git push origin HEAD:feature/golang-circuit-breaker
