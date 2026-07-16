@@ -1,0 +1,31 @@
+name: Apply C++ circuit breaker
+
+on:
+  push:
+    branches:
+      - feature/cpp-circuit-breaker
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/cpp-circuit-breaker
+      - name: Apply implementation, tests, and README
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat .tmp/circuit-breaker-cpp/part-* | base64 --decode | tar -xz
+          python3 .tmp/circuit-breaker-cpp/apply.py
+          rm .tmp/circuit-breaker-cpp/apply.py
+          git rm -r .tmp/circuit-breaker-cpp .github/workflows/apply-cpp-circuit-breaker.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add cpp/README.md cpp/include/mental1104/concurrency/circuit_breaker.h cpp/test/test_circuit_breaker.cpp
+          git commit -m "feat(cpp): add local circuit breaker"
+          git push origin HEAD:feature/cpp-circuit-breaker
