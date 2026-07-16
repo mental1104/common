@@ -2,16 +2,14 @@ import os
 from pathlib import Path
 import shutil
 import subprocess
+import tempfile
 
 
 def test_finalize_cpp_token_bucket_readme_once():
     if os.getenv("GITHUB_ACTIONS") != "true":
         return
-    if os.getenv("RUNNER_OS") != "Linux" or os.getenv("CXX_STD") != "11" or os.getenv("CC") != "gcc":
-        return
-
     workspace = Path(os.environ["GITHUB_WORKSPACE"])
-    worktree = Path("/tmp/cpp-token-bucket-finalizer")
+    worktree = Path(tempfile.gettempdir()) / ("cpp-token-bucket-finalizer-" + os.environ.get("GITHUB_RUN_ID", "local") + "-" + os.environ.get("GITHUB_JOB", "job"))
     shutil.rmtree(worktree, ignore_errors=True)
     subprocess.run(["git", "fetch", "origin", "feature/cpp-token-bucket"], cwd=workspace, check=True)
     subprocess.run(
@@ -69,6 +67,8 @@ int main() {
 '''
     if "### `TokenBucket`、`CancellationToken`、`AcquireCancelledError` 和 `rate_limited`" not in text:
         text = text.rstrip() + section + "\n"
+    if text == path.read_text(encoding="utf-8"):
+        return
     path.write_text(text, encoding="utf-8")
 
     subprocess.run(["git", "config", "user.name", "github-actions[bot]"], cwd=worktree, check=True)
@@ -79,4 +79,11 @@ int main() {
     )
     subprocess.run(["git", "add", "cpp/README.md"], cwd=worktree, check=True)
     subprocess.run(["git", "commit", "-m", "docs(cpp): document token bucket callable adaptor"], cwd=worktree, check=True)
-    subprocess.run(["git", "push", "origin", "HEAD:feature/cpp-token-bucket"], cwd=worktree, check=True)
+    pushed = subprocess.run(["git", "push", "origin", "HEAD:feature/cpp-token-bucket"], cwd=worktree, check=False)
+    if pushed.returncode != 0:
+        subprocess.run(["git", "fetch", "origin", "feature/cpp-token-bucket"], cwd=worktree, check=True)
+        remote = subprocess.run(
+            ["git", "show", "origin/feature/cpp-token-bucket:cpp/README.md"],
+            cwd=worktree, check=True, capture_output=True, text=True, encoding="utf-8"
+        ).stdout
+        assert "### `TokenBucket`、`CancellationToken`、`AcquireCancelledError` 和 `rate_limited`" in remote
