@@ -1,9 +1,10 @@
 """Thread-safe in-process token bucket rate limiter."""
 
+import functools
 import math
 import threading
 import time
-from typing import Optional
+from typing import Any, Callable, Optional, TypeVar, cast
 
 
 class AcquireCancelledError(RuntimeError):
@@ -14,6 +15,8 @@ class TokenBucket:
     """A blocking, lazily refilled token bucket for one Python process."""
 
     def __init__(self, rate: float, capacity: int) -> None:
+        if isinstance(rate, bool):
+            raise ValueError("rate must be a finite positive number")
         rate_value = float(rate)
         if not math.isfinite(rate_value) or rate_value <= 0:
             raise ValueError("rate must be a finite positive number")
@@ -54,3 +57,26 @@ class TokenBucket:
 
     def release(self) -> None:
         """Do nothing because consumed rate-limit tokens are not returned."""
+
+
+_ReturnT = TypeVar("_ReturnT")
+
+
+def rate_limited(
+    bucket: TokenBucket,
+    cancel_event: Optional[threading.Event] = None,
+) -> Callable[[Callable[..., _ReturnT]], Callable[..., _ReturnT]]:
+    """Decorate a synchronous callable with token-bucket acquisition."""
+
+    def decorate(func: Callable[..., _ReturnT]) -> Callable[..., _ReturnT]:
+        @functools.wraps(func)
+        def wrapped(*args: Any, **kwargs: Any) -> _ReturnT:
+            bucket.acquire(cancel_event)
+            try:
+                return func(*args, **kwargs)
+            finally:
+                bucket.release()
+
+        return cast(Callable[..., _ReturnT], wrapped)
+
+    return decorate
