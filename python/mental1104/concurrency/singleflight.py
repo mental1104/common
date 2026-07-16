@@ -68,7 +68,10 @@ class SingleFlightGroup(Generic[K, T]):
             call.done.wait()
             if call.error is not None:
                 raise call.error
-            return SingleFlightResult(value=call.value, shared=True)  # type: ignore[arg-type]
+            return SingleFlightResult(
+                value=call.value,
+                shared=True,
+            )  # type: ignore[arg-type]
 
         try:
             call.value = loader()
@@ -82,7 +85,10 @@ class SingleFlightGroup(Generic[K, T]):
 
         if call.error is not None:
             raise call.error
-        return SingleFlightResult(value=call.value, shared=False)  # type: ignore[arg-type]
+        return SingleFlightResult(
+            value=call.value,
+            shared=False,
+        )  # type: ignore[arg-type]
 
 
 @dataclass(frozen=True)
@@ -104,7 +110,9 @@ class RedisSingleFlightOptions:
         if self.poll_min_seconds <= 0:
             raise ValueError("poll_min_seconds must be positive")
         if self.poll_max_seconds < self.poll_min_seconds:
-            raise ValueError("poll_max_seconds must be greater than or equal to poll_min_seconds")
+            raise ValueError(
+                "poll_max_seconds must be greater than or equal to poll_min_seconds"
+            )
         if not self.lock_prefix:
             raise ValueError("lock_prefix must not be empty")
 
@@ -116,7 +124,7 @@ class _CoordinatedValue(Generic[T]):
 
 
 class RedisSingleFlight(Generic[T]):
-    """Combine local singleflight, Redis locking, cache polling and stale fallback."""
+    """Combine local singleflight, Redis locking, polling, and stale fallback."""
 
     def __init__(
         self,
@@ -144,13 +152,20 @@ class RedisSingleFlight(Generic[T]):
         self._jitter = jitter
         self._local = SingleFlightGroup[str, _CoordinatedValue[T]]()
 
-    def get_or_load(self, key: str, loader: Callable[[], T]) -> SingleFlightResult[T]:
+    def get_or_load(
+        self,
+        key: str,
+        loader: Callable[[], T],
+    ) -> SingleFlightResult[T]:
         if not key:
             raise ValueError("key must not be empty")
 
         cached = self._cache_get(key)
         if cached.found:
-            return SingleFlightResult(value=cached.value, shared=False)  # type: ignore[arg-type]
+            return SingleFlightResult(
+                value=cached.value,
+                shared=False,
+            )  # type: ignore[arg-type]
 
         local_result = self._local.do(key, lambda: self._coordinate(key, loader))
         return SingleFlightResult(
@@ -159,7 +174,11 @@ class RedisSingleFlight(Generic[T]):
             stale=local_result.value.stale,
         )
 
-    def _coordinate(self, key: str, loader: Callable[[], T]) -> _CoordinatedValue[T]:
+    def _coordinate(
+        self,
+        key: str,
+        loader: Callable[[], T],
+    ) -> _CoordinatedValue[T]:
         cached = self._cache_get(key)
         if cached.found:
             return _CoordinatedValue(cached.value)  # type: ignore[arg-type]
@@ -175,7 +194,9 @@ class RedisSingleFlight(Generic[T]):
             try:
                 cached = self._cache_get(key)
                 if cached.found:
-                    return _CoordinatedValue(cached.value)  # type: ignore[arg-type]
+                    return _CoordinatedValue(
+                        cached.value
+                    )  # type: ignore[arg-type]
 
                 value = loader()
                 self._cache_set(key, value, self._options.cache_ttl_seconds)
@@ -202,6 +223,11 @@ class RedisSingleFlight(Generic[T]):
         if self._stale_get is not None:
             stale = self._stale_get(key)
             if stale.found:
-                return _CoordinatedValue(stale.value, stale=True)  # type: ignore[arg-type]
+                return _CoordinatedValue(
+                    stale.value,
+                    stale=True,
+                )  # type: ignore[arg-type]
 
-        raise RebuildTimeoutError("singleflight cache rebuild timed out for key: %s" % key)
+        raise RebuildTimeoutError(
+            "singleflight cache rebuild timed out for key: %s" % key
+        )
