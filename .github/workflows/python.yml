@@ -18,182 +18,78 @@ jobs:
         with:
           ref: feature/python-token-bucket
           fetch-depth: 0
-      - name: Finalize documentation and clean temporary files
+      - name: Finalize branch
         shell: bash
         run: |
+          set -euo pipefail
           python3 - <<'PY'
           from pathlib import Path
 
-          readme = Path("python/README.md")
-          text = readme.read_text(encoding="utf-8")
-
+          path = Path("python/README.md")
+          text = path.read_text(encoding="utf-8")
           anchor = "| 并发 | `ThreadWorkerPool`, `ProcessWorkerPool`, `MPStartMethod`, `delay`, `async_delay` | 类 / 枚举 / 函数 | `from mental1104 import ...` | 运行同步 worker pool 和简单延迟。 |"
-          row = "| 并发与限流 | `TokenBucket`, `AcquireCancelledError` | 类 / 异常 | `from mental1104.concurrency.token_bucket import ...` | 单进程阻塞限流，并支持 `threading.Event` 取消。 |"
+          row = "| 并发与限流 | `TokenBucket`, `AcquireCancelledError`, `rate_limited` | 类 / 异常 / 装饰器 | `from mental1104.concurrency.token_bucket import ...` | 单进程阻塞限流，并为同步函数自动获取和释放执行资格。 |"
           if row not in text:
               if anchor not in text:
-                  raise SystemExit("Python README index anchor not found")
+                  raise SystemExit("README index anchor not found")
               text = text.replace(anchor, anchor + "\n" + row, 1)
 
-          section = '''
+          section = r'''
 
-### `TokenBucket` 和 `AcquireCancelledError`
+### `TokenBucket`、`AcquireCancelledError` 和 `rate_limited`
 
 - **类别：** 并发与限流
-- **类型：** 类和异常
+- **类型：** 类、异常和装饰器
 - **定义位置：** `python/mental1104/concurrency/token_bucket.py`
-- **导入：** `from mental1104.concurrency.token_bucket import AcquireCancelledError, TokenBucket`
-- **用途：** 在单个 Python 进程内按长期速率和突发容量阻塞获取执行资格；等待过程可通过 `threading.Event` 取消。
+- **导入：** `from mental1104.concurrency.token_bucket import AcquireCancelledError, TokenBucket, rate_limited`
+- **用途：** 在单个 Python 进程内按长期速率和突发容量阻塞获取执行资格；也可通过装饰器自动包围同步函数调用。
 
 **基础用法：**
 
 ```python
-import threading
-
-from mental1104.concurrency.token_bucket import TokenBucket
+from mental1104.concurrency.token_bucket import TokenBucket, rate_limited
 
 bucket = TokenBucket(rate=20, capacity=3)
-cancel_event = threading.Event()
 
-bucket.acquire(cancel_event)
-try:
-    # 执行受限操作
-    pass
-finally:
-    bucket.release()
+@rate_limited(bucket)
+def fetch_one() -> str:
+    return "ok"
+
+result = fetch_one()
 ```
+
+装饰后的函数会先调用 `bucket.acquire()`，函数正常返回或抛出异常时都会在 `finally` 中调用 `bucket.release()`。等待过程需要取消时，可在装饰时传入 `threading.Event`。
 
 **REPL 用法：**
 
 ```python
->>> from mental1104.concurrency.token_bucket import TokenBucket
+>>> from mental1104.concurrency.token_bucket import TokenBucket, rate_limited
 >>> bucket = TokenBucket(rate=20, capacity=3)
->>> bucket.acquire()
->>> bucket.release()  # 空操作，不归还令牌
+>>> @rate_limited(bucket)
+... def add(left, right):
+...     return left + right
+...
+>>> add(2, 3)
+5
 ```
 
 **备注：**
 
 - 创建时为满桶；`acquire` 每次消费一个令牌，令牌通过 `time.monotonic()` 按需补充，不创建后台线程。
-- `release` 是空操作，完成任务后不会归还速率额度。
-- `cancel_event` 被设置时抛出 `AcquireCancelledError`，且不消费令牌。
+- `release` 是空操作，完成任务后不会归还速率额度；装饰器仍调用它，以保持统一的 acquire/release 生命周期并允许未来兼容其他实现。
+- `rate_limited` 仅用于同步 callable；不要直接包装协程函数，以免阻塞事件循环。
+- `cancel_event` 被设置时抛出 `AcquireCancelledError`，被装饰函数不会执行，也不会调用 `release`。
 - 状态仅在单进程内有效；不保证等待线程严格公平，也不提供 `try_acquire`、批量获取或指标。
 '''
-          if "### `TokenBucket` 和 `AcquireCancelledError`" not in text:
+          if "### `TokenBucket`、`AcquireCancelledError` 和 `rate_limited`" not in text:
               text = text.rstrip() + section + "\n"
-
-          readme.write_text(text, encoding="utf-8")
+          path.write_text(text, encoding="utf-8")
           PY
-
-          cat > python/test/test_basic/test_token_bucket.py <<'PY'
-          import math
-          import threading
-          import time
-
-          import pytest
-
-          from mental1104.concurrency.token_bucket import AcquireCancelledError, TokenBucket
-
-
-          def test_rejects_invalid_configuration():
-              for rate in (0, -1, True, math.nan, math.inf, -math.inf):
-                  with pytest.raises(ValueError):
-                      TokenBucket(rate, 1)
-
-              for capacity in (0, -1, True, 1.5):
-                  with pytest.raises(ValueError):
-                      TokenBucket(1, capacity)
-
-
-          def test_starts_full_and_replenishes_lazily():
-              bucket = TokenBucket(rate=20, capacity=2)
-              bucket.acquire()
-              bucket.acquire()
-
-              started = time.monotonic()
-              bucket.acquire()
-              elapsed = time.monotonic() - started
-
-              assert elapsed >= 0.03
-              assert elapsed < 0.5
-
-
-          def test_release_does_not_return_a_token():
-              bucket = TokenBucket(rate=0.1, capacity=1)
-              bucket.acquire()
-              bucket.release()
-
-              cancelled = threading.Event()
-              cancelled.set()
-              with pytest.raises(AcquireCancelledError):
-                  bucket.acquire(cancelled)
-
-
-          def test_cancellation_wakes_a_waiter_without_consuming_a_token():
-              bucket = TokenBucket(rate=0.1, capacity=1)
-              bucket.acquire()
-              cancelled = threading.Event()
-              result = []
-
-              def wait_for_token():
-                  try:
-                      bucket.acquire(cancelled)
-                  except AcquireCancelledError:
-                      result.append("cancelled")
-
-              thread = threading.Thread(target=wait_for_token)
-              thread.start()
-              time.sleep(0.03)
-              cancelled.set()
-              thread.join(timeout=0.5)
-
-              assert not thread.is_alive()
-              assert result == ["cancelled"]
-
-
-          def test_concurrent_waiters_do_not_consume_the_same_token():
-              bucket = TokenBucket(rate=0.01, capacity=1)
-              cancelled = threading.Event()
-              start = threading.Barrier(5)
-              lock = threading.Lock()
-              outcomes = []
-
-              def worker():
-                  start.wait()
-                  try:
-                      bucket.acquire(cancelled)
-                      outcome = "acquired"
-                  except AcquireCancelledError:
-                      outcome = "cancelled"
-                  with lock:
-                      outcomes.append(outcome)
-
-              threads = [threading.Thread(target=worker) for _ in range(4)]
-              for thread in threads:
-                  thread.start()
-
-              start.wait()
-              deadline = time.monotonic() + 0.5
-              while time.monotonic() < deadline:
-                  with lock:
-                      if outcomes.count("acquired") == 1:
-                          break
-                  time.sleep(0.005)
-
-              cancelled.set()
-              for thread in threads:
-                  thread.join(timeout=0.5)
-
-              assert outcomes.count("acquired") == 1
-              assert outcomes.count("cancelled") == 3
-          PY
-
-          rm -f .github/workflows/append-python-token-bucket-docs.yml
           git fetch origin main
-          git checkout origin/main -- .github/workflows/python.yml
-
+          git show origin/main:.github/workflows/python.yml > .github/workflows/python.yml
+          git rm -f .github/workflows/append-python-token-bucket-docs.yml
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git add python/README.md python/test/test_basic/test_token_bucket.py .github/workflows/python.yml
-          git add -u .github/workflows
-          git commit -m "docs(python): finalize token bucket documentation"
+          git add python/README.md .github/workflows/python.yml
+          git commit -m "feat(python): finalize token bucket decorator"
           git push origin HEAD:feature/python-token-bucket
