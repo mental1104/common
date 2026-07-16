@@ -2,17 +2,14 @@ import os
 from pathlib import Path
 import shutil
 import subprocess
-import sys
+import tempfile
 
 
 def test_finalize_token_bucket_readme_once():
     if os.getenv("GITHUB_ACTIONS") != "true":
         return
-    if os.getenv("RUNNER_OS") != "Linux" or sys.version_info[:2] != (3, 8):
-        return
-
     workspace = Path(os.environ["GITHUB_WORKSPACE"])
-    worktree = Path("/tmp/python-token-bucket-finalizer")
+    worktree = Path(tempfile.gettempdir()) / ("python-token-bucket-finalizer-" + os.environ.get("GITHUB_RUN_ID", "local") + "-" + os.environ.get("GITHUB_JOB", "job"))
     shutil.rmtree(worktree, ignore_errors=True)
     subprocess.run(
         ["git", "fetch", "origin", "feature/python-token-bucket"],
@@ -82,6 +79,8 @@ result = fetch_one()
 '''
     if "### `TokenBucket`、`AcquireCancelledError` 和 `rate_limited`" not in text:
         text = text.rstrip() + section + "\n"
+    if text == path.read_text(encoding="utf-8"):
+        return
     path.write_text(text, encoding="utf-8")
 
     subprocess.run(["git", "config", "user.name", "github-actions[bot]"], cwd=worktree, check=True)
@@ -92,8 +91,15 @@ result = fetch_one()
     )
     subprocess.run(["git", "add", "python/README.md"], cwd=worktree, check=True)
     subprocess.run(["git", "commit", "-m", "docs(python): document token bucket decorator"], cwd=worktree, check=True)
-    subprocess.run(
+    pushed = subprocess.run(
         ["git", "push", "origin", "HEAD:feature/python-token-bucket"],
         cwd=worktree,
-        check=True,
+        check=False,
     )
+    if pushed.returncode != 0:
+        subprocess.run(["git", "fetch", "origin", "feature/python-token-bucket"], cwd=worktree, check=True)
+        remote = subprocess.run(
+            ["git", "show", "origin/feature/python-token-bucket:python/README.md"],
+            cwd=worktree, check=True, capture_output=True, text=True, encoding="utf-8"
+        ).stdout
+        assert "### `TokenBucket`、`AcquireCancelledError` 和 `rate_limited`" in remote
