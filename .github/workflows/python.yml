@@ -6,6 +6,9 @@ on:
       - feature/python-token-bucket
     paths:
       - .github/workflows/python.yml
+  pull_request:
+    branches:
+      - feature/python-token-bucket
 
 permissions:
   contents: write
@@ -93,5 +96,3 @@ result = fetch_one()
           git add python/README.md .github/workflows/python.yml
           git commit -m "feat(python): finalize token bucket decorator"
           git push origin HEAD:feature/python-token-bucket
-
-# contents-api-trigger
