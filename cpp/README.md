@@ -18,6 +18,7 @@
 - 语义基类型
 - 计时
 - 并发
+- 缓存协调
 - 网络与服务
 - 调试
 - 数值计算器
@@ -44,6 +45,8 @@
 | 并发 | `sleep_for`, `sleep_for_ms`, `ThreadPool` | 函数 / 类 | `mental1104/concurrency/thread/thread_util.h` | 睡眠辅助函数和返回 future 的线程池。 |
 | 并发 | `ThreadPoolExecutor`, `BoostAsioExecutor` | 类 | `mental1104/concurrency/thread/*.h` | 基于本地线程池或 Boost.Asio 线程池的 `IExecutor` 适配器。 |
 | 并发 | `Task`, `ICoroutineScheduler`, `BasicCoroutineScheduler`, `MnCoroutinePoolT`, `MnCoroutinePool`, `BoostMnCoroutinePool` | 类 / 别名 | `mental1104/concurrency/coroutine/*.h`, `mental1104/concurrency/mn/*.h` | 在执行器适配器上调度 C++20 coroutine。 |
+| 缓存协调 | `SingleFlightGroup`, `SingleFlightResult` | 类模板 / 结构体 | `mental1104/concurrency/singleflight.h` | 合并同一进程内同 Key 的并发调用。 |
+| 缓存协调 | `RedisSingleFlight`, `RedisSingleFlightOptions`, `CacheLookup`, `RedisSingleFlightResult`, `RebuildTimeoutError` | 类模板 / 结构体 / 异常 | `mental1104/redis_singleflight.h` | 组合本地 singleflight、Redis 缓存、分布式锁、轮询等待与旧值兜底。 |
 | 容器 | `BasicBloomFilter`, `BloomFilter`, `CoarseLockBloomFilter`, `CoarseLockStringBloomFilter` | 类 / 别名 | `mental1104/bloom_filter.h` | 用于字符串或自定义键成员判断的 Bloom filter 变体。 |
 | 网络与服务 | `RedisLock`, `create_redis_from_env` | 类 / 函数 | `mental1104/redis_lock.h` | 基于 Redis 的锁辅助工具。 |
 | 网络与服务 | `EpollServer` | 类 | `mental1104/net/epoll_server.h` | 注册文件描述符并分发事件回调。 |
@@ -446,6 +449,39 @@ int main() {
 
 - 需要 C++20。`AsyncSimpleCoroutineScheduler` 别名需要 `M1104_HAS_ASYNC_SIMPLE`。
 
+### 本地 Singleflight
+
+- **类别：** 缓存协调
+- **类型：** 类模板和结果结构体
+- **定义位置：** `cpp/include/mental1104/concurrency/singleflight.h`
+- **包含：** `#include "mental1104/concurrency/singleflight.h"`
+- **用途：** 按 Key 合并同一进程内的并发调用；首个调用者执行 loader，等待者复用同一值或同一异常。
+
+**基础用法：**
+
+```cpp
+#include "mental1104/concurrency/singleflight.h"
+#include <string>
+
+int main() {
+  mental1104::SingleFlightGroup<std::string, std::string> group;
+  mental1104::SingleFlightResult<std::string> result =
+      group.do_call("product:123", []() {
+        return std::string("{\"id\":123}");
+      });
+
+  return result.value.empty() ? 1 : 0;
+}
+```
+
+**备注：**
+
+- `shared=false` 表示当前调用执行了 loader；同一 in-flight 调用的等待者得到 `shared=true`。
+- leader 完成后会清理 Key；loader 抛出的异常会被当前等待者复用，后续调用可重新执行。
+- 不同 Key 只共享 group 容器锁的短临界区，loader 本身不会被全局串行化。
+- 结果会复制给调用者，因此 `Value` 需要可复制构造。
+- 头文件兼容仓库 C++11～C++23 矩阵；该能力只协调当前进程，不能跨 Pod。
+
 ### Bloom filter
 
 - **类别：** 容器
@@ -514,8 +550,68 @@ int main() {
 
 **备注：**
 
+- 使用 `SET NX PX` 获取锁，并通过 Lua 比对 owner value 后删除；没有自动续期，也不是可重入锁。
+- `try_lock` 的整数、`std::chrono::duration` 和 `std::chrono::milliseconds` 重载均兼容 C++11～C++23。
 - 需要 Redis++ 和 `REDIS_HOST`/`REDIS_PORT`；`REDISCLI_AUTH` 可选。
 - 待复核：此头文件暴露了 `using namespace sw::redis;` 和未放入命名空间的公共符号。
+
+### Redis 集群级 Singleflight
+
+- **类别：** 缓存协调
+- **类型：** 类模板、配置结构体、回调类型、结果结构体、异常和锁接口
+- **定义位置：** `cpp/include/mental1104/redis_singleflight.h`
+- **包含：** `#include "mental1104/redis_singleflight.h"`
+- **用途：** Redis 缓存 miss 后先在当前进程内合并同 Key 请求，再使用现有 `RedisLock` 选择一个集群级缓存重建者；其他实例轮询共享缓存。
+
+**基础用法：**
+
+```cpp
+#include "mental1104/redis_singleflight.h"
+#include <chrono>
+#include <string>
+
+int main() {
+  std::shared_ptr<sw::redis::Redis> redis = create_redis_from_env();
+  if (!redis) {
+    return 1;
+  }
+
+  typedef mental1104::CacheLookup<std::string> Lookup;
+  mental1104::RedisSingleFlightOptions options;
+  options.lock_ttl = std::chrono::seconds(3);
+  options.cache_ttl = std::chrono::minutes(10);
+
+  mental1104::RedisSingleFlight<std::string> singleflight(
+      redis,
+      [redis](const std::string &key) {
+        sw::redis::OptionalString value = redis->get(key);
+        return value ? Lookup::hit(*value) : Lookup::miss();
+      },
+      [redis](const std::string &key, const std::string &value,
+              std::chrono::milliseconds ttl) {
+        redis->set(key, value, ttl);
+      },
+      mental1104::RedisSingleFlight<std::string>::CacheGet(),
+      options);
+
+  mental1104::RedisSingleFlightResult<std::string> result =
+      singleflight.get_or_load("product:123", []() {
+        return std::string("{\"id\":123}");
+      });
+  return result.value.empty() ? 1 : 0;
+}
+```
+
+**行为与限制：**
+
+- 顺序为：Redis 首读 → 本地 singleflight → Redis 二次检查 → 尝试 `singleflight:lock:<key>` → 持锁后再次检查 → loader → 写缓存；未持锁者以 `poll_min`～`poll_max` jitter 轮询。
+- `CacheLookup` 使用显式 `found()` 语义区分缓存 miss 与合法空值；业务对象序列化由调用方回调负责。
+- 默认锁 TTL 3 秒、缓存 TTL 10 分钟、等待 500ms、轮询 20～50ms；非法 TTL、等待、轮询范围和空前缀会抛出 `std::invalid_argument`。
+- 等待超时后可以调用可选 stale getter；命中时返回 `stale=true`，否则抛出 `RebuildTimeoutError`。
+- `SingleFlightLock` / `LockFactory` 允许在测试中注入 fake lock；正常构造路径使用 `RedisSingleFlightLock` 适配仓库已有 `RedisLock`。
+- Redis 读取、写入、锁和 loader 异常不会伪装成缓存 miss；持锁路径通过 RAII 尝试释放锁。
+- 头文件兼容 C++11～C++23，但需要 Redis++；Redis 相关测试只在仓库检测到 hiredis / Redis++ 时构建。
+- 这是集群级回源抑制，不是 exactly-once。网络分区、进程暂停或 loader 超过锁 TTL 时仍可能重复回源；支付、扣款等业务必须使用业务唯一键、数据库约束和幂等记录。
 
 ### `EpollServer`
 
