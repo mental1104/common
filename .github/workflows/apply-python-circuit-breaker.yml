@@ -1,31 +1,9 @@
 name: Apply Python circuit breaker
 
-on:
-  push:
-    branches:
-      - feature/python-circuit-breaker
-
-permissions:
-  contents: write
+on: [push]
 
 jobs:
   apply:
-    if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: feature/python-circuit-breaker
-      - name: Apply implementation, tests, and README
-        shell: bash
-        run: |
-          set -euo pipefail
-          cat .tmp/circuit-breaker-python/part-* | base64 --decode | tar -xz
-          python3 .tmp/circuit-breaker-python/apply.py
-          rm .tmp/circuit-breaker-python/apply.py
-          git rm -r .tmp/circuit-breaker-python .github/workflows/apply-python-circuit-breaker.yml
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add python/README.md python/mental1104/concurrency/circuit_breaker.py python/test/test_basic/test_circuit_breaker.py
-          git commit -m "feat(python): add local circuit breaker"
-          git push origin HEAD:feature/python-circuit-breaker
+      - run: echo workflow-started
