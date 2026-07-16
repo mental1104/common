@@ -35,7 +35,22 @@ func (c goRedisLockCommands) setNX(
 	value string,
 	ttl time.Duration,
 ) (bool, error) {
-	return c.client.SetNX(ctx, key, value, ttl).Result()
+	status, err := c.client.Do(
+		ctx,
+		"SET",
+		key,
+		value,
+		"PX",
+		ttl.Milliseconds(),
+		"NX",
+	).Text()
+	if errors.Is(err, redis.Nil) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return status == "OK", nil
 }
 
 func (c goRedisLockCommands) evalInt(
