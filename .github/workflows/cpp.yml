@@ -6,6 +6,9 @@ on:
       - feature/cpp-token-bucket
     paths:
       - .github/workflows/cpp.yml
+  pull_request:
+    branches:
+      - feature/cpp-token-bucket
 
 permissions:
   contents: write
@@ -85,5 +88,3 @@ int main() {
           git add cpp/README.md .github/workflows/cpp.yml
           git commit -m "feat(cpp): finalize token bucket callable adaptor"
           git push origin HEAD:feature/cpp-token-bucket
-
-# contents-api-trigger
