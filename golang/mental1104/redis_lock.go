@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
+	"sync"
 	"time"
 
 	redis "github.com/redis/go-redis/v9"
@@ -17,17 +18,54 @@ end
 return 0
 `
 
-type RedisLock struct {
+var ErrRedisLockNilContext = errors.New("redis lock: context must not be nil")
+
+type redisLockCommands interface {
+	setNX(context.Context, string, string, time.Duration) (bool, error)
+	evalInt(context.Context, string, []string, ...any) (int64, error)
+}
+
+type goRedisLockCommands struct {
 	client redis.UniversalClient
-	key    string
-	token  string
-	ttl    time.Duration
-	locked bool
+}
+
+func (c goRedisLockCommands) setNX(
+	ctx context.Context,
+	key string,
+	value string,
+	ttl time.Duration,
+) (bool, error) {
+	return c.client.SetNX(ctx, key, value, ttl).Result()
+}
+
+func (c goRedisLockCommands) evalInt(
+	ctx context.Context,
+	script string,
+	keys []string,
+	args ...any,
+) (int64, error) {
+	return c.client.Eval(ctx, script, keys, args...).Int64()
+}
+
+type RedisLock struct {
+	mu       sync.Mutex
+	commands redisLockCommands
+	key      string
+	token    string
+	ttl      time.Duration
+	locked   bool
 }
 
 func NewRedisLock(client redis.UniversalClient, key string, ttl time.Duration) (*RedisLock, error) {
 	if client == nil {
 		return nil, errors.New("redis lock: client must not be nil")
+	}
+	return newRedisLock(goRedisLockCommands{client: client}, key, ttl)
+}
+
+func newRedisLock(commands redisLockCommands, key string, ttl time.Duration) (*RedisLock, error) {
+	if commands == nil {
+		return nil, errors.New("redis lock: commands must not be nil")
 	}
 	if key == "" {
 		return nil, errors.New("redis lock: key must not be empty")
@@ -40,18 +78,21 @@ func NewRedisLock(client redis.UniversalClient, key string, ttl time.Duration) (
 	if err != nil {
 		return nil, err
 	}
-	return &RedisLock{client: client, key: key, token: token, ttl: ttl}, nil
+	return &RedisLock{commands: commands, key: key, token: token, ttl: ttl}, nil
 }
 
 func (l *RedisLock) TryLock(ctx context.Context) (bool, error) {
 	if ctx == nil {
-		return false, ErrSingleFlightNilContext
+		return false, ErrRedisLockNilContext
 	}
+
+	l.mu.Lock()
+	defer l.mu.Unlock()
 	if l.locked {
 		return false, nil
 	}
 
-	locked, err := l.client.SetNX(ctx, l.key, l.token, l.ttl).Result()
+	locked, err := l.commands.setNX(ctx, l.key, l.token, l.ttl)
 	if err != nil {
 		return false, err
 	}
@@ -61,13 +102,21 @@ func (l *RedisLock) TryLock(ctx context.Context) (bool, error) {
 
 func (l *RedisLock) Unlock(ctx context.Context) (bool, error) {
 	if ctx == nil {
-		return false, ErrSingleFlightNilContext
+		return false, ErrRedisLockNilContext
 	}
+
+	l.mu.Lock()
+	defer l.mu.Unlock()
 	if !l.locked {
 		return false, nil
 	}
 
-	deleted, err := l.client.Eval(ctx, redisUnlockIfOwnerScript, []string{l.key}, l.token).Int64()
+	deleted, err := l.commands.evalInt(
+		ctx,
+		redisUnlockIfOwnerScript,
+		[]string{l.key},
+		l.token,
+	)
 	if err != nil {
 		return false, err
 	}
