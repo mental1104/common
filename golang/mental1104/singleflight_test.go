@@ -260,10 +260,10 @@ func TestRedisLockValidatesInputs(t *testing.T) {
 }
 
 type fakeTryLocker struct {
-	acquired   bool
-	tryErr     error
-	unlockErr  error
-	tryCalls   atomic.Int32
+	acquired    bool
+	tryErr      error
+	unlockErr   error
+	tryCalls    atomic.Int32
 	unlockCalls atomic.Int32
 }
 
