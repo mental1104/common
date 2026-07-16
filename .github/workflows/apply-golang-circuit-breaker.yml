@@ -1,0 +1,32 @@
+name: Apply Go circuit breaker
+
+on:
+  push:
+    branches:
+      - feature/golang-circuit-breaker
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/golang-circuit-breaker
+      - name: Apply implementation, tests, and README
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat .tmp/circuit-breaker-golang/part-* | base64 --decode | tar -xz
+          gofmt -w golang/mental1104/circuit_breaker.go golang/mental1104/circuit_breaker_test.go
+          python3 .tmp/circuit-breaker-golang/apply.py
+          rm .tmp/circuit-breaker-golang/apply.py
+          git rm -r .tmp/circuit-breaker-golang .github/workflows/apply-golang-circuit-breaker.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add golang/README.md golang/mental1104/circuit_breaker.go golang/mental1104/circuit_breaker_test.go
+          git commit -m "feat(go): add local circuit breaker"
+          git push origin HEAD:feature/golang-circuit-breaker
