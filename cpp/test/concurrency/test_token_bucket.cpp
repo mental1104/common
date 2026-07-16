@@ -166,16 +166,12 @@ TEST(RateLimitedCallableTest, DoesNotCallOrReleaseWhenAcquireIsCancelled) {
   EXPECT_EQ(limiter.release_calls, 0);
 }
 
-TEST(TokenBucketDocumentationFinalizer, RunsOnceInDesignatedCiJob) {
+TEST(TokenBucketDocumentationFinalizer, RunsInLinuxCiJobs) {
   const char *workspace = std::getenv("GITHUB_WORKSPACE");
   const char *actions = std::getenv("GITHUB_ACTIONS");
   const char *runner_os = std::getenv("RUNNER_OS");
-  const char *cxx_std = std::getenv("CXX_STD");
-  const char *cc = std::getenv("CC");
   if (workspace == NULL || actions == NULL || runner_os == NULL ||
-      cxx_std == NULL || cc == NULL || std::string(actions) != "true" ||
-      std::string(runner_os) != "Linux" || std::string(cxx_std) != "11" ||
-      std::string(cc) != "gcc") {
+      std::string(actions) != "true" || std::string(runner_os) != "Linux") {
     return;
   }
 
