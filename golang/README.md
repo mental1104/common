@@ -22,6 +22,7 @@
 | 集合与字符串包含判断 | `InString` | 函数 | `github.com/mental1104/common/golang` | 检查字符串是否包含子串。 |
 | 集合与字符串包含判断 | `InRune` | 函数 | `github.com/mental1104/common/golang` | 检查字符串是否包含指定 rune。 |
 | 并发与限流 | `TokenBucket`, `ErrNilContext` | 结构体 / 错误值 | `github.com/mental1104/common/golang` | 单进程内阻塞获取令牌，并支持 Context 取消。 |
+| 并发与韧性 | `CircuitBreaker`, `CircuitBreakerConfig`, `CircuitPermit`, `ErrCircuitOpen`, `Execute` | 状态 / 结构体 / 错误值 / 泛型函数 | `github.com/mental1104/common/golang/mental1104` | 基于失败率和慢调用率保护本地的下游接口调用。 |
 | CLI 与实验 | `labctl`, `labs/*` | 命令 | `./golang/cmd/labctl`, `./golang/labs/*` | 可运行的实验 / 演示入口。 |
 
 ## 详情
@@ -282,3 +283,39 @@ gc minimal demo: <YYYYMMDDTHHMMSSZ>
 **备注：**
 
 - 待复核：实验是可运行演示，不是稳定的可复用库 API。
+
+### `CircuitBreaker`
+
+- **类别：** 并发与韧性
+- **类型：** 状态、配置、结构体、许可、快照、错误值和泛型函数
+- **定义位置：** `golang/mental1104/circuit_breaker.go`
+- **导入：** `mental1104 "github.com/mental1104/common/golang/mental1104"`
+- **用途：** 在调用方进程内按下游服务与接口维护 Closed / Open / Half-Open 状态，基于精确时间滑窗统计系统失败和慢调用。
+
+**基础用法：**
+
+```go
+config := mental1104.DefaultCircuitBreakerConfig()
+breaker, err := mental1104.NewCircuitBreaker(config)
+if err != nil {
+    panic(err)
+}
+result, err := mental1104.ExecuteOrFallback(
+    breaker,
+    reserveStock,
+    func(err error) bool { return !errors.Is(err, ErrInventoryShortage) },
+    func(*mental1104.CircuitOpenError) (ReserveResult, error) {
+        return cachedUnavailableResult(), nil
+    },
+)
+```
+
+**备注：**
+
+- `RecordIgnored` 用于库存不足、参数错误等正常业务结果；它不进入 Closed 统计窗口，在 Half-Open 中只要不超慢阈值就视为健康探针。
+- `ErrorClassifier` 返回 `true` 表示系统失败；传 `nil` 时所有非空 error 都计为失败。fallback 只在 `TryAcquire` 返回 `ErrCircuitOpen` 时执行。
+- Half-Open 每轮最多发放配置数量的探针；任一失败或慢探针立即重新 Open，达到成功条件且没有在途探针后 Closed。
+- 统计使用 Go `time.Time` 的单调部分；实现线程安全、无后台 goroutine，并提供 `Snapshot` 与 `WithStateChangeListener`。
+- 熔断器不负责超时、限并发或重试。Open 状态应禁止重试，并与 Context 超时、Bulkhead、有限重试和 jitter 配套使用。
+- 应按“下游服务 + 接口 + 调用类型”创建实例，不要做成 Redis 集中式熔断器，也不要按高基数业务 ID 建实例。
+
