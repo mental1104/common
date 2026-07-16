@@ -1,10 +1,12 @@
-// redis_lock_test.cpp
-#include <atomic>
+#pragma once
+
 #include <chrono>
-#include <gtest/gtest.h>
+#include <cstdlib>
 #include <iostream>
-#include <random>
-#include <sstream>
+#include <memory>
+#include <string>
+#include <type_traits>
+
 #include "mental1104/meta/compiler_support.h"
 #if defined(M1104_REDISPP_CXX_STANDARD)
 #if M1104_REDISPP_CXX_STANDARD < 17
@@ -18,9 +20,6 @@
 #include <sw/redis++/cxx11/sw/redis++/cxx_utils.h>
 #endif
 #include <sw/redis++/redis++.h>
-#include <thread>
-#include <type_traits>
-#include <vector>
 
 #include "mental1104/random.h"
 using namespace sw::redis;
@@ -163,7 +162,7 @@ private:
 //   REDIS_HOST=192.168.31.239
 //   REDIS_PORT=6379
 // ======================================================================
-std::shared_ptr<Redis> create_redis_from_env() {
+inline std::shared_ptr<Redis> create_redis_from_env() {
   // std::getenv 从进程环境取变量，未设置时返回 nullptr/NULL；C 和 C++
   // 共用这个接口。缺失必需的 host/port 就直接返回 nullptr（未设置默认值）。
   // 若需默认值，可在取出后判空填入默认，如 host_env ? host_env :
