@@ -88,13 +88,13 @@ type coordinatedValue[V any] struct {
 }
 
 type RedisSingleFlight[V any] struct {
-	local       SingleFlightGroup[string, coordinatedValue[V]]
-	cacheGet    RedisCacheGet[V]
-	cacheSet    RedisCacheSet[V]
-	staleGet    RedisCacheGet[V]
-	options     RedisSingleFlightOptions
-	newLock     redisLockFactory
-	pollJitter  func(time.Duration, time.Duration) time.Duration
+	local      SingleFlightGroup[string, coordinatedValue[V]]
+	cacheGet   RedisCacheGet[V]
+	cacheSet   RedisCacheSet[V]
+	staleGet   RedisCacheGet[V]
+	options    RedisSingleFlightOptions
+	newLock    redisLockFactory
+	pollJitter func(time.Duration, time.Duration) time.Duration
 }
 
 func NewRedisSingleFlight[V any](
