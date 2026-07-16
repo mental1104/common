@@ -24,6 +24,10 @@
 #include "mental1104/random.h"
 using namespace sw::redis;
 
+namespace mental1104 {
+class RedisSingleFlightLock;
+}
+
 // 读图索引：
 // - 这个类用 Redis 的 SET NX PX 做分布式互斥锁，value_ 是本客户端的唯一标识。
 // - try_lock(expire) => SET key value NX PX expire 成功则持锁；默认 30s 过期。
@@ -77,22 +81,25 @@ public:
   }
 
 private:
+  friend class mental1104::RedisSingleFlightLock;
+
+  bool try_lock_or_throw(std::chrono::milliseconds expire) {
+    // 使用 SET key value NX PX expire 来实现分布式锁。
+    bool result = redis_->set(
+        key_, value_, expire,
+        UpdateType::NOT_EXIST); // NX 语义：只在 key 不存在时写入。
+    if (result) {
+      locked_ = true;
+    }
+    return result;
+  }
+
   bool try_lock_impl(std::chrono::milliseconds expire) {
     try {
-      // 使用 SET key value NX PX expire 来实现分布式锁
-      bool result = redis_->set(
-          key_, value_, expire,
-          UpdateType::NOT_EXIST); // NX 语义：只在 key
-                                  // 不存在时写入，确保只有第一个调用者持锁
-      if (result) {
-        locked_ = true;
-      }
-      // result == true 表示 SET 成功写入（锁获取成功）；false 表示 key
-      // 已存在或命令失败（未持锁）
-      return result;
+      return try_lock_or_throw(expire);
     } catch (const Error &err) {
-      // 进入这里通常是 Redis
-      // 命令执行异常（连接断开/超时、序列化错误、鉴权失败等），此时未持锁
+      // 保留现有兼容行为：普通 RedisLock 调用把 Redis 异常视为未持锁并记录日志。
+      // RedisSingleFlightLock 通过友元入口保留异常，以区分锁竞争和 Redis 故障。
       std::cerr << "try_lock error: " << err.what() << std::endl;
       return false;
     }
