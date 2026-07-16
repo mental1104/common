@@ -79,7 +79,7 @@ public:
       : lock_(redis, key) {}
 
   bool try_lock(std::chrono::milliseconds ttl) override {
-    return this->lock_.try_lock(ttl);
+    return this->lock_.try_lock_or_throw(ttl);
   }
 
   void unlock() override { this->lock_.unlock(); }
