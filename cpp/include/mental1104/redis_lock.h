@@ -68,10 +68,9 @@ public:
     return try_lock_impl(ms);
   }
 
-  template <typename T,
-            typename = std::enable_if_t<std::is_integral_v<
-                T>>> // SFINAE 约束：仅限整数类型重载（避免与 duration 冲突）
-  bool try_lock(T expire_ms) {
+  template <typename T>
+  typename std::enable_if<std::is_integral<T>::value, bool>::type
+  try_lock(T expire_ms) {
     if (expire_ms < 0)
       expire_ms = 0;
     return try_lock_impl(
