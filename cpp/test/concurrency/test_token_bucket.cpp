@@ -2,71 +2,13 @@
 
 #include <atomic>
 #include <chrono>
-#include <cstdlib>
-#include <fstream>
 #include <gtest/gtest.h>
+#include <functional>
 #include <limits>
+#include <stdexcept>
 #include <string>
 #include <thread>
 #include <vector>
-
-#ifdef _WIN32
-#include <direct.h>
-#else
-#include <sys/stat.h>
-#endif
-
-namespace {
-
-std::string token_bucket_repo_root() {
-  const char *workspace = std::getenv("GITHUB_WORKSPACE");
-  if (workspace != NULL && workspace[0] != '\0') {
-    return workspace;
-  }
-
-  const std::string source_file(__FILE__);
-  const std::string unix_marker("/cpp/test/");
-  const std::string windows_marker("\\cpp\\test\\");
-  std::string::size_type pos = source_file.find(unix_marker);
-  if (pos != std::string::npos) {
-    return source_file.substr(0, pos);
-  }
-  pos = source_file.find(windows_marker);
-  if (pos != std::string::npos) {
-    return source_file.substr(0, pos);
-  }
-  return ".";
-}
-
-std::string token_bucket_join(const std::string &left, const char *right) {
-#ifdef _WIN32
-  return left + "\\" + right;
-#else
-  return left + "/" + right;
-#endif
-}
-
-} // namespace
-
-TEST(TokenBucketTransport, CopyReadmeToCoverageArtifact) {
-  const std::string repo_root = token_bucket_repo_root();
-  const std::string artifact_dir = token_bucket_join(repo_root, "_cov");
-#ifdef _WIN32
-  _mkdir(artifact_dir.c_str());
-#else
-  mkdir(artifact_dir.c_str(), 0755);
-#endif
-
-  std::ifstream input(
-      token_bucket_join(repo_root, "cpp/README.md").c_str(), std::ios::binary);
-  ASSERT_TRUE(input.good());
-  std::ofstream output(
-      token_bucket_join(artifact_dir, "cpp-token-bucket-readme.md").c_str(),
-      std::ios::binary);
-  ASSERT_TRUE(output.good());
-  output << input.rdbuf();
-  ASSERT_TRUE(output.good());
-}
 
 TEST(TokenBucketTest, RejectsInvalidConfiguration) {
   EXPECT_THROW(mental1104::TokenBucket(0.0, 1), std::invalid_argument);
@@ -158,4 +100,67 @@ TEST(TokenBucketTest, ConcurrentWaitersDoNotShareToken) {
   }
 
   EXPECT_EQ(acquired.load(), 1);
+}
+
+namespace {
+
+class RecordingLimiter {
+public:
+  RecordingLimiter() : acquire_result(true), acquire_calls(0), release_calls(0) {}
+
+  bool acquire(const mental1104::CancellationToken *) {
+    ++acquire_calls;
+    return acquire_result;
+  }
+
+  void release() noexcept { ++release_calls; }
+
+  bool acquire_result;
+  int acquire_calls;
+  int release_calls;
+};
+
+} // namespace
+
+TEST(RateLimitedCallableTest, AcquiresCallsAndReleases) {
+  RecordingLimiter limiter;
+  int call_count = 0;
+  mental1104::RateLimitedCallable<RecordingLimiter,
+                                  std::function<int(int, int)> >
+      wrapped = mental1104::rate_limited(
+          limiter, std::function<int(int, int)>([&](int left, int right) {
+            ++call_count;
+            return left + right;
+          }));
+
+  EXPECT_EQ(wrapped(2, 3), 5);
+  EXPECT_EQ(limiter.acquire_calls, 1);
+  EXPECT_EQ(call_count, 1);
+  EXPECT_EQ(limiter.release_calls, 1);
+}
+
+TEST(RateLimitedCallableTest, ReleasesWhenCallableThrows) {
+  RecordingLimiter limiter;
+  mental1104::RateLimitedCallable<RecordingLimiter, std::function<void()> >
+      wrapped = mental1104::rate_limited(
+          limiter, std::function<void()>([] { throw std::runtime_error("boom"); }));
+
+  EXPECT_THROW(wrapped(), std::runtime_error);
+  EXPECT_EQ(limiter.acquire_calls, 1);
+  EXPECT_EQ(limiter.release_calls, 1);
+}
+
+TEST(RateLimitedCallableTest, DoesNotCallOrReleaseWhenAcquireIsCancelled) {
+  RecordingLimiter limiter;
+  limiter.acquire_result = false;
+  int call_count = 0;
+  mental1104::CancellationToken cancellation;
+  mental1104::RateLimitedCallable<RecordingLimiter, std::function<void()> >
+      wrapped = mental1104::rate_limited(
+          limiter, std::function<void()>([&] { ++call_count; }), &cancellation);
+
+  EXPECT_THROW(wrapped(), mental1104::AcquireCancelledError);
+  EXPECT_EQ(limiter.acquire_calls, 1);
+  EXPECT_EQ(call_count, 0);
+  EXPECT_EQ(limiter.release_calls, 0);
 }
