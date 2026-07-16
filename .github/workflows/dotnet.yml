@@ -7,13 +7,6 @@ on:
         description: "Enable verbose test output"
         type: boolean
         default: true
-  push:
-    branches-ignore:
-      - main
-    paths:
-      - "dotnet/**"
-      - "devops/**"
-      - ".github/workflows/dotnet.yml"
   pull_request:
     paths:
       - "dotnet/**"
