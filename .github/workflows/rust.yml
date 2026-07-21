@@ -7,14 +7,8 @@ on:
         description: "Enable verbose test output"
         type: boolean
         default: true
-  push:
-    branches-ignore:
-      - main
-    paths:
-      - "rust/**"
-      - "devops/**"
-      - ".github/workflows/rust.yml"
   pull_request:
+    types: [ready_for_review]
     paths:
       - "rust/**"
       - "devops/**"
