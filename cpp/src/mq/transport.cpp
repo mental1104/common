@@ -1,5 +1,6 @@
 #include "mental1104/mq/transport.h"
 
+#include <exception>
 #include <stdexcept>
 
 namespace mental1104 {
@@ -74,9 +75,22 @@ void Producer::close() {
     }
     closed_ = true;
   }
-  transport_->close();
-  std::unique_lock<std::mutex> lock(mutex_);
-  pending_cv_.wait(lock, [this]() { return pending_ == 0; });
+
+  std::exception_ptr close_error;
+  try {
+    transport_->close();
+  } catch (...) {
+    close_error = std::current_exception();
+  }
+
+  {
+    std::unique_lock<std::mutex> lock(mutex_);
+    pending_cv_.wait(lock, [this]() { return pending_ == 0; });
+  }
+
+  if (close_error) {
+    std::rethrow_exception(close_error);
+  }
 }
 
 Consumer::Consumer(const std::shared_ptr<ConsumerTransport> &transport,
