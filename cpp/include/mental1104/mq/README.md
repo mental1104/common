@@ -16,7 +16,7 @@ API 与 `python/mental1104/mq` 的核心语义对齐：
 - `AbstractConsumer::receive`、`acknowledge`、`negative_acknowledge`、`unsubscribe`、`resubscribe`、`close`；
 - `AbstractMessageQueue::create_producer`、`create_consumer`、`close`。
 
-`send_async` 接受下游传入的 `SendCallback`。每个已被 transport 接受的异步发送，在成功或失败时回调一次；`Producer::close` 会等待所有已接受回调完成。回调可能在 native client 线程或内部 poll 线程执行，调用方必须自行保证线程安全，且回调异常会被隔离。
+`send_async` 接受下游传入的 `SendCallback`。每个已被 transport 接受的异步发送，在成功或失败时触发一次回调；`Producer::close` 会等待这些发送得到最终结果并触发回调。回调可能在 native client 线程或内部 poll 线程执行，调用方必须自行保证线程安全，且回调异常会被隔离。
 
 ## Kafka 最小示例
 
