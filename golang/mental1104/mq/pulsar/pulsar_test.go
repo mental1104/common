@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	commonmq "github.com/mental1104/common/golang/mental1104/mq"
 	pulsargo "github.com/apache/pulsar-client-go/pulsar"
+	commonmq "github.com/mental1104/common/golang/mental1104/mq"
 )
 
 type fakeProducer struct {
@@ -27,28 +27,28 @@ func (p *fakeProducer) SendAsync(_ context.Context, message *pulsargo.ProducerMe
 	go callback(pulsargo.NewMessageID(1, 2, 0, 0), message, p.sendErr)
 }
 func (p *fakeProducer) FlushWithCtx(context.Context) error { p.flushes.Add(1); return nil }
-func (p *fakeProducer) Close()                              { p.closed.Add(1) }
+func (p *fakeProducer) Close()                             { p.closed.Add(1) }
 
 type fakeMessage struct{ payload []byte }
 
-func (m fakeMessage) Topic() string                                  { return "persistent://t/n/topic" }
-func (m fakeMessage) ProducerName() string                           { return "producer" }
-func (m fakeMessage) Properties() map[string]string                  { return nil }
-func (m fakeMessage) Payload() []byte                                { return m.payload }
-func (m fakeMessage) IsNullValue() bool                              { return false }
-func (m fakeMessage) ID() pulsargo.MessageID                         { return pulsargo.NewMessageID(1, 2, 0, 0) }
-func (m fakeMessage) PublishTime() time.Time                         { return time.Time{} }
-func (m fakeMessage) EventTime() time.Time                           { return time.Time{} }
-func (m fakeMessage) Key() string                                    { return "" }
-func (m fakeMessage) OrderingKey() string                            { return "" }
-func (m fakeMessage) RedeliveryCount() uint32                        { return 0 }
-func (m fakeMessage) IsReplicated() bool                             { return false }
-func (m fakeMessage) GetReplicatedFrom() string                      { return "" }
-func (m fakeMessage) GetSchemaValue(interface{}) error               { return nil }
-func (m fakeMessage) SchemaVersion() []byte                          { return nil }
+func (m fakeMessage) Topic() string                                     { return "persistent://t/n/topic" }
+func (m fakeMessage) ProducerName() string                              { return "producer" }
+func (m fakeMessage) Properties() map[string]string                     { return nil }
+func (m fakeMessage) Payload() []byte                                   { return m.payload }
+func (m fakeMessage) IsNullValue() bool                                 { return false }
+func (m fakeMessage) ID() pulsargo.MessageID                            { return pulsargo.NewMessageID(1, 2, 0, 0) }
+func (m fakeMessage) PublishTime() time.Time                            { return time.Time{} }
+func (m fakeMessage) EventTime() time.Time                              { return time.Time{} }
+func (m fakeMessage) Key() string                                       { return "" }
+func (m fakeMessage) OrderingKey() string                               { return "" }
+func (m fakeMessage) RedeliveryCount() uint32                           { return 0 }
+func (m fakeMessage) IsReplicated() bool                                { return false }
+func (m fakeMessage) GetReplicatedFrom() string                         { return "" }
+func (m fakeMessage) GetSchemaValue(interface{}) error                  { return nil }
+func (m fakeMessage) SchemaVersion() []byte                             { return nil }
 func (m fakeMessage) GetEncryptionContext() *pulsargo.EncryptionContext { return nil }
-func (m fakeMessage) Index() *uint64                                 { return nil }
-func (m fakeMessage) BrokerPublishTime() *time.Time                  { return nil }
+func (m fakeMessage) Index() *uint64                                    { return nil }
+func (m fakeMessage) BrokerPublishTime() *time.Time                     { return nil }
 
 type fakeConsumer struct {
 	message      pulsargo.Message
