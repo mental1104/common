@@ -13,7 +13,7 @@ namespace {
 
 class FakeProducerTransport : public mental1104::mq::ProducerTransport {
 public:
-  FakeProducerTransport() : fail(false), close_count(0) {}
+  FakeProducerTransport() : fail(false), close_fail(false), close_count(0) {}
   ~FakeProducerTransport() {
     if (worker.joinable()) {
       worker.join();
@@ -40,12 +40,16 @@ public:
 
   void close() override {
     ++close_count;
+    if (close_fail) {
+      throw std::runtime_error("close failed");
+    }
     if (worker.joinable()) {
       worker.join();
     }
   }
 
   bool fail;
+  bool close_fail;
   std::atomic<int> close_count;
   std::thread worker;
 };
@@ -114,6 +118,21 @@ TEST(MessageQueue, ProducerAsyncCallbackAndCloseAreComplete) {
   EXPECT_EQ(1, transport->close_count.load());
   EXPECT_THROW(producer.send(mental1104::mq::make_record("late")),
                std::runtime_error);
+}
+
+TEST(MessageQueue, ProducerWaitsForCallbackWhenTransportCloseFails) {
+  std::shared_ptr<FakeProducerTransport> transport(new FakeProducerTransport());
+  transport->close_fail = true;
+  mental1104::mq::Producer producer(transport);
+  std::atomic<int> callbacks(0);
+
+  producer.send_async(
+      mental1104::mq::make_record("async"),
+      [&callbacks](const mental1104::mq::SendResult &) { ++callbacks; });
+
+  EXPECT_THROW(producer.close(), std::runtime_error);
+  EXPECT_EQ(1, callbacks.load());
+  EXPECT_EQ(1, transport->close_count.load());
 }
 
 TEST(MessageQueue, ProducerPropagatesSyncAndAsyncFailure) {
