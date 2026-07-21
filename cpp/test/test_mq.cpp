@@ -1,6 +1,6 @@
+#include "mental1104/mq/bridge.h"
 #include "mental1104/mq/kafka.h"
 #include "mental1104/mq/pulsar.h"
-#include "mental1104/mq/transport.h"
 
 #include <gtest/gtest.h>
 
@@ -8,190 +8,203 @@
 #include <chrono>
 #include <stdexcept>
 #include <thread>
+#include <vector>
 
 namespace {
+using namespace mental1104::mq;
 
-class FakeProducerTransport : public mental1104::mq::ProducerTransport {
+class FakeReceipt : public Receipt {};
+class FakeProducerBackend : public IProducerBackend {
 public:
-  FakeProducerTransport() : fail(false), close_fail(false), close_count(0) {}
-  ~FakeProducerTransport() {
-    if (worker.joinable()) {
-      worker.join();
-    }
+  FakeProducerBackend() : reject(false), duplicate(false), close_count(0) {}
+  ~FakeProducerBackend() { close(); }
+  SendResult send(const Message &message) override {
+    last = message;
+    return reject ? SendResult::failure(
+                        MQError(ErrorCode::Backend, "send", "failed"))
+                  : SendResult::success("sync-id");
   }
-
-  mental1104::mq::SendResult
-  send(const mental1104::mq::Record &) override {
-    return fail ? mental1104::mq::SendResult::failure("send failed")
-                : mental1104::mq::SendResult::success("sync-id");
+  OperationResult send_async(const Message &message,
+                             const DeliveryCallback &callback) override {
+    last = message;
+    if (reject)
+      return OperationResult::failure(
+          MQError(ErrorCode::Backend, "send_async", "rejected"));
+    workers.push_back(std::thread([this, callback]() {
+      callback(SendResult::success("async-id"));
+      if (duplicate)
+        callback(SendResult::success("duplicate"));
+    }));
+    return OperationResult::success();
   }
-
-  void send_async(const mental1104::mq::Record &,
-                  const mental1104::mq::SendCallback &callback) override {
-    if (worker.joinable()) {
-      worker.join();
-    }
-    worker = std::thread([this, callback]() {
-      std::this_thread::sleep_for(std::chrono::milliseconds(5));
-      callback(fail ? mental1104::mq::SendResult::failure("send failed")
-                    : mental1104::mq::SendResult::success("async-id"));
-    });
-  }
-
-  void close() override {
+  OperationResult close() override {
     ++close_count;
-    if (close_fail) {
-      throw std::runtime_error("close failed");
-    }
-    if (worker.joinable()) {
-      worker.join();
-    }
+    for (std::size_t i = 0; i < workers.size(); ++i)
+      if (workers[i].joinable())
+        workers[i].join();
+    return OperationResult::success();
   }
-
-  bool fail;
-  bool close_fail;
+  bool reject;
+  bool duplicate;
   std::atomic<int> close_count;
-  std::thread worker;
+  Message last;
+  std::vector<std::thread> workers;
 };
 
-class FakeConsumerTransport : public mental1104::mq::ConsumerTransport {
+class FakeConsumerBackend : public IConsumerBackend {
 public:
-  FakeConsumerTransport()
-      : ack_count(0), nack_count(0), unsubscribe_count(0),
-        resubscribe_count(0), close_count(0) {}
-
-  mental1104::mq::MessagePtr receive(int timeout_millis) override {
-    if (timeout_millis == 0) {
-      throw std::runtime_error("message receive timed out");
+  FakeConsumerBackend()
+      : index(0), ack_count(0), nack_count(0), close_count(0) {}
+  ReceiveResult receive(int) override {
+    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    if (index < messages.size()) {
+      BackendMessage b;
+      b.message = messages[index++];
+      b.receipt.reset(new FakeReceipt());
+      return ReceiveResult::success(b);
     }
-    mental1104::mq::MessagePtr message(new mental1104::mq::Message());
-    message->payload = mental1104::mq::make_record("payload");
-    return message;
+    return ReceiveResult::failure(
+        MQError(ErrorCode::Timeout, "receive", "timeout"));
   }
-  void acknowledge(const mental1104::mq::MessagePtr &) override {
+  OperationResult acknowledge(const ReceiptPtr &) override {
     ++ack_count;
+    return OperationResult::success();
   }
-  void negative_acknowledge(const mental1104::mq::MessagePtr &) override {
+  OperationResult negative_acknowledge(const ReceiptPtr &) override {
     ++nack_count;
+    return OperationResult::success();
   }
-  void unsubscribe() override { ++unsubscribe_count; }
-  void resubscribe() override { ++resubscribe_count; }
-  void close() override { ++close_count; }
-
-  int ack_count;
-  int nack_count;
-  int unsubscribe_count;
-  int resubscribe_count;
-  int close_count;
+  OperationResult unsubscribe() override { return OperationResult::success(); }
+  OperationResult resubscribe() override { return OperationResult::success(); }
+  OperationResult close() override {
+    ++close_count;
+    return OperationResult::success();
+  }
+  std::vector<Message> messages;
+  std::size_t index;
+  std::atomic<int> ack_count, nack_count, close_count;
 };
 
-TEST(MessageQueue, TopicBuildersMatchPythonSemantics) {
-  EXPECT_EQ("tenant.namespace.topic",
-            mental1104::mq::build_kafka_topic("tenant", "namespace", "topic"));
-  EXPECT_EQ("persistent://tenant/namespace/topic",
-            mental1104::mq::build_pulsar_topic("tenant", "namespace", "topic"));
-  EXPECT_THROW(mental1104::mq::build_kafka_topic("", "", ""),
-               std::invalid_argument);
-  EXPECT_THROW(mental1104::mq::build_pulsar_topic("", "namespace", "topic"),
-               std::invalid_argument);
+TEST(MessageQueueBridge, DomainDoesNotExposeSdkMessage) {
+  Message message;
+  message.topic = "events";
+  message.key = make_record("key");
+  message.payload = make_record("payload");
+  message.headers["trace"] = "1";
+  EXPECT_EQ("payload", record_to_string(message.payload));
+  EXPECT_EQ("tenant.namespace.events",
+            build_kafka_topic("tenant", "namespace", "events"));
+  EXPECT_EQ("persistent://tenant/namespace/events",
+            build_pulsar_topic("tenant", "namespace", "events"));
 }
 
-TEST(MessageQueue, ProducerAsyncCallbackAndCloseAreComplete) {
-  std::shared_ptr<FakeProducerTransport> transport(new FakeProducerTransport());
-  mental1104::mq::Producer producer(transport);
-  producer.send(mental1104::mq::make_record("sync"));
-
-  std::atomic<int> callbacks(0);
-  mental1104::mq::SendResult result;
-  producer.send_async(
-      mental1104::mq::make_record("async"),
-      [&callbacks, &result](const mental1104::mq::SendResult &value) {
-        result = value;
-        ++callbacks;
-      });
-  producer.close();
-  producer.close();
-
-  EXPECT_EQ(1, callbacks.load());
+TEST(MessageQueueBridge, ProducerForwardsResultAndClosesIdempotently) {
+  std::shared_ptr<FakeProducerBackend> backend(new FakeProducerBackend());
+  Producer producer(backend);
+  Message message;
+  message.payload = make_record("value");
+  message.headers["trace"] = "1";
+  SendResult result = producer.send(message);
   EXPECT_TRUE(result.ok);
-  EXPECT_EQ("async-id", result.message_id);
-  EXPECT_EQ(1, transport->close_count.load());
-  EXPECT_THROW(producer.send(mental1104::mq::make_record("late")),
-               std::runtime_error);
+  EXPECT_EQ("sync-id", result.message_id);
+  EXPECT_EQ("1", backend->last.headers["trace"]);
+  EXPECT_TRUE(producer.close().ok);
+  EXPECT_TRUE(producer.close().ok);
+  EXPECT_EQ(1, backend->close_count.load());
+  EXPECT_EQ(ErrorCode::Closed, producer.send(message).error.code);
 }
 
-TEST(MessageQueue, ProducerWaitsForCallbackWhenTransportCloseFails) {
-  std::shared_ptr<FakeProducerTransport> transport(new FakeProducerTransport());
-  transport->close_fail = true;
-  mental1104::mq::Producer producer(transport);
-  std::atomic<int> callbacks(0);
-
-  producer.send_async(
-      mental1104::mq::make_record("async"),
-      [&callbacks](const mental1104::mq::SendResult &) { ++callbacks; });
-
-  EXPECT_THROW(producer.close(), std::runtime_error);
-  EXPECT_EQ(1, callbacks.load());
-  EXPECT_EQ(1, transport->close_count.load());
+TEST(MessageQueueBridge, AsyncCallbackIsExactlyOnceAndPanicSafe) {
+  std::shared_ptr<FakeProducerBackend> backend(new FakeProducerBackend());
+  backend->duplicate = true;
+  Producer producer(backend);
+  std::atomic<int> calls(0);
+  Message message;
+  EXPECT_TRUE(producer.async()
+                  .send_async(message,
+                              [&](const SendResult &r) {
+                                EXPECT_TRUE(r.ok);
+                                ++calls;
+                                throw std::runtime_error("ignored");
+                              })
+                  .ok);
+  EXPECT_TRUE(producer.close().ok);
+  for (int i = 0; i < 100 && calls.load() < 1; ++i)
+    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+  EXPECT_EQ(1, calls.load());
 }
 
-TEST(MessageQueue, ProducerPropagatesSyncAndAsyncFailure) {
-  std::shared_ptr<FakeProducerTransport> transport(new FakeProducerTransport());
-  transport->fail = true;
-  mental1104::mq::Producer producer(transport);
-  EXPECT_THROW(producer.send(mental1104::mq::make_record("sync")),
-               std::runtime_error);
-
-  std::atomic<int> callbacks(0);
-  bool ok = true;
-  producer.send_async(
-      mental1104::mq::make_record("async"),
-      [&callbacks, &ok](const mental1104::mq::SendResult &result) {
-        ok = result.ok;
-        ++callbacks;
-      });
+TEST(MessageQueueBridge, SynchronousAsyncRejectionDoesNotCallCallback) {
+  std::shared_ptr<FakeProducerBackend> backend(new FakeProducerBackend());
+  backend->reject = true;
+  Producer producer(backend);
+  std::atomic<int> calls(0);
+  EXPECT_FALSE(producer.async()
+                   .send_async(Message(), [&](const SendResult &) { ++calls; })
+                   .ok);
   producer.close();
-  EXPECT_EQ(1, callbacks.load());
-  EXPECT_FALSE(ok);
+  EXPECT_EQ(0, calls.load());
 }
 
-TEST(MessageQueue, ConsumerForwardsLifecycleOperations) {
-  std::shared_ptr<FakeConsumerTransport> transport(new FakeConsumerTransport());
-  int listener_calls = 0;
-  mental1104::mq::Consumer consumer(
-      transport, [&listener_calls](const mental1104::mq::MessagePtr &) {
-        ++listener_calls;
-      });
-
-  mental1104::mq::MessagePtr message = consumer.receive(10);
-  EXPECT_EQ("payload", mental1104::mq::record_to_string(message->payload));
-  consumer.acknowledge(message);
-  consumer.negative_acknowledge(message);
-  consumer.unsubscribe();
-  consumer.resubscribe();
-  consumer.close();
-  consumer.close();
-
-  EXPECT_EQ(1, listener_calls);
-  EXPECT_EQ(1, transport->ack_count);
-  EXPECT_EQ(1, transport->nack_count);
-  EXPECT_EQ(1, transport->unsubscribe_count);
-  EXPECT_EQ(1, transport->resubscribe_count);
-  EXPECT_EQ(1, transport->close_count);
-  EXPECT_THROW(consumer.receive(10), std::runtime_error);
+TEST(MessageQueueBridge, ConsumerStartStopRestartAndHandlerFailure) {
+  std::shared_ptr<FakeConsumerBackend> backend(new FakeConsumerBackend());
+  Message one;
+  one.payload = make_record("one");
+  Message two;
+  two.payload = make_record("two");
+  backend->messages.push_back(one);
+  backend->messages.push_back(two);
+  Consumer consumer(backend);
+  std::atomic<int> handled(0);
+  EXPECT_TRUE(consumer
+                  .start([&](const Message &m) {
+                    ++handled;
+                    if (record_to_string(m.payload) == "two")
+                      throw std::runtime_error("fail");
+                    return HandlerResult::acknowledge();
+                  })
+                  .ok);
+  EXPECT_EQ(
+      ErrorCode::AlreadyStarted,
+      consumer
+          .start([](const Message &) { return HandlerResult::acknowledge(); })
+          .error.code);
+  for (int i = 0; i < 100 && handled.load() < 2; ++i)
+    std::this_thread::sleep_for(std::chrono::milliseconds(2));
+  EXPECT_TRUE(consumer.stop().ok);
+  EXPECT_EQ(2, handled.load());
+  EXPECT_EQ(1, backend->ack_count.load());
+  EXPECT_EQ(1, backend->nack_count.load());
+  EXPECT_TRUE(
+      consumer
+          .start([](const Message &) { return HandlerResult::acknowledge(); })
+          .ok);
+  EXPECT_TRUE(consumer.stop().ok);
+  EXPECT_TRUE(consumer.close().ok);
+  EXPECT_TRUE(consumer.close().ok);
+  EXPECT_EQ(1, backend->close_count.load());
 }
 
-TEST(MessageQueue, OptionalBackendsFailClearlyWhenUnavailable) {
-  if (!mental1104::mq::kafka_available()) {
-    mental1104::mq::KafkaMessageQueue queue;
-    EXPECT_THROW(queue.create_producer("t", "n", "topic"),
-                 std::runtime_error);
+TEST(MessageQueueBridge, OptionalBackendsFailWithUnifiedError) {
+  if (!kafka_available()) {
+    ProducerConfig config;
+    config.backend.reset(new KafkaBackendConfig());
+    config.topic.topic = "events";
+    EXPECT_THROW(create_kafka_producer_backend(
+                     config, *static_cast<const KafkaBackendConfig *>(
+                                 config.backend.get())),
+                 MQException);
   }
-  if (!mental1104::mq::pulsar_available()) {
-    mental1104::mq::PulsarMessageQueue queue;
-    EXPECT_THROW(queue.create_producer("t", "n", "topic"),
-                 std::runtime_error);
+  if (!pulsar_available()) {
+    ProducerConfig config;
+    config.backend.reset(new PulsarBackendConfig());
+    config.topic.tenant = "t";
+    config.topic.namespace_name = "n";
+    config.topic.topic = "events";
+    EXPECT_THROW(create_pulsar_producer_backend(
+                     config, *static_cast<const PulsarBackendConfig *>(
+                                 config.backend.get())),
+                 MQException);
   }
 }
-
 } // namespace
