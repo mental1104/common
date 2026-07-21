@@ -1,0 +1,37 @@
+package mq
+
+import (
+	"context"
+	"errors"
+	"sync"
+	"sync/atomic"
+	"testing"
+	"time"
+)
+
+type fakeProducerBackend struct {
+	sendResult SendResult
+	sendErr error
+	asyncErr error
+	duplicate bool
+	closeErr error
+	closeCount atomic.Int32
+}
+func (f *fakeProducerBackend) Send(context.Context, Message)(SendResult,error){return f.sendResult,f.sendErr}
+func (f *fakeProducerBackend) SendAsync(_ context.Context,_ Message,callback DeliveryCallback)error{if f.asyncErr!=nil{return f.asyncErr};go func(){callback(f.sendResult);if f.duplicate{callback(f.sendResult)}}();return nil}
+func (f *fakeProducerBackend) Close(context.Context)error{f.closeCount.Add(1);return f.closeErr}
+
+type fakeConsumerBackend struct{mu sync.Mutex;messages []BackendMessage;receive chan struct{};ackCount,nackCount,closeCount atomic.Int32}
+func newFakeConsumerBackend(messages ...BackendMessage)*fakeConsumerBackend{return &fakeConsumerBackend{messages:messages,receive:make(chan struct{},1)}}
+func(f *fakeConsumerBackend)Receive(ctx context.Context)(BackendMessage,error){for{f.mu.Lock();if len(f.messages)>0{m:=f.messages[0];f.messages=f.messages[1:];f.mu.Unlock();return m,nil};f.mu.Unlock();select{case<-ctx.Done():return BackendMessage{},ctx.Err();case<-f.receive:}}}
+func(f *fakeConsumerBackend)Acknowledge(context.Context,string)error{f.ackCount.Add(1);return nil}
+func(f *fakeConsumerBackend)NegativeAcknowledge(context.Context,string)error{f.nackCount.Add(1);return nil}
+func(f *fakeConsumerBackend)Unsubscribe(context.Context)error{return nil}
+func(f *fakeConsumerBackend)Resubscribe(context.Context)error{return nil}
+func(f *fakeConsumerBackend)Close(context.Context)error{f.closeCount.Add(1);return nil}
+
+func TestProducerBridgeForwardsAndClosesIdempotently(t *testing.T){b:=&fakeProducerBackend{sendResult:SendResult{MessageID:"42"}};p,err:=NewProducer(b);if err!=nil{t.Fatal(err)};r,err:=p.Send(context.Background(),NewMessage([]byte("hello")));if err!=nil||r.MessageID!="42"{t.Fatalf("result=%+v err=%v",r,err)};if err:=p.Close(context.Background());err!=nil{t.Fatal(err)};if err:=p.Close(context.Background());err!=nil{t.Fatal(err)};if b.closeCount.Load()!=1{t.Fatalf("close count=%d",b.closeCount.Load())};if _,err:=p.Send(context.Background(),Message{});!errors.Is(err,ErrClosed){t.Fatalf("expected ErrClosed, got %v",err)}}
+func TestProducerBridgeConvertsBackendError(t *testing.T){cause:=errors.New("broker unavailable");p,_:=NewProducer(&fakeProducerBackend{sendErr:cause});_,err:=p.Send(context.Background(),Message{});var mqErr *MQError;if !errors.As(err,&mqErr)||!errors.Is(err,cause)||mqErr.Code!=ErrorBackend{t.Fatalf("unexpected error: %#v",err)}}
+func TestAsyncProducerCallbackExactlyOnceAndPanicSafe(t *testing.T){b:=&fakeProducerBackend{sendResult:SendResult{MessageID:"async"},duplicate:true};p,_:=NewProducer(b);var calls atomic.Int32;done:=make(chan struct{});if err:=p.Async().SendAsync(context.Background(),Message{},func(SendResult){if calls.Add(1)==1{close(done)};panic("caller panic")});err!=nil{t.Fatal(err)};select{case<-done:case<-time.After(time.Second):t.Fatal("callback was not invoked")};if err:=p.Close(context.Background());err!=nil{t.Fatal(err)};if calls.Load()!=1{t.Fatalf("callback count=%d",calls.Load())}}
+func TestAsyncProducerSynchronousRejectionDoesNotCallback(t *testing.T){cause:=errors.New("queue full");p,_:=NewProducer(&fakeProducerBackend{asyncErr:cause});var calls atomic.Int32;err:=p.Async().SendAsync(context.Background(),Message{},func(SendResult){calls.Add(1)});if err==nil||!errors.Is(err,cause){t.Fatalf("expected wrapped rejection, got %v",err)};if calls.Load()!=0{t.Fatalf("callback count=%d",calls.Load())}}
+func TestConsumerStartStopRestartAndHandlerFailure(t *testing.T){b:=newFakeConsumerBackend(NewBackendMessage(NewMessage([]byte("one")),"r1"));c,_:=NewConsumer(b);first:=make(chan struct{});if err:=c.Start(context.Background(),func(context.Context,Message)(ConsumeAction,error){close(first);return ConsumeAcknowledge,nil});err!=nil{t.Fatal(err)};if err:=c.Start(context.Background(),func(context.Context,Message)(ConsumeAction,error){return 0,nil});!errors.Is(err,ErrAlreadyStarted){t.Fatalf("expected already started, got %v",err)};<-first;if err:=c.Stop(context.Background());err!=nil{t.Fatal(err)};if b.ackCount.Load()!=1{t.Fatalf("ack count=%d",b.ackCount.Load())};b.mu.Lock();b.messages=append(b.messages,NewBackendMessage(NewMessage([]byte("two")),"r2"));b.mu.Unlock();b.receive<-struct{}{};second:=make(chan struct{});if err:=c.Start(context.Background(),func(context.Context,Message)(ConsumeAction,error){close(second);return ConsumeLeaveUnacknowledged,errors.New("handler failed")});err!=nil{t.Fatal(err)};<-second;err:=c.Stop(context.Background());var mqErr *MQError;if !errors.As(err,&mqErr)||mqErr.Code!=ErrorHandler{t.Fatalf("expected handler error, got %v",err)};if b.nackCount.Load()!=1{t.Fatalf("nack count=%d",b.nackCount.Load())};_ = c.Close(context.Background());_ = c.Close(context.Background());if b.closeCount.Load()!=1{t.Fatalf("close count=%d",b.closeCount.Load())}}
