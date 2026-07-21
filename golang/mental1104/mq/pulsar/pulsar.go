@@ -58,6 +58,10 @@ type MessageQueue struct {
 	closeTimeout   time.Duration
 }
 
+type PulsarMessageQueue = MessageQueue
+type PulsarProducer = Producer
+type PulsarConsumer = Consumer
+
 func NewMessageQueue(config Config) (*MessageQueue, error) {
 	if config.ClientOptions.URL == "" {
 		return nil, errors.New("pulsar client URL must not be empty")
@@ -203,15 +207,15 @@ func (p *Producer) SendAsync(ctx context.Context, record any, callback commonmq.
 	}
 	message := &pulsargo.ProducerMessage{Payload: payload}
 	p.producer.SendAsync(ctx, message, func(id pulsargo.MessageID, _ *pulsargo.ProducerMessage, sendErr error) {
-		defer p.wg.Done()
 		if sendErr != nil {
 			sendErr = fmt.Errorf("pulsar async send: %w", sendErr)
 		}
+		messageID := ""
+		if id != nil {
+			messageID = id.String()
+		}
+		p.wg.Done()
 		if callback != nil {
-			messageID := ""
-			if id != nil {
-				messageID = id.String()
-			}
 			callback(commonmq.SendResult{MessageID: messageID, Err: sendErr})
 		}
 	})
@@ -245,8 +249,8 @@ type Consumer struct {
 
 func (c *Consumer) Receive(ctx context.Context, timeout time.Duration) (*commonmq.Message, error) {
 	c.opMu.Lock()
-	defer c.opMu.Unlock()
 	if c.closed || c.consumer == nil {
+		c.opMu.Unlock()
 		return nil, commonmq.ErrClosed
 	}
 	if timeout > 0 {
@@ -256,14 +260,17 @@ func (c *Consumer) Receive(ctx context.Context, timeout time.Duration) (*commonm
 	}
 	native, err := c.consumer.Receive(ctx)
 	if err != nil {
+		c.opMu.Unlock()
 		if errors.Is(err, context.DeadlineExceeded) {
 			return nil, commonmq.ErrTimeout
 		}
 		return nil, fmt.Errorf("pulsar receive: %w", err)
 	}
 	message := &commonmq.Message{Payload: append([]byte(nil), native.Payload()...), Native: native}
-	if c.listener != nil {
-		c.listener(message)
+	listener := c.listener
+	c.opMu.Unlock()
+	if listener != nil {
+		listener(message)
 	}
 	return message, nil
 }
