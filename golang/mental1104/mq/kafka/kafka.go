@@ -38,6 +38,10 @@ type MessageQueue struct {
 	readerFactory readerFactory
 }
 
+type KafkaMessageQueue = MessageQueue
+type KafkaProducer = Producer
+type KafkaConsumer = Consumer
+
 func NewMessageQueue(config Config) (*MessageQueue, error) {
 	if len(config.Brokers) == 0 {
 		return nil, errors.New("kafka brokers must not be empty")
@@ -91,7 +95,7 @@ func (q *MessageQueue) CreateProducer(_ context.Context, tenant, namespace, topi
 	if err != nil {
 		return nil, fmt.Errorf("create kafka producer: %w", err)
 	}
-	return &Producer{writer: native, topic: fullTopic}, nil
+	return &Producer{writer: native}, nil
 }
 
 func (q *MessageQueue) CreateConsumer(_ context.Context, tenant, namespace, topic, subscription string, _ commonmq.Schema, options commonmq.ConsumerOptions) (commonmq.AbstractConsumer, error) {
@@ -132,7 +136,6 @@ type Producer struct {
 	closed bool
 	wg     sync.WaitGroup
 	writer writer
-	topic  string
 }
 
 func (p *Producer) begin() error {
@@ -171,11 +174,11 @@ func (p *Producer) SendAsync(ctx context.Context, record any, callback commonmq.
 	}
 	payload = append([]byte(nil), payload...)
 	go func() {
-		defer p.wg.Done()
 		err := p.writer.WriteMessages(ctx, kafkago.Message{Value: payload})
 		if err != nil {
 			err = fmt.Errorf("kafka async send: %w", err)
 		}
+		p.wg.Done()
 		if callback != nil {
 			callback(commonmq.SendResult{Err: err})
 		}
@@ -207,8 +210,8 @@ type Consumer struct {
 
 func (c *Consumer) Receive(ctx context.Context, timeout time.Duration) (*commonmq.Message, error) {
 	c.opMu.Lock()
-	defer c.opMu.Unlock()
 	if c.closed || c.reader == nil {
+		c.opMu.Unlock()
 		return nil, commonmq.ErrClosed
 	}
 	if timeout > 0 {
@@ -218,14 +221,17 @@ func (c *Consumer) Receive(ctx context.Context, timeout time.Duration) (*commonm
 	}
 	native, err := c.reader.FetchMessage(ctx)
 	if err != nil {
+		c.opMu.Unlock()
 		if errors.Is(err, context.DeadlineExceeded) {
 			return nil, commonmq.ErrTimeout
 		}
 		return nil, fmt.Errorf("kafka receive: %w", err)
 	}
 	message := &commonmq.Message{Payload: append([]byte(nil), native.Value...), Native: native}
-	if c.listener != nil {
-		c.listener(message)
+	listener := c.listener
+	c.opMu.Unlock()
+	if listener != nil {
+		listener(message)
 	}
 	return message, nil
 }
