@@ -1,8 +1,10 @@
 #include "mental1104/mq/pulsar.h"
 #include "mental1104/mq/transport.h"
 
+#include <atomic>
 #include <mutex>
 #include <stdexcept>
+#include <string>
 
 #ifdef M1104_HAS_PULSAR
 #include <pulsar/Client.h>
@@ -16,6 +18,21 @@ namespace mq {
 
 #ifdef M1104_HAS_PULSAR
 namespace {
+
+std::string pulsar_error(const char *prefix, pulsar::Result result) {
+  return std::string(prefix) + pulsar::strResult(result);
+}
+
+std::string pulsar_message_id(const pulsar::MessageId &id) {
+  std::string serialized;
+  id.serialize(serialized);
+  return serialized;
+}
+
+pulsar::Message build_pulsar_message(const Record &record) {
+  const std::string content(record.begin(), record.end());
+  return pulsar::MessageBuilder().setContent(content).build();
+}
 
 pulsar::ConsumerType to_pulsar_type(SubscriptionType type) {
   switch (type) {
@@ -38,30 +55,18 @@ public:
 
   SendResult send(const Record &record) override {
     ensure_open();
-    pulsar::Message message =
-        pulsar::MessageBuilder()
-            .setContent(record.empty()
-                            ? ""
-                            : reinterpret_cast<const char *>(&record[0]),
-                        record.size())
-            .build();
+    const pulsar::Message message = build_pulsar_message(record);
     pulsar::MessageId id;
     const pulsar::Result result = producer_.send(message, id);
     if (result != pulsar::ResultOk) {
       return SendResult::failure(pulsar::strResult(result));
     }
-    return SendResult::success(id.serialize());
+    return SendResult::success(pulsar_message_id(id));
   }
 
   void send_async(const Record &record, const SendCallback &callback) override {
     ensure_open();
-    pulsar::Message message =
-        pulsar::MessageBuilder()
-            .setContent(record.empty()
-                            ? ""
-                            : reinterpret_cast<const char *>(&record[0]),
-                        record.size())
-            .build();
+    const pulsar::Message message = build_pulsar_message(record);
     producer_.sendAsync(message,
                         [callback](pulsar::Result result,
                                    const pulsar::MessageId &id) {
@@ -69,7 +74,8 @@ public:
                             return;
                           }
                           if (result == pulsar::ResultOk) {
-                            callback(SendResult::success(id.serialize()));
+                            callback(SendResult::success(
+                                pulsar_message_id(id)));
                           } else {
                             callback(SendResult::failure(
                                 pulsar::strResult(result)));
@@ -79,24 +85,23 @@ public:
 
   void close() override {
     std::lock_guard<std::mutex> lock(mutex_);
-    if (closed_) {
+    if (closed_.exchange(true)) {
       return;
     }
-    closed_ = true;
     producer_.flush();
     producer_.close();
   }
 
 private:
   void ensure_open() const {
-    if (closed_) {
+    if (closed_.load()) {
       throw std::runtime_error("Pulsar producer is closed");
     }
   }
 
   pulsar::Producer producer_;
   mutable std::mutex mutex_;
-  bool closed_;
+  std::atomic<bool> closed_;
 };
 
 class PulsarMessageHandle : public MessageHandle {
@@ -125,8 +130,7 @@ public:
       throw std::runtime_error("message receive timed out");
     }
     if (result != pulsar::ResultOk) {
-      throw std::runtime_error("Pulsar receive: " +
-                               pulsar::strResult(result));
+      throw std::runtime_error(pulsar_error("Pulsar receive: ", result));
     }
     MessagePtr message(new Message());
     const std::string payload = native.getDataAsString();
@@ -139,8 +143,7 @@ public:
     const pulsar::Result result =
         consumer_.acknowledge(handle_of(message)->message);
     if (result != pulsar::ResultOk) {
-      throw std::runtime_error("Pulsar acknowledge: " +
-                               pulsar::strResult(result));
+      throw std::runtime_error(pulsar_error("Pulsar acknowledge: ", result));
     }
   }
 
@@ -152,8 +155,7 @@ public:
     ensure_open();
     const pulsar::Result result = consumer_.unsubscribe();
     if (result != pulsar::ResultOk) {
-      throw std::runtime_error("Pulsar unsubscribe: " +
-                               pulsar::strResult(result));
+      throw std::runtime_error(pulsar_error("Pulsar unsubscribe: ", result));
     }
   }
 
@@ -195,8 +197,7 @@ private:
     const pulsar::Result result =
         client_.subscribe(topic_, subscription_, configuration_, consumer_);
     if (result != pulsar::ResultOk) {
-      throw std::runtime_error("Pulsar subscribe: " +
-                               pulsar::strResult(result));
+      throw std::runtime_error(pulsar_error("Pulsar subscribe: ", result));
     }
   }
 
@@ -265,8 +266,8 @@ std::shared_ptr<AbstractProducer> PulsarMessageQueue::create_producer(
   const pulsar::Result result =
       impl_->client.createProducer(full_topic, configuration, native);
   if (result != pulsar::ResultOk) {
-    throw std::runtime_error("create Pulsar producer: " +
-                             pulsar::strResult(result));
+    throw std::runtime_error(
+        pulsar_error("create Pulsar producer: ", result));
   }
   return std::shared_ptr<AbstractProducer>(new Producer(
       std::shared_ptr<ProducerTransport>(new PulsarProducerTransport(native))));
