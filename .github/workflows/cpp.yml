@@ -7,14 +7,8 @@ on:
         description: "Enable verbose test output"
         type: boolean
         default: true
-  push:
-    branches-ignore:
-      - main
-    paths:
-      - "cpp/**"
-      - "devops/**"
-      - ".github/workflows/cpp.yml"
   pull_request:
+    types: [ready_for_review]
     paths:
       - "cpp/**"
       - "devops/**"
