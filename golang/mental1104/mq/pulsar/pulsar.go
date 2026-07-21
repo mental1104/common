@@ -7,8 +7,8 @@ import (
 	"sync"
 	"time"
 
-	commonmq "github.com/mental1104/common/golang/mental1104/mq"
 	pulsargo "github.com/apache/pulsar-client-go/pulsar"
+	commonmq "github.com/mental1104/common/golang/mental1104/mq"
 )
 
 type Config struct {
