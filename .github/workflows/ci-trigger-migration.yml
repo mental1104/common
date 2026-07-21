@@ -1,9 +1,10 @@
 name: CI trigger migration
 
 on:
-  push:
+  pull_request:
+    types: [ready_for_review]
     branches:
-      - ci/pr-ready-for-review-only
+      - main
     paths:
       - ".github/workflows/ci-trigger-migration.yml"
 
