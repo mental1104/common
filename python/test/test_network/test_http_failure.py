@@ -28,14 +28,19 @@ class StatusResponse:
     status: int
 
 
-def test_classify_http_outcome_distinguishes_status_and_network_failures() -> None:
-    """429/503 应保留状态码，连接异常应保留原异常且没有状态码。"""
+def test_classify_http_outcome_distinguishes_success_status_and_network_failures() -> None:
+    """成功响应应保留状态码，429/503 与连接异常应按所在层级分类。"""
 
+    success = classify_http_outcome(StatusCodeResponse(204))
     too_many_requests = classify_http_outcome(StatusCodeResponse(429))
     unavailable = classify_http_outcome(StatusResponse(503))
     network_error = EOFError("connection closed before response")
     disconnected = classify_http_outcome(error=network_error)
 
+    assert success == HTTPOutcome(
+        kind=HTTPOutcomeKind.SUCCESS,
+        status_code=204,
+    )
     assert too_many_requests == HTTPOutcome(
         kind=HTTPOutcomeKind.HTTP_STATUS_FAILURE,
         status_code=429,
