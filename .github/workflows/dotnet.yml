@@ -3,6 +3,10 @@ name: .NET
 on:
   workflow_call:
     inputs:
+      full_matrix:
+        description: "Run the complete OS/runtime compatibility matrix"
+        type: boolean
+        default: false
       verbose_logs:
         description: "Enable verbose test output"
         type: boolean
@@ -99,6 +103,7 @@ jobs:
           fi
 
   macos:
+    if: ${{ inputs.full_matrix }}
     name: macOS / .NET ${{ matrix.dotnet }}
     runs-on: macos-latest
     strategy:
@@ -185,6 +190,7 @@ jobs:
           fi
 
   windows:
+    if: ${{ inputs.full_matrix }}
     name: Windows / .NET ${{ matrix.dotnet }}
     runs-on: windows-latest
     strategy:

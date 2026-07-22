@@ -8,8 +8,8 @@ Use this reference after `SKILL.md` triggers. Load only the sections relevant to
 - Main source roots are `cpp/`, `python/`, `golang/`, `rust/mental1104/`, `dotnet/`, `java/flink-datastream-demo/`, `export/`, `devops/`, `tools/ci/`, and `.github/workflows/`.
 - Use `./dev` as the preferred entrypoint. It wraps setup, build, test, coverage, fmt, bench, install, uninstall, vet, guard, Docker, Java/Flink run, and verify-install commands.
 - Keep CI and Pages conventions aligned: language workflows are reusable execution units, `ci-main.yml` routes PR changes to the affected language workflows, and coverage extraction scripts under `tools/ci/` produce normalized `cov.json`.
-- GitHub Actions 只能由已进入 Ready for review 状态的非草稿 PR 启动；语言目录变更只运行对应语言流水线，`devops/`、`tools/ci/`、根 `dev` 等共享基础设施变更可以扇出到全部语言。Pages 或路由器基础设施变化时才执行全语言矩阵并聚合 Pages。Draft PR 不得分配 runner，Ready PR 的后续 `synchronize` 事件应重新执行受影响的 CI。
-- Treat the current GitHub Actions definitions as the repository compatibility contract. Code should be written against the platforms, compilers, runtimes, language standards, build/test/install/coverage steps, and local actions declared under `.github/workflows/` and `.github/actions/`, not just against the local developer machine.
+- GitHub Actions 只能由非草稿 PR 或仓库级手动 `CI Router` 启动。PR 按路径选择受影响语言，并默认只运行该语言最新稳定版本的 Linux 快速通道；手动 `CI Router` 向六个语言 workflow 传入 `full_matrix: true`，展开完整平台、编译器和运行时矩阵后聚合 Pages。Draft PR 不得分配 runner，Ready PR 的后续 `synchronize` 事件应取消旧运行并重新执行受影响的快速 CI。
+- Treat the complete manual GitHub Actions matrix as the repository compatibility contract. The fast PR lane is a feedback optimization and must not be used to raise the minimum compiler, language standard, runtime, or platform requirement.
 - `AGENTS.md` is a pointer-only compatibility file. Do not add new maintenance content there.
 - When a change creates reusable rules or public workflow knowledge, update `.codex/skills/common-codegen-guidelines/SKILL.md` or the relevant file under `references/` in the same change.
 - 语言 README 中的可调用 API 文档默认用中文维护。API 名称、路径、导入、命令和代码示例保持原文，但说明文字、表格标签、维护规则、备注和复核标记使用中文；用 `待复核` 代替 `Needs review`。
@@ -20,7 +20,7 @@ Use this reference after `SKILL.md` triggers. Load only the sections relevant to
 - Put public headers under `cpp/include/mental1104/...`; implementations live under `cpp/src/...`; examples belong under `cpp/examples/...`.
 - Use namespace `mental1104` for public APIs. Keep public names consistent with nearby files.
 - Use `cpp/include/mental1104/meta/compiler_support.h` feature macros: `M1104_CPLUSPLUS`, `M1104_HAS_CXX11/14/17/20/23`, `M1104_HAS_INCLUDE`, and `M1104_HAS_STRING_VIEW`.
-- C++ common-library code must honor the `.github/workflows/cpp.yml` matrix: Linux GCC/Clang, macOS Clang/GCC, Windows MSVC, and C++11, C++14, C++17, C++20, and C++23. Treat C++11 as the baseline for shared headers and broadly reused source unless the target is explicitly gated out of older standards.
+- C++ common-library code must honor the complete manual `.github/workflows/cpp.yml` matrix: Linux GCC/Clang, macOS Clang/GCC, Windows MSVC, and C++11, C++14, C++17, C++20, and C++23. Pull requests normally exercise only Linux GCC with C++23; treat C++11 as the baseline for shared headers and broadly reused source unless the target is explicitly gated out of older standards.
 - Prefer `mental1104::string_view` in public APIs. It maps to `std::string_view` on C++17+ and `std::string` on C++11/14.
 - Do not introduce C++17+ features into shared headers unless guarded with repository macros and a lower-standard fallback.
 - When using C++14/17/20/23 features in C++, provide a C++11-compatible fallback, isolate the code behind feature macros/CMake conditions, or make the target unavailable only where the CI matrix already excludes it.
@@ -34,7 +34,7 @@ Use this reference after `SKILL.md` triggers. Load only the sections relevant to
 - For C++ class implementations, qualify member field and helper-method access with `this->` when touching state such as `entries_` or `epoll_fd_`; constructor initializer lists and out-of-class function definitions remain unqualified by necessity.
 - Preserve the file-local comment style. Chinese `用法` / `说明` comments are welcome when they explain non-obvious compatibility, ABI, concurrency, or algorithm decisions; avoid noisy comments.
 - Public APIs need focused tests and, when useful, examples. If Redis++ or middleware behavior is touched, include the specialized devtool command or documented environment requirement.
-- Typical validation: `./dev build-cpp`, `./dev test-cpp`, `./dev coverage-cpp`, `./dev fmt-cpp`, `./dev vet-cpp`, `./dev guard-cpp`, `./dev test-redispp`, `./dev install-cpp`, `./dev verify-install`. For shared C++ changes, locally exercise at least the oldest and newest relevant standards when feasible, for example `CXX_STD=11 ./dev build-cpp --config Debug` and `CXX_STD=23 ./dev build-cpp --config Debug`; rely on CI for the full OS/compiler/standard matrix.
+- Typical validation: `./dev build-cpp`, `./dev test-cpp`, `./dev coverage-cpp`, `./dev fmt-cpp`, `./dev vet-cpp`, `./dev guard-cpp`, `./dev test-redispp`, `./dev install-cpp`, `./dev verify-install`. For shared C++ changes, locally exercise at least the oldest and newest relevant standards when feasible, for example `CXX_STD=11 ./dev build-cpp --config Debug` and `CXX_STD=23 ./dev build-cpp --config Debug`; rely on the manual full CI for the complete OS/compiler/standard matrix.
 
 ## Python
 
@@ -97,7 +97,9 @@ Use this reference after `SKILL.md` triggers. Load only the sections relevant to
 
 - Devtool command modules live under `devops/devtool/commands/...`; register commands through the existing `configure(subparsers)` and alias patterns.
 - If adding a language-facing workflow, wire build/test/coverage/install/verify behavior through `./dev` first, then update CI to call the wrapper.
-- If a workflow matrix, local action, or required compiler/runtime changes, update this skill reference so future code generation follows the new compatibility contract.
+- Each language workflow exposes `full_matrix` through `workflow_call`. Keep one shared set of steps: the default `false` lane selects one latest stable Linux matrix entry for PR feedback, while `true` restores the complete existing OS/version matrix. Do not create parallel `quick-*` and `full-*` workflow copies.
+- `ci-main.yml` is the only manual full-matrix entrypoint. On `workflow_dispatch`, it calls all language workflows with `full_matrix: true` and then runs Pages; on PR events, it calls only path-selected workflows with the default fast mode.
+- If a workflow matrix, local action, or required compiler/runtime changes, update this skill reference so future code generation follows both the fast lane and complete compatibility contract.
 - Coverage extractors under `tools/ci/extract_coverage_*.py` should parse real reports into normalized `cov.json`; do not replace missing data with fake success.
 - C++ CI uses `.github/actions/cpp-coverage-artifact` to keep `cov.json` extraction, `_cov` staging, and artifact upload behind one workflow step across Linux, macOS, and Windows.
 - Pages generation should tolerate missing coverage by producing N/A badges/tables rather than broken links.

@@ -17,17 +17,18 @@ on:
       - ".github/actions/**"
       - ".github/workflows/**"
       - "dev"
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: common-ci-${{ github.event.pull_request.number }}
+  group: common-ci-${{ github.event.pull_request.number || github.run_id }}
   cancel-in-progress: true
 
 jobs:
   changes:
-    if: github.event.pull_request.draft == false
+    if: ${{ github.event_name == 'pull_request' && github.event.pull_request.draft == false }}
     runs-on: ubuntu-latest
     outputs:
       cpp: ${{ steps.routes.outputs.cpp }}
@@ -131,43 +132,55 @@ jobs:
 
   cpp:
     needs: changes
-    if: needs.changes.outputs.cpp == 'true' || needs.changes.outputs.pages == 'true'
+    if: ${{ always() && (github.event_name == 'workflow_dispatch' || needs.changes.outputs.cpp == 'true' || needs.changes.outputs.pages == 'true') }}
     uses: ./.github/workflows/cpp.yml
+    with:
+      full_matrix: ${{ github.event_name == 'workflow_dispatch' }}
     secrets: inherit
 
   python:
     needs: changes
-    if: needs.changes.outputs.python == 'true' || needs.changes.outputs.pages == 'true'
+    if: ${{ always() && (github.event_name == 'workflow_dispatch' || needs.changes.outputs.python == 'true' || needs.changes.outputs.pages == 'true') }}
     uses: ./.github/workflows/python.yml
+    with:
+      full_matrix: ${{ github.event_name == 'workflow_dispatch' }}
     secrets: inherit
 
   rust:
     needs: changes
-    if: needs.changes.outputs.rust == 'true' || needs.changes.outputs.pages == 'true'
+    if: ${{ always() && (github.event_name == 'workflow_dispatch' || needs.changes.outputs.rust == 'true' || needs.changes.outputs.pages == 'true') }}
     uses: ./.github/workflows/rust.yml
+    with:
+      full_matrix: ${{ github.event_name == 'workflow_dispatch' }}
     secrets: inherit
 
   dotnet:
     needs: changes
-    if: needs.changes.outputs.dotnet == 'true' || needs.changes.outputs.pages == 'true'
+    if: ${{ always() && (github.event_name == 'workflow_dispatch' || needs.changes.outputs.dotnet == 'true' || needs.changes.outputs.pages == 'true') }}
     uses: ./.github/workflows/dotnet.yml
+    with:
+      full_matrix: ${{ github.event_name == 'workflow_dispatch' }}
     secrets: inherit
 
   golang:
     needs: changes
-    if: needs.changes.outputs.golang == 'true' || needs.changes.outputs.pages == 'true'
+    if: ${{ always() && (github.event_name == 'workflow_dispatch' || needs.changes.outputs.golang == 'true' || needs.changes.outputs.pages == 'true') }}
     uses: ./.github/workflows/golang.yml
+    with:
+      full_matrix: ${{ github.event_name == 'workflow_dispatch' }}
     secrets: inherit
 
   java:
     needs: changes
-    if: needs.changes.outputs.java == 'true' || needs.changes.outputs.pages == 'true'
+    if: ${{ always() && (github.event_name == 'workflow_dispatch' || needs.changes.outputs.java == 'true' || needs.changes.outputs.pages == 'true') }}
     uses: ./.github/workflows/java.yml
+    with:
+      full_matrix: ${{ github.event_name == 'workflow_dispatch' }}
     secrets: inherit
 
   pages:
     needs: [changes, cpp, python, rust, dotnet, golang, java]
-    if: ${{ always() && needs.changes.result == 'success' && needs.changes.outputs.pages == 'true' }}
+    if: ${{ always() && (github.event_name == 'workflow_dispatch' || (needs.changes.result == 'success' && needs.changes.outputs.pages == 'true')) }}
     uses: ./.github/workflows/walkthrough-pages.yml
     secrets: inherit
     permissions:

@@ -3,6 +3,10 @@ name: Rust
 on:
   workflow_call:
     inputs:
+      full_matrix:
+        description: "Run the complete OS/toolchain compatibility matrix"
+        type: boolean
+        default: false
       verbose_logs:
         description: "Enable verbose test output"
         type: boolean
@@ -17,11 +21,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - toolchain: "stable"
-          - toolchain: "1.85.0"
-            msrv: true
+      matrix: ${{ fromJson(inputs.full_matrix && '{"include":[{"toolchain":"stable"},{"toolchain":"1.85.0","msrv":true}]}' || '{"include":[{"toolchain":"stable"}]}') }}
     env:
       PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/devops
     defaults:
@@ -133,6 +133,7 @@ jobs:
           fi
 
   macos:
+    if: ${{ inputs.full_matrix }}
     name: macOS / Rust stable
     runs-on: macos-latest
     env:
@@ -230,6 +231,7 @@ jobs:
           fi
 
   windows:
+    if: ${{ inputs.full_matrix }}
     name: Windows / Rust stable
     runs-on: windows-latest
     env:

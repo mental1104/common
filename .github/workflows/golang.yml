@@ -3,6 +3,10 @@ name: Go
 on:
   workflow_call:
     inputs:
+      full_matrix:
+        description: "Run the complete OS/runtime compatibility matrix"
+        type: boolean
+        default: false
       enable_go_prerelease:
         description: "Run Go 1.24/1.25 jobs (pre-release)"
         type: boolean
@@ -21,7 +25,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
-      matrix: ${{ fromJson(((inputs.enable_go_prerelease == false || inputs.enable_go_prerelease == 'false') || vars.CI_ENABLE_GO_PRERELEASE == 'false') && '{"go":["1.22.x","1.23.x"]}' || '{"go":["1.22.x","1.23.x","1.24.x","1.25.x"]}') }}
+      matrix: ${{ fromJson(inputs.full_matrix && (((inputs.enable_go_prerelease == false || inputs.enable_go_prerelease == 'false') || vars.CI_ENABLE_GO_PRERELEASE == 'false') && '{"go":["1.22.x","1.23.x"]}' || '{"go":["1.22.x","1.23.x","1.24.x","1.25.x"]}') || '{"go":["1.25.x"]}') }}
     env:
       PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/devops
     defaults:
@@ -52,7 +56,7 @@ jobs:
         continue-on-error: true
         run: ./dev setup-go
       - name: Format Go
-        if: ${{ matrix.go == '1.22.x' }}
+        if: ${{ (!inputs.full_matrix && matrix.go == '1.25.x') || (inputs.full_matrix && matrix.go == '1.22.x') }}
         continue-on-error: true
         run: ./dev fmt-go
       - name: Build Go
@@ -64,11 +68,11 @@ jobs:
         continue-on-error: true
         run: ./dev coverage-go
       - name: Vet Go
-        if: ${{ matrix.go == '1.22.x' }}
+        if: ${{ (!inputs.full_matrix && matrix.go == '1.25.x') || (inputs.full_matrix && matrix.go == '1.22.x') }}
         continue-on-error: true
         run: ./dev vet-go
       - name: Guard Go
-        if: ${{ matrix.go == '1.22.x' }}
+        if: ${{ (!inputs.full_matrix && matrix.go == '1.25.x') || (inputs.full_matrix && matrix.go == '1.22.x') }}
         continue-on-error: true
         run: ./dev guard-go
       - name: Extract cov.json (never fail)
@@ -124,6 +128,7 @@ jobs:
           fi
 
   macos:
+    if: ${{ inputs.full_matrix }}
     name: macOS / Go ${{ matrix.go }}
     runs-on: macos-latest
     strategy:
@@ -217,6 +222,7 @@ jobs:
           fi
 
   windows:
+    if: ${{ inputs.full_matrix }}
     name: Windows / Go ${{ matrix.go }}
     runs-on: windows-latest
     strategy:

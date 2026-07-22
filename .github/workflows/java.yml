@@ -3,6 +3,10 @@ name: Java
 on:
   workflow_call:
     inputs:
+      full_matrix:
+        description: "Run the complete OS/runtime compatibility matrix"
+        type: boolean
+        default: false
       verbose_logs:
         description: "Enable verbose test output"
         type: boolean
@@ -17,8 +21,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
-      matrix:
-        java: ["11", "17", "21"]
+      matrix: ${{ fromJson(inputs.full_matrix && '{"java":["11","17","21"]}' || '{"java":["21"]}') }}
     env:
       PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/devops
     defaults:
@@ -107,6 +110,7 @@ jobs:
           fi
 
   macos:
+    if: ${{ inputs.full_matrix }}
     name: macOS / JDK ${{ matrix.java }}
     runs-on: macos-latest
     strategy:
@@ -201,6 +205,7 @@ jobs:
           fi
 
   windows:
+    if: ${{ inputs.full_matrix }}
     name: Windows / JDK ${{ matrix.java }}
     runs-on: windows-latest
     strategy:
