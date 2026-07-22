@@ -14,33 +14,45 @@
 namespace mental1104 {
 namespace mq {
 
+/// 默认等待 Pulsar Producer 刷新十秒。
 PulsarBackendConfig::PulsarBackendConfig() : close_timeout_millis(10000) {}
+
+/// 返回 Pulsar 后端标识。
 BackendType PulsarBackendConfig::backend_type() const {
   return BackendType::Pulsar;
 }
 
 #ifdef M1104_HAS_PULSAR
 namespace {
-MQError pulsar_error(const std::string &op, pulsar::Result result,
+
+/// 把 Pulsar Result 转换为统一 MQError。
+MQError pulsar_error(const std::string &operation, pulsar::Result result,
                      bool retryable = false) {
   return MQError(result == pulsar::ResultTimeout ? ErrorCode::Timeout
                                                  : ErrorCode::Backend,
-                 op, pulsar::strResult(result), "pulsar", retryable);
+                 operation, pulsar::strResult(result), "pulsar", retryable);
 }
+
+/// 序列化 Pulsar MessageId 为公共字符串标识。
 std::string message_id(const pulsar::MessageId &id) {
   std::string value;
   id.serialize(value);
   return value;
 }
-pulsar::Message build_message(const Message &m) {
+
+/// 把公共 Message 复制为 Pulsar Message。
+pulsar::Message build_message(const Message &message) {
   pulsar::MessageBuilder builder;
-  builder.setContent(std::string(m.payload.begin(), m.payload.end()));
-  if (!m.key.empty())
-    builder.setPartitionKey(std::string(m.key.begin(), m.key.end()));
-  if (!m.headers.empty())
-    builder.setProperties(m.headers);
+  builder.setContent(
+      std::string(message.payload.begin(), message.payload.end()));
+  if (!message.key.empty())
+    builder.setPartitionKey(std::string(message.key.begin(), message.key.end()));
+  if (!message.headers.empty())
+    builder.setProperties(message.headers);
   return builder.build();
 }
+
+/// 把公共订阅类型映射为 Pulsar ConsumerType。
 pulsar::ConsumerType consumer_type(SubscriptionType value) {
   switch (value) {
   case SubscriptionType::Exclusive:
@@ -55,24 +67,33 @@ pulsar::ConsumerType consumer_type(SubscriptionType value) {
   }
 }
 
+/// pulsar-client-cpp Producer 的 Bridge backend。
+///
+/// client_ 和 producer_ 由本对象独占。Pulsar SDK 自行管理异步 I/O 线程；用户 callback
+/// 由 SDK callback 进入 Bridge completion，再由 Bridge 隔离线程执行。
 class PulsarProducerBackend : public IProducerBackend {
 public:
+  /// 创建 Pulsar Client 和 Producer。
   PulsarProducerBackend(const ProducerConfig &config,
                         const PulsarBackendConfig &backend)
       : client_(backend.service_url), closed_(false) {
-    pulsar::ProducerConfiguration pc;
-    pc.setBatchingEnabled(config.batching_enabled);
-    pulsar::Result result =
-        client_.createProducer(build_pulsar_topic(config.topic), pc, producer_);
+    pulsar::ProducerConfiguration producer_config;
+    producer_config.setBatchingEnabled(config.batching_enabled);
+    pulsar::Result result = client_.createProducer(
+        build_pulsar_topic(config.topic), producer_config, producer_);
     if (result != pulsar::ResultOk)
       throw MQException(pulsar_error("create_producer", result));
   }
+
+  /// 尽力刷新并关闭，不允许异常越过析构边界。
   ~PulsarProducerBackend() {
     try {
       close();
     } catch (...) {
     }
   }
+
+  /// 同步发送并返回 broker MessageId/partition。
   SendResult send(const Message &message) override {
     if (closed_.load())
       return SendResult::failure(
@@ -83,6 +104,9 @@ public:
                ? SendResult::success(message_id(id), id.partition())
                : SendResult::failure(pulsar_error("send", result, true));
   }
+
+  /// 使用 Pulsar 原生 sendAsync 提交请求。
+  /// SDK 同步抛异常时返回失败且不调用 callback；接受后 SDK 最终回调一次。
   OperationResult send_async(const Message &message,
                              const DeliveryCallback &callback) override {
     if (closed_.load())
@@ -105,18 +129,22 @@ public:
       return OperationResult::failure(exception_error("send_async", "pulsar"));
     }
   }
+
+  /// 幂等刷新 Producer，再关闭 Producer 和 Client。
+  /// mutex_ 串行化多个 close 调用；closed_ 在开始关闭时立即拒绝新发送。
   OperationResult close() override {
     std::lock_guard<std::mutex> lock(mutex_);
     if (closed_.exchange(true))
       return OperationResult::success();
-    pulsar::Result flush = producer_.flush();
-    pulsar::Result close_result = producer_.close();
+    pulsar::Result flush_result = producer_.flush();
+    pulsar::Result producer_result = producer_.close();
     pulsar::Result client_result = client_.close();
-    if (flush != pulsar::ResultOk)
-      return OperationResult::failure(pulsar_error("flush", flush, true));
-    if (close_result != pulsar::ResultOk)
+    if (flush_result != pulsar::ResultOk)
       return OperationResult::failure(
-          pulsar_error("close_producer", close_result));
+          pulsar_error("flush", flush_result, true));
+    if (producer_result != pulsar::ResultOk)
+      return OperationResult::failure(
+          pulsar_error("close_producer", producer_result));
     if (client_result != pulsar::ResultOk)
       return OperationResult::failure(
           pulsar_error("close_client", client_result));
@@ -130,14 +158,20 @@ private:
   std::mutex mutex_;
 };
 
+/// 保存一条 Pulsar 原生 Message，供 ack/nack 使用。
 class PulsarReceipt : public Receipt {
 public:
   explicit PulsarReceipt(const pulsar::Message &value) : message(value) {}
   pulsar::Message message;
 };
 
+/// pulsar-client-cpp Consumer 的 Bridge backend。
+///
+/// client_ 与 consumer_ 由本对象独占；mutex_ 串行化 receive、确认、重订阅和关闭，
+/// 防止 SDK Consumer 与 Receipt 确认操作并发销毁。
 class PulsarConsumerBackend : public IConsumerBackend {
 public:
+  /// 保存订阅配置并立即创建 Consumer。
   PulsarConsumerBackend(const ConsumerConfig &config,
                         const PulsarBackendConfig &backend)
       : client_(backend.service_url), topic_(build_pulsar_topic(config.topic)),
@@ -148,22 +182,28 @@ public:
                                 "subscription must not be empty", "pulsar"));
     subscribe_new();
   }
+
+  /// 尽力关闭 Consumer 和 Client，不允许异常越过析构边界。
   ~PulsarConsumerBackend() {
     try {
       close();
     } catch (...) {
     }
   }
-  ReceiveResult receive(int timeout) override {
+
+  /// 拉取一条 Pulsar Message，并复制为公共 Message + PulsarReceipt。
+  ReceiveResult receive(int timeout_millis) override {
     std::lock_guard<std::mutex> lock(mutex_);
     if (closed_)
       return ReceiveResult::failure(MQError(ErrorCode::Closed, "receive",
                                             "consumer is closed", "pulsar"));
     pulsar::Message native;
-    pulsar::Result result = timeout < 0 ? consumer_.receive(native)
-                                        : consumer_.receive(native, timeout);
+    pulsar::Result result = timeout_millis < 0
+                                ? consumer_.receive(native)
+                                : consumer_.receive(native, timeout_millis);
     if (result != pulsar::ResultOk)
       return ReceiveResult::failure(pulsar_error("receive", result, true));
+
     BackendMessage value;
     value.message.topic = native.getTopicName();
     value.message.payload.assign(
@@ -180,30 +220,38 @@ public:
     value.receipt.reset(new PulsarReceipt(native));
     return ReceiveResult::success(value);
   }
+
+  /// 确认 PulsarReceipt 中保存的原生消息。
   OperationResult acknowledge(const ReceiptPtr &receipt) override {
     std::lock_guard<std::mutex> lock(mutex_);
-    std::shared_ptr<PulsarReceipt> r =
+    std::shared_ptr<PulsarReceipt> pulsar_receipt =
         std::dynamic_pointer_cast<PulsarReceipt>(receipt);
-    if (!r)
+    if (!pulsar_receipt)
       return OperationResult::failure(
           MQError(ErrorCode::InvalidMessage, "acknowledge",
                   "invalid Pulsar receipt", "pulsar"));
-    pulsar::Result result = consumer_.acknowledge(r->message);
-    return result == pulsar::ResultOk ? OperationResult::success()
-                                      : OperationResult::failure(pulsar_error(
-                                            "acknowledge", result, true));
+    pulsar::Result result = consumer_.acknowledge(pulsar_receipt->message);
+    return result == pulsar::ResultOk
+               ? OperationResult::success()
+               : OperationResult::failure(
+                     pulsar_error("acknowledge", result, true));
   }
+
+  /// 否认 PulsarReceipt 中保存的原生消息。
+  /// negativeAcknowledge 不返回结果，重投时机由 broker 配置决定。
   OperationResult negative_acknowledge(const ReceiptPtr &receipt) override {
     std::lock_guard<std::mutex> lock(mutex_);
-    std::shared_ptr<PulsarReceipt> r =
+    std::shared_ptr<PulsarReceipt> pulsar_receipt =
         std::dynamic_pointer_cast<PulsarReceipt>(receipt);
-    if (!r)
+    if (!pulsar_receipt)
       return OperationResult::failure(
           MQError(ErrorCode::InvalidMessage, "negative_acknowledge",
                   "invalid Pulsar receipt", "pulsar"));
-    consumer_.negativeAcknowledge(r->message);
+    consumer_.negativeAcknowledge(pulsar_receipt->message);
     return OperationResult::success();
   }
+
+  /// 删除当前 Pulsar subscription。
   OperationResult unsubscribe() override {
     std::lock_guard<std::mutex> lock(mutex_);
     if (closed_)
@@ -212,8 +260,11 @@ public:
     pulsar::Result result = consumer_.unsubscribe();
     return result == pulsar::ResultOk
                ? OperationResult::success()
-               : OperationResult::failure(pulsar_error("unsubscribe", result));
+               : OperationResult::failure(
+                     pulsar_error("unsubscribe", result));
   }
+
+  /// 关闭旧 Consumer，并按原 topic/subscription/type 创建新 Consumer。
   OperationResult resubscribe() override {
     std::lock_guard<std::mutex> lock(mutex_);
     if (closed_)
@@ -222,35 +273,44 @@ public:
     consumer_.close();
     return subscribe_new_result();
   }
+
+  /// 幂等关闭 Consumer 和 Client。
   OperationResult close() override {
     std::lock_guard<std::mutex> lock(mutex_);
     if (closed_)
       return OperationResult::success();
     closed_ = true;
-    pulsar::Result c = consumer_.close();
-    pulsar::Result client = client_.close();
-    if (c != pulsar::ResultOk)
-      return OperationResult::failure(pulsar_error("close_consumer", c));
-    if (client != pulsar::ResultOk)
-      return OperationResult::failure(pulsar_error("close_client", client));
+    pulsar::Result consumer_result = consumer_.close();
+    pulsar::Result client_result = client_.close();
+    if (consumer_result != pulsar::ResultOk)
+      return OperationResult::failure(
+          pulsar_error("close_consumer", consumer_result));
+    if (client_result != pulsar::ResultOk)
+      return OperationResult::failure(
+          pulsar_error("close_client", client_result));
     return OperationResult::success();
   }
 
 private:
+  /// 使用保存的 topic/subscription/type 创建 Consumer，并以结果形式返回。
   OperationResult subscribe_new_result() {
-    pulsar::ConsumerConfiguration cc;
-    cc.setConsumerType(consumer_type(type_));
+    pulsar::ConsumerConfiguration consumer_config;
+    consumer_config.setConsumerType(consumer_type(type_));
     pulsar::Result result =
-        client_.subscribe(topic_, subscription_, cc, consumer_);
+        client_.subscribe(topic_, subscription_, consumer_config, consumer_);
     return result == pulsar::ResultOk
                ? OperationResult::success()
-               : OperationResult::failure(pulsar_error("subscribe", result));
+               : OperationResult::failure(
+                     pulsar_error("subscribe", result));
   }
+
+  /// 创建 Consumer，失败时转换为兼容 MQException。
   void subscribe_new() {
-    OperationResult r = subscribe_new_result();
-    if (!r.ok)
-      throw MQException(r.error);
+    OperationResult result = subscribe_new_result();
+    if (!result.ok)
+      throw MQException(result.error);
   }
+
   pulsar::Client client_;
   std::string topic_;
   std::string subscription_;
@@ -259,9 +319,11 @@ private:
   bool closed_;
   std::mutex mutex_;
 };
+
 } // namespace
 #endif
 
+/// 报告当前构建是否包含 pulsar-client-cpp。
 bool pulsar_available() {
 #ifdef M1104_HAS_PULSAR
   return true;
@@ -269,6 +331,8 @@ bool pulsar_available() {
   return false;
 #endif
 }
+
+/// 创建 Pulsar Producer backend；未编译 SDK 时抛统一配置异常。
 std::unique_ptr<IProducerBackend>
 create_pulsar_producer_backend(const ProducerConfig &config,
                                const PulsarBackendConfig &backend) {
@@ -282,6 +346,8 @@ create_pulsar_producer_backend(const ProducerConfig &config,
                             "pulsar-client-cpp is unavailable", "pulsar"));
 #endif
 }
+
+/// 创建 Pulsar Consumer backend；未编译 SDK 时抛统一配置异常。
 std::unique_ptr<IConsumerBackend>
 create_pulsar_consumer_backend(const ConsumerConfig &config,
                                const PulsarBackendConfig &backend) {
@@ -296,58 +362,69 @@ create_pulsar_consumer_backend(const ConsumerConfig &config,
 #endif
 }
 
-PulsarMessageQueue::PulsarMessageQueue(const Options &o)
-    : options_(o), closed_(false) {}
+/// 保存兼容 facade 的 Pulsar 配置。
+PulsarMessageQueue::PulsarMessageQueue(const Options &options)
+    : options_(options), closed_(false) {}
+
+/// 析构时幂等关闭 facade，不向外抛异常。
 PulsarMessageQueue::~PulsarMessageQueue() noexcept {
   try {
     close();
   } catch (...) {
   }
 }
+
+/// 从兼容参数构造 Pulsar ProducerConfig 和 Producer Bridge。
 std::shared_ptr<Producer> PulsarMessageQueue::create_producer(
-    const std::string &tenant, const std::string &ns, const std::string &topic,
-    const Schema &, bool batching) {
+    const std::string &tenant, const std::string &namespace_name,
+    const std::string &topic, const Schema &, bool batching_enabled) {
   if (closed_)
     throw MQException(MQError(ErrorCode::Closed, "create_producer",
                               "message queue is closed", "pulsar"));
-  std::shared_ptr<PulsarBackendConfig> b(new PulsarBackendConfig());
+  std::shared_ptr<PulsarBackendConfig> backend(new PulsarBackendConfig());
   Options::const_iterator it = options_.find("service.url");
   if (it != options_.end())
-    b->service_url = it->second;
-  b->options = options_;
-  ProducerConfig c;
-  c.topic.tenant = tenant;
-  c.topic.namespace_name = ns;
-  c.topic.topic = topic;
-  c.batching_enabled = batching;
-  c.backend = b;
-  return std::shared_ptr<Producer>(new Producer(create_producer_backend(c)));
+    backend->service_url = it->second;
+  backend->options = options_;
+  ProducerConfig config;
+  config.topic.tenant = tenant;
+  config.topic.namespace_name = namespace_name;
+  config.topic.topic = topic;
+  config.batching_enabled = batching_enabled;
+  config.backend = backend;
+  return std::shared_ptr<Producer>(new Producer(create_producer_backend(config)));
 }
+
+/// 从兼容参数构造 Pulsar ConsumerConfig 和 Consumer Bridge。
 std::shared_ptr<Consumer> PulsarMessageQueue::create_consumer(
-    const std::string &tenant, const std::string &ns, const std::string &topic,
-    const std::string &subscription, const Schema &, SubscriptionType type,
-    const MessageListener &listener, const Options &options) {
+    const std::string &tenant, const std::string &namespace_name,
+    const std::string &topic, const std::string &subscription, const Schema &,
+    SubscriptionType type, const MessageListener &listener,
+    const Options &options) {
   if (closed_)
     throw MQException(MQError(ErrorCode::Closed, "create_consumer",
                               "message queue is closed", "pulsar"));
-  std::shared_ptr<PulsarBackendConfig> b(new PulsarBackendConfig());
+  std::shared_ptr<PulsarBackendConfig> backend(new PulsarBackendConfig());
   Options merged = options_;
   merged.insert(options.begin(), options.end());
   Options::const_iterator it = merged.find("service.url");
   if (it != merged.end())
-    b->service_url = it->second;
-  b->options = merged;
-  ConsumerConfig c;
-  c.topic.tenant = tenant;
-  c.topic.namespace_name = ns;
-  c.topic.topic = topic;
-  c.subscription = subscription;
-  c.subscription_type = type;
-  c.backend = b;
+    backend->service_url = it->second;
+  backend->options = merged;
+  ConsumerConfig config;
+  config.topic.tenant = tenant;
+  config.topic.namespace_name = namespace_name;
+  config.topic.topic = topic;
+  config.subscription = subscription;
+  config.subscription_type = type;
+  config.backend = backend;
   return std::shared_ptr<Consumer>(new Consumer(
-      std::shared_ptr<IConsumerBackend>(create_consumer_backend(c).release()),
+      std::shared_ptr<IConsumerBackend>(
+          create_consumer_backend(config).release()),
       listener));
 }
+
+/// 幂等关闭兼容 facade；已创建 Bridge 的资源由各对象自行管理。
 void PulsarMessageQueue::close() { closed_ = true; }
 
 } // namespace mq
