@@ -1,38 +1,173 @@
-name: CI Main
+name: CI Router
 
 on:
-  push:
-    branches:
-      - main
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths:
+      - "cpp/**"
+      - "python/**"
+      - "golang/**"
+      - "rust/**"
+      - "dotnet/**"
+      - "java/**"
+      - "export/**"
+      - "devops/**"
+      - "tools/ci/**"
+      - "tools/walkthrough/**"
+      - ".github/actions/**"
+      - ".github/workflows/**"
+      - "dev"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: common-ci-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
 
 jobs:
+  changes:
+    if: github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    outputs:
+      cpp: ${{ steps.routes.outputs.cpp }}
+      python: ${{ steps.routes.outputs.python }}
+      golang: ${{ steps.routes.outputs.golang }}
+      rust: ${{ steps.routes.outputs.rust }}
+      dotnet: ${{ steps.routes.outputs.dotnet }}
+      java: ${{ steps.routes.outputs.java }}
+      pages: ${{ steps.routes.outputs.pages }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect affected pipelines
+        id: routes
+        shell: bash
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+
+          # 显式比较 PR 的 base/head，避免 checkout 的临时 merge commit 干扰路径判断。
+          git fetch --no-tags origin "${BASE_SHA}" "${HEAD_SHA}"
+          changed_files="$(git diff --name-only "${BASE_SHA}" "${HEAD_SHA}")"
+          printf '%s\n' "${changed_files}"
+
+          # 每个输出表示对应可复用 workflow 是否需要在本次 PR 中执行。
+          emit_route() {
+            local route="$1"
+            shift
+
+            local matched="false"
+            local pattern
+            for pattern in "$@"; do
+              if grep -Eq "${pattern}" <<<"${changed_files}"; then
+                matched="true"
+                break
+              fi
+            done
+
+            printf '%s=%s\n' "${route}" "${matched}" >> "${GITHUB_OUTPUT}"
+          }
+
+          emit_route cpp \
+            '^cpp/' \
+            '^export/' \
+            '^devops/' \
+            '^tools/ci/' \
+            '^\.github/actions/cpp-coverage-artifact/' \
+            '^\.github/workflows/cpp\.yml$' \
+            '^\.github/workflows/ci-main\.yml$' \
+            '^dev$'
+
+          emit_route python \
+            '^python/' \
+            '^devops/' \
+            '^tools/ci/' \
+            '^\.github/workflows/python\.yml$' \
+            '^\.github/workflows/ci-main\.yml$' \
+            '^dev$'
+
+          emit_route golang \
+            '^golang/' \
+            '^devops/' \
+            '^tools/ci/' \
+            '^\.github/workflows/golang\.yml$' \
+            '^\.github/workflows/ci-main\.yml$' \
+            '^dev$'
+
+          emit_route rust \
+            '^rust/' \
+            '^devops/' \
+            '^tools/ci/' \
+            '^\.github/workflows/rust\.yml$' \
+            '^\.github/workflows/ci-main\.yml$' \
+            '^dev$'
+
+          emit_route dotnet \
+            '^dotnet/' \
+            '^devops/' \
+            '^tools/ci/' \
+            '^\.github/workflows/dotnet\.yml$' \
+            '^\.github/workflows/ci-main\.yml$' \
+            '^dev$'
+
+          emit_route java \
+            '^java/' \
+            '^devops/' \
+            '^tools/ci/' \
+            '^\.github/workflows/java\.yml$' \
+            '^\.github/workflows/ci-main\.yml$' \
+            '^dev$'
+
+          emit_route pages \
+            '^tools/walkthrough/' \
+            '^\.github/workflows/walkthrough-pages\.yml$' \
+            '^\.github/workflows/ci-main\.yml$'
+
   cpp:
+    needs: changes
+    if: needs.changes.outputs.cpp == 'true' || needs.changes.outputs.pages == 'true'
     uses: ./.github/workflows/cpp.yml
     secrets: inherit
 
   python:
+    needs: changes
+    if: needs.changes.outputs.python == 'true' || needs.changes.outputs.pages == 'true'
     uses: ./.github/workflows/python.yml
     secrets: inherit
 
   rust:
+    needs: changes
+    if: needs.changes.outputs.rust == 'true' || needs.changes.outputs.pages == 'true'
     uses: ./.github/workflows/rust.yml
     secrets: inherit
 
   dotnet:
+    needs: changes
+    if: needs.changes.outputs.dotnet == 'true' || needs.changes.outputs.pages == 'true'
     uses: ./.github/workflows/dotnet.yml
     secrets: inherit
 
   golang:
+    needs: changes
+    if: needs.changes.outputs.golang == 'true' || needs.changes.outputs.pages == 'true'
     uses: ./.github/workflows/golang.yml
     secrets: inherit
 
   java:
+    needs: changes
+    if: needs.changes.outputs.java == 'true' || needs.changes.outputs.pages == 'true'
     uses: ./.github/workflows/java.yml
     secrets: inherit
 
   pages:
-    needs: [cpp, python, rust, dotnet, golang, java]
-    if: always()
+    needs: [changes, cpp, python, rust, dotnet, golang, java]
+    if: ${{ always() && needs.changes.result == 'success' && needs.changes.outputs.pages == 'true' }}
     uses: ./.github/workflows/walkthrough-pages.yml
     secrets: inherit
     permissions:
