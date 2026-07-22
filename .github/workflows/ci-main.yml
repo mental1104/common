@@ -1,38 +1,43 @@
 name: CI Main
 
 on:
-  push:
-    branches:
-      - main
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
 
 jobs:
   cpp:
+    if: github.event.pull_request.draft == false
     uses: ./.github/workflows/cpp.yml
     secrets: inherit
 
   python:
+    if: github.event.pull_request.draft == false
     uses: ./.github/workflows/python.yml
     secrets: inherit
 
   rust:
+    if: github.event.pull_request.draft == false
     uses: ./.github/workflows/rust.yml
     secrets: inherit
 
   dotnet:
+    if: github.event.pull_request.draft == false
     uses: ./.github/workflows/dotnet.yml
     secrets: inherit
 
   golang:
+    if: github.event.pull_request.draft == false
     uses: ./.github/workflows/golang.yml
     secrets: inherit
 
   java:
+    if: github.event.pull_request.draft == false
     uses: ./.github/workflows/java.yml
     secrets: inherit
 
   pages:
     needs: [cpp, python, rust, dotnet, golang, java]
-    if: always()
+    if: ${{ always() && github.event.pull_request.draft == false }}
     uses: ./.github/workflows/walkthrough-pages.yml
     secrets: inherit
     permissions:
