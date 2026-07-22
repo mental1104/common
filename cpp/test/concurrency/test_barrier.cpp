@@ -37,14 +37,15 @@ TEST(BarrierTest, UsesStandardBarrierWhenAvailable) {
 #endif
 }
 
-TEST(BarrierTest, ArrivalTokenIsMoveOnly) {
+TEST(BarrierTest, ArrivalTokenMeetsStandardMoveRequirements) {
   typedef mental1104::barrier<> barrier_type;
   typedef barrier_type::arrival_token arrival_token;
 
+  // 标准只保证 arrival_token 可移动构造、可移动赋值和可析构；
+  // 是否支持复制属于实现细节，不能作为 std::barrier 兼容性断言。
   EXPECT_TRUE(std::is_move_constructible<arrival_token>::value);
   EXPECT_TRUE(std::is_move_assignable<arrival_token>::value);
-  EXPECT_FALSE(std::is_copy_constructible<arrival_token>::value);
-  EXPECT_FALSE(std::is_copy_assignable<arrival_token>::value);
+  EXPECT_TRUE(std::is_destructible<arrival_token>::value);
 }
 
 TEST(BarrierTest, SingleParticipantCanReuseBarrier) {
