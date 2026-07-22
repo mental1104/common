@@ -8,6 +8,7 @@ Use this reference after `SKILL.md` triggers. Load only the sections relevant to
 - Main source roots are `cpp/`, `python/`, `golang/`, `rust/mental1104/`, `dotnet/`, `java/flink-datastream-demo/`, `export/`, `devops/`, `tools/ci/`, and `.github/workflows/`.
 - Use `./dev` as the preferred entrypoint. It wraps setup, build, test, coverage, fmt, bench, install, uninstall, vet, guard, Docker, Java/Flink run, and verify-install commands.
 - Keep CI and Pages conventions aligned: language workflows upload coverage artifacts, `ci-main.yml` coordinates main-branch execution, and coverage extraction scripts under `tools/ci/` produce normalized `cov.json`.
+- GitHub Actions 只能由已进入 Ready for review 状态的非草稿 PR 启动；`ci-main.yml` 是唯一外部入口，语言矩阵和 Pages 工作流必须保持 `workflow_call`-only，Draft PR 不得分配 runner，Ready PR 的后续 `synchronize` 事件应重新执行 CI。
 - Treat the current GitHub Actions definitions as the repository compatibility contract. Code should be written against the platforms, compilers, runtimes, language standards, build/test/install/coverage steps, and local actions declared under `.github/workflows/` and `.github/actions/`, not just against the local developer machine.
 - `AGENTS.md` is a pointer-only compatibility file. Do not add new maintenance content there.
 - When a change creates reusable rules or public workflow knowledge, update `.codex/skills/common-codegen-guidelines/SKILL.md` or the relevant file under `references/` in the same change.
