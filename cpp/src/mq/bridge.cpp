@@ -7,12 +7,19 @@
 namespace mental1104 {
 namespace mq {
 
+/// Producer 与 AsyncProducer 共享的线程安全状态。
+///
+/// mutex/cv 保护关闭状态和操作计数；backend 的所有权由 shared_ptr 持有，保证异步
+/// completion 在 Producer facade 销毁后仍可安全完成。close 等待同步调用、backend
+/// 关闭以及所有已接受 callback 完成派发。
 class ProducerState : public std::enable_shared_from_this<ProducerState> {
 public:
-  explicit ProducerState(const std::shared_ptr<IProducerBackend> &b)
-      : backend(b), closing(false), closed(false), active_sync(0),
+  /// @param backend 非空 Producer backend 的共享所有权。
+  explicit ProducerState(const std::shared_ptr<IProducerBackend> &backend)
+      : backend(backend), closing(false), closed(false), active_sync(0),
         pending_async(0) {}
 
+  /// 同步转发一条消息，并把后端异常转换为 SendResult。
   SendResult send(const Message &message) {
     {
       std::lock_guard<std::mutex> lock(mutex);
@@ -36,6 +43,10 @@ public:
     return result;
   }
 
+  /// 提交异步发送并建立 exactly-once completion 门禁。
+  ///
+  /// backend 同步拒绝时直接减少 pending 计数且不调用用户 callback；一旦 backend
+  /// 接受，Completion 保持 ProducerState 所有权并保证最终只派发一次结果。
   OperationResult send_async(Message message,
                              const DeliveryCallback &callback) {
     {
@@ -46,13 +57,22 @@ public:
                     "send_async", "producer is closed"));
       ++pending_async;
     }
+
+    /// 单个异步请求的完成状态。
     struct Completion {
       std::atomic<bool> done;
       std::shared_ptr<ProducerState> state;
       DeliveryCallback callback;
-      Completion(const std::shared_ptr<ProducerState> &s,
-                 const DeliveryCallback &cb)
-          : done(false), state(s), callback(cb) {}
+
+      /// 保存共享状态，避免 callback 到达前 Bridge 状态悬空。
+      Completion(const std::shared_ptr<ProducerState> &state,
+                 const DeliveryCallback &callback)
+          : done(false), state(state), callback(callback) {}
+
+      /// exactly-once 派发最终结果并释放 pending 计数。
+      ///
+      /// 用户 callback 在 detached 线程中执行；started promise 只确认线程已启动，
+      /// close 不等待用户业务逻辑任意长时间。callback 异常被线程边界捕获。
       void finish(const SendResult &result) {
         if (done.exchange(true))
           return;
@@ -65,6 +85,7 @@ public:
             try {
               user_callback(result);
             } catch (...) {
+              // 用户 callback 不能破坏 backend callback 线程或关闭状态。
             }
           }).detach();
           ready.wait();
@@ -77,19 +98,21 @@ public:
         state->cv.notify_all();
       }
     };
+
     std::shared_ptr<Completion> completion(
         new Completion(shared_from_this(), callback));
     OperationResult accepted;
     try {
       accepted =
-          backend->send_async(message, [completion](const SendResult &r) {
-            completion->finish(r);
+          backend->send_async(message, [completion](const SendResult &result) {
+            completion->finish(result);
           });
     } catch (...) {
       accepted = OperationResult::failure(
           exception_error("send_async", std::string()));
     }
     if (!accepted.ok && !completion->done.load()) {
+      // 同步拒绝不属于“已接受请求”，因此不调用用户 callback。
       {
         std::lock_guard<std::mutex> lock(mutex);
         if (pending_async > 0)
@@ -97,12 +120,16 @@ public:
       }
       cv.notify_all();
     } else if (!accepted.ok && completion->done.load()) {
-      // The backend already completed synchronously; the request was accepted.
+      // 后端已经同步完成 callback；该请求按已接受成功处理。
       return OperationResult::success();
     }
     return accepted;
   }
 
+  /// 幂等关闭共享 backend。
+  ///
+  /// 首个调用负责真正关闭；并发调用等待 closed。顺序为等待同步 send、关闭 backend、
+  /// 再等待已接受异步请求完成派发。
   OperationResult close() {
     {
       std::unique_lock<std::mutex> lock(mutex);
@@ -143,19 +170,24 @@ public:
   OperationResult close_result;
 };
 
-Producer::Producer(std::unique_ptr<IProducerBackend> b)
-    : state_(
-          new ProducerState(std::shared_ptr<IProducerBackend>(std::move(b)))) {
+/// 接管 unique_ptr backend 并转换为异步安全的共享状态。
+Producer::Producer(std::unique_ptr<IProducerBackend> backend)
+    : state_(new ProducerState(
+          std::shared_ptr<IProducerBackend>(std::move(backend)))) {
   if (!state_->backend)
     throw MQException(MQError(ErrorCode::InvalidConfig, "Producer",
                               "backend must not be null"));
 }
-Producer::Producer(const std::shared_ptr<IProducerBackend> &b)
-    : state_(new ProducerState(b)) {
-  if (!b)
+
+/// 使用已有共享 backend 创建 Producer。
+Producer::Producer(const std::shared_ptr<IProducerBackend> &backend)
+    : state_(new ProducerState(backend)) {
+  if (!backend)
     throw MQException(MQError(ErrorCode::InvalidConfig, "Producer",
                               "backend must not be null"));
 }
+
+/// 析构时尽力关闭，不允许异常越过析构边界。
 Producer::~Producer() noexcept {
   if (state_) {
     try {
@@ -164,8 +196,12 @@ Producer::~Producer() noexcept {
     }
   }
 }
+
+/// 移动共享状态，源对象变为空 facade。
 Producer::Producer(Producer &&other) noexcept
     : state_(std::move(other.state_)) {}
+
+/// 关闭当前状态后接管源对象状态。
 Producer &Producer::operator=(Producer &&other) noexcept {
   if (this != &other) {
     if (state_) {
@@ -178,51 +214,75 @@ Producer &Producer::operator=(Producer &&other) noexcept {
   }
   return *this;
 }
+
+/// 转发同步发送；空 facade 返回 Closed。
 SendResult Producer::send(const Message &message) {
   return state_ ? state_->send(message)
                 : SendResult::failure(MQError(ErrorCode::Closed, "send",
                                               "producer has no backend"));
 }
+
+/// 兼容 Record 发送入口，失败时抛统一异常。
 void Producer::send(const Record &record) {
-  Message m;
-  m.payload = record;
-  SendResult r = send(m);
-  if (!r.ok)
-    throw MQException(r.error);
+  Message message;
+  message.payload = record;
+  SendResult result = send(message);
+  if (!result.ok)
+    throw MQException(result.error);
 }
+
+/// 创建共享同一 ProducerState 的异步 facade。
 AsyncProducer Producer::async() const { return AsyncProducer(state_); }
+
+/// 兼容 Record 异步入口，提交失败时抛统一异常。
 void Producer::send_async(const Record &record,
                           const SendCallback &callback) const {
-  Message m;
-  m.payload = record;
-  OperationResult r = async().send_async(m, callback);
-  if (!r.ok)
-    throw MQException(r.error);
+  Message message;
+  message.payload = record;
+  OperationResult result = async().send_async(message, callback);
+  if (!result.ok)
+    throw MQException(result.error);
 }
+
+/// 幂等关闭 ProducerState。
 OperationResult Producer::close() {
   return state_ ? state_->close() : OperationResult::success();
 }
 
+/// 构造空异步 facade。
 AsyncProducer::AsyncProducer() {}
-AsyncProducer::AsyncProducer(const std::shared_ptr<ProducerState> &s)
-    : state_(s) {}
-OperationResult AsyncProducer::send_async(Message m,
-                                          const DeliveryCallback &cb) const {
-  return state_
-             ? state_->send_async(m, cb)
-             : OperationResult::failure(MQError(ErrorCode::Closed, "send_async",
-                                                "producer has no backend"));
+
+/// 保存共享 ProducerState。
+AsyncProducer::AsyncProducer(const std::shared_ptr<ProducerState> &state)
+    : state_(state) {}
+
+/// 转发异步发送；空 facade 返回 Closed。
+OperationResult AsyncProducer::send_async(
+    Message message, const DeliveryCallback &callback) const {
+  return state_ ? state_->send_async(message, callback)
+                : OperationResult::failure(
+                      MQError(ErrorCode::Closed, "send_async",
+                              "producer has no backend"));
 }
+
+/// 关闭共享 ProducerState。
 OperationResult AsyncProducer::close() {
   return state_ ? state_->close() : OperationResult::success();
 }
 
+/// Consumer Bridge 的共享线程与确认状态。
+///
+/// worker 只由 start 创建，stop/close 负责 join；handler 在 worker 中串行执行。
+/// 手动 receive 使用 receipts 将 MessagePtr 映射为 backend 私有 Receipt。
 class ConsumerState : public std::enable_shared_from_this<ConsumerState> {
 public:
-  explicit ConsumerState(const std::shared_ptr<IConsumerBackend> &b,
-                         const MessageListener &l)
-      : backend(b), listener(l), running(false), stopping(false),
+  /// 保存 backend 和兼容 listener。
+  explicit ConsumerState(const std::shared_ptr<IConsumerBackend> &backend,
+                         const MessageListener &listener)
+      : backend(backend), listener(listener), running(false), stopping(false),
         closed(false) {}
+
+  /// 析构时尽力停止并关闭，不向外抛异常。
   ~ConsumerState() {
     try {
       close();
@@ -230,6 +290,7 @@ public:
     }
   }
 
+  /// 非阻塞启动唯一 worker 线程。
   OperationResult start(const MessageHandler &handler) {
     std::lock_guard<std::mutex> lock(mutex);
     if (closed)
@@ -251,6 +312,7 @@ public:
     return OperationResult::success();
   }
 
+  /// worker 主循环：短超时 receive、串行 handler、按结果执行 ack/nack。
   void run_loop() {
     for (;;) {
       {
@@ -273,6 +335,7 @@ public:
         last_error = received.error;
         break;
       }
+
       HandlerResult handled;
       try {
         handled = current_handler(received.value.message);
@@ -284,6 +347,7 @@ public:
             MQError(ErrorCode::Handler, "handler",
                     "handler threw an unknown exception"));
       }
+
       OperationResult action = OperationResult::success();
       if (!handled.error.empty() ||
           handled.action == ConsumeAction::NegativeAcknowledge)
@@ -303,6 +367,8 @@ public:
     cv.notify_all();
   }
 
+  /// 幂等停止 worker，并等待当前 receive/handler 返回。
+  /// worker 内部调用 stop 时 detach 自身，避免 self-join 死锁。
   OperationResult stop() {
     std::thread joiner;
     {
@@ -323,6 +389,7 @@ public:
     return OperationResult::success();
   }
 
+  /// 幂等停止 worker 后关闭 backend。
   OperationResult close() {
     {
       std::lock_guard<std::mutex> lock(mutex);
@@ -332,18 +399,20 @@ public:
       stopping = true;
     }
     stop();
-    OperationResult r;
+    OperationResult result;
     try {
-      r = backend->close();
+      result = backend->close();
     } catch (...) {
-      r = OperationResult::failure(exception_error("close", std::string()));
+      result =
+          OperationResult::failure(exception_error("close", std::string()));
     }
     std::lock_guard<std::mutex> lock(mutex);
-    close_result = r;
-    return r;
+    close_result = result;
+    return result;
   }
 
-  MessagePtr receive_manual(int timeout) {
+  /// 在 start 未运行时同步拉取消息，并登记 MessagePtr 到 Receipt 的映射。
+  MessagePtr receive_manual(int timeout_millis) {
     {
       std::lock_guard<std::mutex> lock(mutex);
       if (closed)
@@ -354,31 +423,33 @@ public:
             MQError(ErrorCode::AlreadyStarted, "receive",
                     "manual receive is unavailable while consumer is started"));
     }
-    ReceiveResult r = backend->receive(timeout);
-    if (!r.ok)
-      throw MQException(r.error);
-    MessagePtr m(new Message(r.value.message));
+    ReceiveResult result = backend->receive(timeout_millis);
+    if (!result.ok)
+      throw MQException(result.error);
+    MessagePtr message(new Message(result.value.message));
     {
       std::lock_guard<std::mutex> lock(mutex);
-      receipts[m.get()] = r.value.receipt;
+      receipts[message.get()] = result.value.receipt;
     }
     if (listener)
-      listener(m);
-    return m;
+      listener(message);
+    return message;
   }
 
-  ReceiptPtr take_receipt(const MessagePtr &m) {
-    if (!m)
+  /// 取出并删除 MessagePtr 对应的 Receipt，防止重复确认。
+  ReceiptPtr take_receipt(const MessagePtr &message) {
+    if (!message)
       throw MQException(MQError(ErrorCode::InvalidMessage, "receipt",
                                 "message must not be null"));
     std::lock_guard<std::mutex> lock(mutex);
-    std::map<const Message *, ReceiptPtr>::iterator it = receipts.find(m.get());
+    std::map<const Message *, ReceiptPtr>::iterator it =
+        receipts.find(message.get());
     if (it == receipts.end())
       throw MQException(MQError(ErrorCode::InvalidMessage, "receipt",
                                 "message does not belong to this consumer"));
-    ReceiptPtr r = it->second;
+    ReceiptPtr receipt = it->second;
     receipts.erase(it);
-    return r;
+    return receipt;
   }
 
   std::shared_ptr<IConsumerBackend> backend;
@@ -395,20 +466,26 @@ public:
   std::map<const Message *, ReceiptPtr> receipts;
 };
 
-Consumer::Consumer(std::unique_ptr<IConsumerBackend> b)
-    : state_(new ConsumerState(std::shared_ptr<IConsumerBackend>(std::move(b)),
-                               MessageListener())) {
+/// 接管 unique_ptr backend 创建 ConsumerState。
+Consumer::Consumer(std::unique_ptr<IConsumerBackend> backend)
+    : state_(new ConsumerState(
+          std::shared_ptr<IConsumerBackend>(std::move(backend)),
+          MessageListener())) {
   if (!state_->backend)
     throw MQException(MQError(ErrorCode::InvalidConfig, "Consumer",
                               "backend must not be null"));
 }
-Consumer::Consumer(const std::shared_ptr<IConsumerBackend> &b,
-                   const MessageListener &l)
-    : state_(new ConsumerState(b, l)) {
-  if (!b)
+
+/// 使用已有共享 backend 和兼容 listener 创建 Consumer。
+Consumer::Consumer(const std::shared_ptr<IConsumerBackend> &backend,
+                   const MessageListener &listener)
+    : state_(new ConsumerState(backend, listener)) {
+  if (!backend)
     throw MQException(MQError(ErrorCode::InvalidConfig, "Consumer",
                               "backend must not be null"));
 }
+
+/// 析构时尽力关闭，不允许异常越过析构边界。
 Consumer::~Consumer() noexcept {
   if (state_) {
     try {
@@ -417,57 +494,83 @@ Consumer::~Consumer() noexcept {
     }
   }
 }
-Consumer::Consumer(Consumer &&o) noexcept : state_(std::move(o.state_)) {}
-Consumer &Consumer::operator=(Consumer &&o) noexcept {
-  if (this != &o) {
+
+/// 移动 ConsumerState，源对象变为空 facade。
+Consumer::Consumer(Consumer &&other) noexcept
+    : state_(std::move(other.state_)) {}
+
+/// 关闭当前状态后接管源对象状态。
+Consumer &Consumer::operator=(Consumer &&other) noexcept {
+  if (this != &other) {
     if (state_) {
       try {
         state_->close();
       } catch (...) {
       }
     }
-    state_ = std::move(o.state_);
+    state_ = std::move(other.state_);
   }
   return *this;
 }
-OperationResult Consumer::start(const MessageHandler &h) {
-  return state_ ? state_->start(h)
+
+/// 非阻塞启动消费线程；空 facade 返回 Closed。
+OperationResult Consumer::start(const MessageHandler &handler) {
+  return state_ ? state_->start(handler)
                 : OperationResult::failure(MQError(ErrorCode::Closed, "start",
                                                    "consumer has no backend"));
 }
+
+/// 幂等停止消费线程。
 OperationResult Consumer::stop() {
   return state_ ? state_->stop() : OperationResult::success();
 }
+
+/// 幂等关闭 ConsumerState。
 OperationResult Consumer::close() {
   return state_ ? state_->close() : OperationResult::success();
 }
+
+/// 在线程安全锁下读取 running 状态。
 bool Consumer::running() const {
   if (!state_)
     return false;
   std::lock_guard<std::mutex> lock(state_->mutex);
   return state_->running;
 }
-MessagePtr Consumer::receive(int t) { return state_->receive_manual(t); }
-void Consumer::acknowledge(const MessagePtr &m) {
-  OperationResult r = state_->backend->acknowledge(state_->take_receipt(m));
-  if (!r.ok)
-    throw MQException(r.error);
+
+/// 转发兼容手动 receive。
+MessagePtr Consumer::receive(int timeout_millis) {
+  return state_->receive_manual(timeout_millis);
 }
-void Consumer::negative_acknowledge(const MessagePtr &m) {
-  OperationResult r =
-      state_->backend->negative_acknowledge(state_->take_receipt(m));
-  if (!r.ok)
-    throw MQException(r.error);
+
+/// 消费并确认 MessagePtr 对应的 Receipt。
+void Consumer::acknowledge(const MessagePtr &message) {
+  OperationResult result =
+      state_->backend->acknowledge(state_->take_receipt(message));
+  if (!result.ok)
+    throw MQException(result.error);
 }
+
+/// 消费并否认 MessagePtr 对应的 Receipt。
+void Consumer::negative_acknowledge(const MessagePtr &message) {
+  OperationResult result =
+      state_->backend->negative_acknowledge(state_->take_receipt(message));
+  if (!result.ok)
+    throw MQException(result.error);
+}
+
+/// 转发取消订阅，失败时抛统一异常。
 void Consumer::unsubscribe() {
-  OperationResult r = state_->backend->unsubscribe();
-  if (!r.ok)
-    throw MQException(r.error);
+  OperationResult result = state_->backend->unsubscribe();
+  if (!result.ok)
+    throw MQException(result.error);
 }
+
+/// 转发重新订阅，失败时抛统一异常。
 void Consumer::resubscribe() {
-  OperationResult r = state_->backend->resubscribe();
-  if (!r.ok)
-    throw MQException(r.error);
+  OperationResult result = state_->backend->resubscribe();
+  if (!result.ok)
+    throw MQException(result.error);
 }
 
 } // namespace mq
