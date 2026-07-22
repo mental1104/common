@@ -3,6 +3,10 @@ name: cpp
 on:
   workflow_call:
     inputs:
+      full_matrix:
+        description: "Run the complete OS/compiler/standard compatibility matrix"
+        type: boolean
+        default: false
       verbose_logs:
         description: "Enable verbose test output"
         type: boolean
@@ -26,9 +30,7 @@ jobs:
           --health-interval=5s --health-timeout=3s --health-retries=5
     strategy:
       fail-fast: false
-      matrix:
-        compiler: [gcc, clang]
-        cxx_std: ["11", "14", "17", "20", "23"]
+      matrix: ${{ fromJson(inputs.full_matrix && '{"compiler":["gcc","clang"],"cxx_std":["11","14","17","20","23"]}' || '{"compiler":["gcc"],"cxx_std":["23"]}') }}
     env:
       CMAKE_BUILD_PARALLEL_LEVEL: 4
       GCOV: gcov
@@ -172,6 +174,7 @@ jobs:
           fi
 
   macos:
+    if: ${{ inputs.full_matrix }}
     name: macOS / ${{ matrix.compiler == 'clang' && 'clang++' || 'g++' }} / C++${{ matrix.cxx_std }}
     runs-on: macos-latest
     strategy:
@@ -285,6 +288,7 @@ jobs:
           fi
 
   windows:
+    if: ${{ inputs.full_matrix }}
     name: Windows / MSVC / C++${{ matrix.cxx_std }}
     runs-on: windows-latest
     strategy:
