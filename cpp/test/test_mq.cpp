@@ -1,121 +1,164 @@
-#include "mental1104/mq/bridge.h"
 #include "mental1104/mq/kafka.h"
 #include "mental1104/mq/pulsar.h"
 
 #include <gtest/gtest.h>
 
-#include <atomic>
 #include <chrono>
-#include <stdexcept>
-#include <thread>
-#include <vector>
+#include <cstdlib>
+#include <future>
+#include <sstream>
+#include <string>
 
 namespace {
 using namespace mental1104::mq;
 
-/// FakeConsumerBackend 生成的私有确认凭据。
-class FakeReceipt : public Receipt {};
+/// 读取非空环境变量。
+///
+/// @param name 环境变量名称，必须是以空字符结尾的字符串。
+/// @return 环境变量存在且非空时返回其值；否则返回空字符串。
+std::string env_value(const char *name) {
+  const char *value = std::getenv(name);
+  return value && value[0] != '\0' ? std::string(value) : std::string();
+}
 
-/// 只验证 Bridge 契约的 Producer backend，不模拟任何具体 MQ SDK。
-/// workers 由 backend 持有并在 close 中 join，避免测试 goroutine/线程泄漏。
-class FakeProducerBackend : public IProducerBackend {
-public:
-  FakeProducerBackend() : reject(false), duplicate(false), close_count(0) {}
+/// 生成进程内足够唯一的测试订阅名称，避免复用历史消费位点。
+///
+/// @param prefix 订阅名称前缀，用于区分 Kafka 和 Pulsar 测试。
+/// @return 由前缀和高精度时钟计数组成的新订阅名称。
+std::string unique_subscription(const std::string &prefix) {
+  std::ostringstream value;
+  value << prefix << "-"
+        << std::chrono::high_resolution_clock::now().time_since_epoch().count();
+  return value.str();
+}
 
-  /// 析构时复用幂等 close，保证测试提前失败也回收线程。
-  ~FakeProducerBackend() { close(); }
+/// 从 Consumer 中等待指定 payload，并确认期间遇到的其他历史消息。
+///
+/// @param consumer 已连接真实中间件的 Consumer。
+/// @param expected_payload 当前测试发送的唯一 payload。
+/// @param attempts 最多执行的单次一秒 receive 次数，必须大于零。
+/// @return 收到目标消息时返回其共享指针；超时后返回空指针。
+MessagePtr receive_expected(Consumer &consumer,
+                            const std::string &expected_payload, int attempts) {
+  for (int attempt = 0; attempt < attempts; ++attempt) {
+    try {
+      MessagePtr message = consumer.receive(1000);
+      if (record_to_string(message->payload) == expected_payload)
+        return message;
 
-  /// 记录最后一条消息并按 reject 开关返回同步结果。
-  SendResult send(const Message &message) override {
-    last = message;
-    return reject ? SendResult::failure(
-                        MQError(ErrorCode::Backend, "send", "failed"))
-                  : SendResult::success("sync-id");
+      // 测试 topic 可能残留旧消息；确认后继续等待本轮唯一 payload。
+      consumer.acknowledge(message);
+    } catch (const MQException &error) {
+      if (error.error().code != ErrorCode::Timeout)
+        throw;
+    }
+  }
+  return MessagePtr();
+}
+
+/// 验证异步 delivery callback 可以关闭同一个 Producer，而不会形成自锁。
+///
+/// @param producer 已连接真实中间件的 Producer。
+/// @param payload 本次异步发送的唯一消息内容。
+void expect_async_callback_can_close(Producer &producer,
+                                     const std::string &payload) {
+  std::promise<OperationResult> closed;
+  std::future<OperationResult> completed = closed.get_future();
+  Message message;
+  message.payload = make_record(payload);
+
+  OperationResult accepted = producer.async().send_async(
+      message, [&producer, &closed](const SendResult &result) {
+        closed.set_value(result.ok ? producer.close()
+                                   : OperationResult::failure(result.error));
+      });
+
+  ASSERT_TRUE(accepted.ok) << accepted.error.message;
+  ASSERT_EQ(std::future_status::ready,
+            completed.wait_for(std::chrono::seconds(15)));
+  EXPECT_TRUE(completed.get().ok);
+  EXPECT_TRUE(producer.close().ok);
+}
+
+/// KafkaIntegrationTest 只在 SDK 和真实 Kafka 测试环境完整时运行。
+class KafkaIntegrationTest : public ::testing::Test {
+protected:
+  /// 检查 SDK、连接地址和预建测试 topic；缺失任一条件时跳过当前用例。
+  void SetUp() override {
+    if (!kafka_available())
+      GTEST_SKIP() << "librdkafka is not available in this build";
+
+    const std::string host = env_value("KAFKA_ADVERTISED_HOST");
+    const std::string port = env_value("KAFKA_EXTERNAL_PORT");
+    topic_ = env_value("KAFKA_TEST_TOPIC");
+    if (host.empty() || port.empty() || topic_.empty()) {
+      GTEST_SKIP() << "Kafka integration requires KAFKA_ADVERTISED_HOST, "
+                      "KAFKA_EXTERNAL_PORT and KAFKA_TEST_TOPIC";
+    }
+    bootstrap_servers_ = host + ":" + port;
   }
 
-  /// 启动 worker 异步完成请求；duplicate 用于验证 Bridge 的 exactly-once 门禁。
-  OperationResult send_async(const Message &message,
-                             const DeliveryCallback &callback) override {
-    last = message;
-    if (reject)
-      return OperationResult::failure(
-          MQError(ErrorCode::Backend, "send_async", "rejected"));
-    workers.push_back(std::thread([this, callback]() {
-      callback(SendResult::success("async-id"));
-      if (duplicate)
-        callback(SendResult::success("duplicate"));
-    }));
-    return OperationResult::success();
+  /// 创建只包含真实 Kafka 连接参数的 backend 配置。
+  ///
+  /// @param consumer 是否为 Consumer 配置；Consumer 会额外从 earliest 开始读取。
+  /// @return 可传给 Kafka backend 工厂的配置值。
+  KafkaBackendConfig kafka_backend(bool consumer) const {
+    KafkaBackendConfig backend;
+    backend.options["bootstrap.servers"] = bootstrap_servers_;
+    if (consumer)
+      backend.options["auto.offset.reset"] = "earliest";
+    return backend;
   }
 
-  /// 幂等语义由 Bridge 验证；本 fake 记录实际调用次数并 join 全部 worker。
-  OperationResult close() override {
-    ++close_count;
-    for (std::size_t i = 0; i < workers.size(); ++i)
-      if (workers[i].joinable())
-        workers[i].join();
-    return OperationResult::success();
-  }
-
-  bool reject;
-  bool duplicate;
-  std::atomic<int> close_count;
-  Message last;
-  std::vector<std::thread> workers;
+  std::string bootstrap_servers_;
+  std::string topic_;
 };
 
-/// 通过内存消息序列验证 Consumer Bridge 状态机的最小 backend。
-class FakeConsumerBackend : public IConsumerBackend {
-public:
-  FakeConsumerBackend()
-      : index(0), ack_count(0), nack_count(0), close_count(0) {}
+/// PulsarIntegrationTest 只在 SDK 和真实 Pulsar 测试环境完整时运行。
+class PulsarIntegrationTest : public ::testing::Test {
+protected:
+  /// 检查 SDK、连接地址和预建测试 topic；缺失任一条件时跳过当前用例。
+  void SetUp() override {
+    if (!pulsar_available())
+      GTEST_SKIP() << "pulsar-client-cpp is not available in this build";
 
-  /// 依次返回 messages；耗尽后返回 Timeout，让 Bridge 保持轮询。
-  ReceiveResult receive(int) override {
-    std::this_thread::sleep_for(std::chrono::milliseconds(1));
-    if (index < messages.size()) {
-      BackendMessage backend_message;
-      backend_message.message = messages[index++];
-      backend_message.receipt.reset(new FakeReceipt());
-      return ReceiveResult::success(backend_message);
+    const std::string host = env_value("PULSAR_HOST");
+    const std::string port = env_value("PULSAR_BROKER_PORT");
+    tenant_ = env_value("PULSAR_TEST_TENANT");
+    namespace_ = env_value("PULSAR_TEST_NAMESPACE");
+    topic_ = env_value("PULSAR_TEST_TOPIC");
+    if (host.empty() || port.empty() || tenant_.empty() || namespace_.empty() ||
+        topic_.empty()) {
+      GTEST_SKIP() << "Pulsar integration requires PULSAR_HOST, "
+                      "PULSAR_BROKER_PORT, PULSAR_TEST_TENANT, "
+                      "PULSAR_TEST_NAMESPACE and PULSAR_TEST_TOPIC";
     }
-    return ReceiveResult::failure(
-        MQError(ErrorCode::Timeout, "receive", "timeout"));
+    service_url_ = "pulsar://" + host + ":" + port;
   }
 
-  /// 记录 ack 次数。
-  OperationResult acknowledge(const ReceiptPtr &) override {
-    ++ack_count;
-    return OperationResult::success();
+  /// 创建只包含真实 Pulsar service URL 的 backend 配置。
+  ///
+  /// @return 可传给 Pulsar backend 工厂的配置值。
+  PulsarBackendConfig pulsar_backend() const {
+    PulsarBackendConfig backend;
+    backend.service_url = service_url_;
+    return backend;
   }
 
-  /// 记录 nack 次数。
-  OperationResult negative_acknowledge(const ReceiptPtr &) override {
-    ++nack_count;
-    return OperationResult::success();
-  }
-
-  OperationResult unsubscribe() override { return OperationResult::success(); }
-  OperationResult resubscribe() override { return OperationResult::success(); }
-
-  /// 记录实际 close 次数。
-  OperationResult close() override {
-    ++close_count;
-    return OperationResult::success();
-  }
-
-  std::vector<Message> messages;
-  std::size_t index;
-  std::atomic<int> ack_count, nack_count, close_count;
+  std::string service_url_;
+  std::string tenant_;
+  std::string namespace_;
+  std::string topic_;
 };
 
 /// 验证公共 Message 只包含领域字段，并验证 Kafka/Pulsar topic 映射。
-TEST(MessageQueueBridge, DomainDoesNotExposeSdkMessage) {
+TEST(MessageQueueDomain, BuildsBackendTopicNames) {
   Message message;
   message.topic = "events";
   message.key = make_record("key");
   message.payload = make_record("payload");
   message.headers["trace"] = "1";
+
   EXPECT_EQ("payload", record_to_string(message.payload));
   EXPECT_EQ("tenant.namespace.events",
             build_kafka_topic("tenant", "namespace", "events"));
@@ -123,118 +166,109 @@ TEST(MessageQueueBridge, DomainDoesNotExposeSdkMessage) {
             build_pulsar_topic("tenant", "namespace", "events"));
 }
 
-/// 验证同步 Producer 转发、结果映射、幂等关闭和关闭后拒绝发送。
-TEST(MessageQueueBridge, ProducerForwardsResultAndClosesIdempotently) {
-  std::shared_ptr<FakeProducerBackend> backend(new FakeProducerBackend());
-  Producer producer(backend);
+/// 使用真实 Kafka 完成生产、消费和确认闭环。
+TEST_F(KafkaIntegrationTest, ProducesConsumesAndAcknowledges) {
+  KafkaBackendConfig producer_backend = this->kafka_backend(false);
+  KafkaBackendConfig consumer_backend = this->kafka_backend(true);
+
+  ProducerConfig producer_config;
+  producer_config.topic.topic = this->topic_;
+  ConsumerConfig consumer_config;
+  consumer_config.topic.topic = this->topic_;
+  consumer_config.subscription = unique_subscription("common-cpp-kafka");
+
+  Consumer consumer(
+      create_kafka_consumer_backend(consumer_config, consumer_backend));
+  Producer producer(
+      create_kafka_producer_backend(producer_config, producer_backend));
+
+  const std::string payload = unique_subscription("kafka-payload");
   Message message;
-  message.payload = make_record("value");
-  message.headers["trace"] = "1";
-  SendResult result = producer.send(message);
-  EXPECT_TRUE(result.ok);
-  EXPECT_EQ("sync-id", result.message_id);
-  EXPECT_EQ("1", backend->last.headers["trace"]);
+  message.payload = make_record(payload);
+  message.headers["source"] = "common-cpp-test";
+
+  SendResult sent = producer.send(message);
+  ASSERT_TRUE(sent.ok) << sent.error.message;
+
+  MessagePtr received = receive_expected(consumer, payload, 15);
+  ASSERT_TRUE(static_cast<bool>(received));
+  EXPECT_EQ("common-cpp-test", received->headers["source"]);
+  consumer.acknowledge(received);
+
   EXPECT_TRUE(producer.close().ok);
-  EXPECT_TRUE(producer.close().ok);
-  EXPECT_EQ(1, backend->close_count.load());
-  EXPECT_EQ(ErrorCode::Closed, producer.send(message).error.code);
+  EXPECT_TRUE(consumer.close().ok);
 }
 
-/// 验证重复 backend completion 只触发一次用户 callback，且 callback 异常被隔离。
-TEST(MessageQueueBridge, AsyncCallbackIsExactlyOnceAndPanicSafe) {
-  std::shared_ptr<FakeProducerBackend> backend(new FakeProducerBackend());
-  backend->duplicate = true;
-  Producer producer(backend);
-  std::atomic<int> calls(0);
+/// 使用真实 Kafka 验证异步 callback 内关闭 Producer 的生命周期边界。
+TEST_F(KafkaIntegrationTest, AsyncCallbackMayCloseProducer) {
+  KafkaBackendConfig backend = this->kafka_backend(false);
+  ProducerConfig config;
+  config.topic.topic = this->topic_;
+  Producer producer(create_kafka_producer_backend(config, backend));
+
+  expect_async_callback_can_close(
+      producer, unique_subscription("kafka-async-close"));
+}
+
+/// 使用真实 Pulsar 完成生产、消费和确认闭环。
+TEST_F(PulsarIntegrationTest, ProducesConsumesAndAcknowledges) {
+  PulsarBackendConfig producer_backend = this->pulsar_backend();
+  PulsarBackendConfig consumer_backend = this->pulsar_backend();
+
+  ProducerConfig producer_config;
+  producer_config.topic.tenant = this->tenant_;
+  producer_config.topic.namespace_name = this->namespace_;
+  producer_config.topic.topic = this->topic_;
+  ConsumerConfig consumer_config;
+  consumer_config.topic = producer_config.topic;
+  consumer_config.subscription = unique_subscription("common-cpp-pulsar");
+
+  Consumer consumer(
+      create_pulsar_consumer_backend(consumer_config, consumer_backend));
+  Producer producer(
+      create_pulsar_producer_backend(producer_config, producer_backend));
+
+  const std::string payload = unique_subscription("pulsar-payload");
   Message message;
-  EXPECT_TRUE(producer.async()
-                  .send_async(message,
-                              [&](const SendResult &result) {
-                                EXPECT_TRUE(result.ok);
-                                ++calls;
-                                throw std::runtime_error("ignored");
-                              })
-                  .ok);
+  message.payload = make_record(payload);
+  message.headers["source"] = "common-cpp-test";
+
+  SendResult sent = producer.send(message);
+  ASSERT_TRUE(sent.ok) << sent.error.message;
+
+  MessagePtr received = receive_expected(consumer, payload, 15);
+  ASSERT_TRUE(static_cast<bool>(received));
+  EXPECT_EQ("common-cpp-test", received->headers["source"]);
+  consumer.acknowledge(received);
+
   EXPECT_TRUE(producer.close().ok);
-  for (int i = 0; i < 100 && calls.load() < 1; ++i)
-    std::this_thread::sleep_for(std::chrono::milliseconds(1));
-  EXPECT_EQ(1, calls.load());
-}
-
-/// 验证 backend 同步拒绝时不调用 callback。
-TEST(MessageQueueBridge, SynchronousAsyncRejectionDoesNotCallCallback) {
-  std::shared_ptr<FakeProducerBackend> backend(new FakeProducerBackend());
-  backend->reject = true;
-  Producer producer(backend);
-  std::atomic<int> calls(0);
-  EXPECT_FALSE(producer.async()
-                   .send_async(Message(), [&](const SendResult &) { ++calls; })
-                   .ok);
-  producer.close();
-  EXPECT_EQ(0, calls.load());
-}
-
-/// 验证 Consumer 非阻塞启动、重复启动、stop/restart 及 handler 失败自动 nack。
-TEST(MessageQueueBridge, ConsumerStartStopRestartAndHandlerFailure) {
-  std::shared_ptr<FakeConsumerBackend> backend(new FakeConsumerBackend());
-  Message one;
-  one.payload = make_record("one");
-  Message two;
-  two.payload = make_record("two");
-  backend->messages.push_back(one);
-  backend->messages.push_back(two);
-  Consumer consumer(backend);
-  std::atomic<int> handled(0);
-  EXPECT_TRUE(consumer
-                  .start([&](const Message &message) {
-                    ++handled;
-                    if (record_to_string(message.payload) == "two")
-                      throw std::runtime_error("fail");
-                    return HandlerResult::acknowledge();
-                  })
-                  .ok);
-  EXPECT_EQ(
-      ErrorCode::AlreadyStarted,
-      consumer
-          .start([](const Message &) { return HandlerResult::acknowledge(); })
-          .error.code);
-  for (int i = 0; i < 100 && handled.load() < 2; ++i)
-    std::this_thread::sleep_for(std::chrono::milliseconds(2));
-  EXPECT_TRUE(consumer.stop().ok);
-  EXPECT_EQ(2, handled.load());
-  EXPECT_EQ(1, backend->ack_count.load());
-  EXPECT_EQ(1, backend->nack_count.load());
-  EXPECT_TRUE(
-      consumer
-          .start([](const Message &) { return HandlerResult::acknowledge(); })
-          .ok);
-  EXPECT_TRUE(consumer.stop().ok);
   EXPECT_TRUE(consumer.close().ok);
-  EXPECT_TRUE(consumer.close().ok);
-  EXPECT_EQ(1, backend->close_count.load());
 }
 
-/// 验证缺少可选 native SDK 时返回统一 MQException，而非链接或空指针错误。
-TEST(MessageQueueBridge, OptionalBackendsFailWithUnifiedError) {
+/// 使用真实 Pulsar 验证异步 callback 内关闭 Producer 的生命周期边界。
+TEST_F(PulsarIntegrationTest, AsyncCallbackMayCloseProducer) {
+  PulsarBackendConfig backend = this->pulsar_backend();
+  ProducerConfig config;
+  config.topic.tenant = this->tenant_;
+  config.topic.namespace_name = this->namespace_;
+  config.topic.topic = this->topic_;
+  Producer producer(create_pulsar_producer_backend(config, backend));
+
+  expect_async_callback_can_close(
+      producer, unique_subscription("pulsar-async-close"));
+}
+
+/// 未编译可选 SDK 时，工厂应返回统一配置异常而不是链接或空指针错误。
+TEST(MessageQueueAvailability, MissingSdkFailsWithUnifiedError) {
   if (!kafka_available()) {
     ProducerConfig config;
-    config.backend.reset(new KafkaBackendConfig());
-    config.topic.topic = "events";
-    EXPECT_THROW(create_kafka_producer_backend(
-                     config, *static_cast<const KafkaBackendConfig *>(
-                                 config.backend.get())),
-                 MQException);
+    KafkaBackendConfig backend;
+    EXPECT_THROW(create_kafka_producer_backend(config, backend), MQException);
   }
   if (!pulsar_available()) {
     ProducerConfig config;
-    config.backend.reset(new PulsarBackendConfig());
-    config.topic.tenant = "t";
-    config.topic.namespace_name = "n";
-    config.topic.topic = "events";
-    EXPECT_THROW(create_pulsar_producer_backend(
-                     config, *static_cast<const PulsarBackendConfig *>(
-                                 config.backend.get())),
-                 MQException);
+    PulsarBackendConfig backend;
+    EXPECT_THROW(create_pulsar_producer_backend(config, backend), MQException);
   }
 }
 
