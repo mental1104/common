@@ -22,7 +22,7 @@ This repository is a multi-language common-library workspace, so generated code 
 
 Generated code must satisfy these repository conditions:
 
-- **CI matrix is the coding contract**: write code to satisfy the current GitHub Actions platform, compiler, runtime, language-standard, build, test, install, and coverage matrix defined under `.github/workflows/` and `.github/actions/`.
+- **CI matrix is the coding contract**: pull requests run the affected language's latest stable Linux lane for fast feedback; the repository-level manual `CI Router` run expands the complete platform/compiler/runtime matrix. Code must remain compatible with that complete manual matrix, not only with the fast PR lane.
 - **Portability first**: support the repository's intended OS/compiler/runtime matrix; for reusable common-library code, treat the lowest CI-supported language/runtime version as the baseline and guard newer language-version features in shared surfaces.
 - **Warning-clean**: keep C++/C#/Go/Rust/Java compiler and linter warnings clean because CI and some third-party integrations treat warnings as failures.
 - **Local API consistency**: use `mental1104` namespaces/packages/modules and existing helpers for logging, concurrency, database scopes, message queues, coverage extraction, and devtool operations.
