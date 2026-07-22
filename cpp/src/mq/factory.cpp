@@ -5,11 +5,15 @@
 namespace mental1104 {
 namespace mq {
 namespace {
+
+/// 把 BackendType 转换为稳定日志名称。
 std::string backend_name(BackendType type) {
   return type == BackendType::Kafka ? "kafka" : "pulsar";
 }
+
 } // namespace
 
+/// 根据多态配置选择 Kafka 或 Pulsar Producer backend。
 std::unique_ptr<IProducerBackend>
 create_producer_backend(const ProducerConfig &config) {
   if (!config.backend)
@@ -42,10 +46,12 @@ create_producer_backend(const ProducerConfig &config) {
   } catch (const MQException &) {
     throw;
   } catch (...) {
+    // 第三方 SDK 构造异常在 Factory 边界统一收敛。
     throw MQException(exception_error("create_producer_backend", name));
   }
 }
 
+/// 根据多态配置选择 Kafka 或 Pulsar Consumer backend。
 std::unique_ptr<IConsumerBackend>
 create_consumer_backend(const ConsumerConfig &config) {
   if (!config.backend)
@@ -78,13 +84,17 @@ create_consumer_backend(const ConsumerConfig &config) {
   } catch (const MQException &) {
     throw;
   } catch (...) {
+    // 第三方 SDK 构造异常在 Factory 边界统一收敛。
     throw MQException(exception_error("create_consumer_backend", name));
   }
 }
 
+/// 创建拥有具体 Producer backend 的 Bridge。
 Producer create_producer(const ProducerConfig &config) {
   return Producer(create_producer_backend(config));
 }
+
+/// 创建拥有具体 Consumer backend 的 Bridge。
 Consumer create_consumer(const ConsumerConfig &config) {
   return Consumer(create_consumer_backend(config));
 }
