@@ -28,7 +28,7 @@
 |---|---|---|---|---|
 | 容器与字符串 | `contains` | 函数模板 | `mental1104/util.h` | 检查 STL 容器成员关系和 map 键是否存在。 |
 | 容器与字符串 | `to_lower_copy` | 函数 | `mental1104/util.h` | 返回小写化后的 `std::string` 副本。 |
-| 容器与字符串 | `ExponentialBackoff` | 类 | `mental1104/util.h` | 按上限推进重试延迟。 |
+| 容器与字符串 | `ExponentialBackoff` | 类 | `mental1104/util.h` | 按上限推进重试延迟，可显式加入对称随机抖动。 |
 | 缓存包装器 | `LRUCache`, `make_lru_cache`, `make_cache` | 类 / 函数 | `mental1104/core/cache.h` | 用 tuple 键 LRU 或无界缓存包装可调用对象。 |
 | 缓存包装器 | `LFUCache`, `make_lfu_cache` | 类 / 函数 | `mental1104/core/cache.h` | 用 tuple 键 LFU 缓存包装可调用对象。 |
 | JSON | `JsonParser`, `parse_json`, `ParseResult`, `JsonDoc`, `JsonValueView` | 枚举 / 函数 / 类 | `mental1104/json.h` | 通过 cJSON 或 RapidJSON 解析 JSON，并通过后端无关视图读取值。 |
@@ -66,6 +66,7 @@
 #include "mental1104/util.h"
 #include <chrono>
 #include <iostream>
+#include <random>
 #include <vector>
 
 int main() {
@@ -77,21 +78,26 @@ int main() {
       std::chrono::milliseconds(10),
       std::chrono::milliseconds(100));
   auto wait = backoff.next();
+  std::mt19937 rng(123);
+  auto jittered_wait = backoff.next(0.2, rng);
   backoff.reset();
 
-  std::cout << has_two << " " << lower << " " << wait.count() << "\n";
+  std::cout << has_two << " " << lower << " " << wait.count() << " "
+            << jittered_wait.count() << "\n";
 }
 ```
 
 **示例输出：**
 
 ```text
-1 hello 10
+1 hello 10 24
 ```
 
 **备注：**
 
 - 对 map 使用时，`contains` 检查键是否存在。
+- `ExponentialBackoff::next()` 保持确定性指数退避；`next(jitter_ratio, rng)` 先按原序列推进，再把本次等待均匀采样到 `[(1-ratio)d, (1+ratio)d]`。
+- 调用方显式传入随机引擎，便于测试复现，也避免工具类隐藏全局随机状态。
 
 ### `LRUCache`、`LFUCache` 和缓存工厂
 
