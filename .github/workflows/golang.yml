@@ -11,31 +11,9 @@ on:
         description: "Enable verbose test output"
         type: boolean
         default: true
-  push:
-    branches-ignore:
-      - main
-    paths:
-      - "golang/**"
-      - "devops/**"
-      - ".github/workflows/golang.yml"
-  pull_request:
-    paths:
-      - "golang/**"
-      - "devops/**"
-      - ".github/workflows/golang.yml"
-  workflow_dispatch:
-    inputs:
-      enable_go_prerelease:
-        description: "Run Go 1.24/1.25 jobs (pre-release)"
-        type: boolean
-        default: true
-      verbose_logs:
-        description: "Enable verbose test output"
-        type: boolean
-        default: true
 
 env:
-  GO_TEST_V: ${{ (vars.CI_VERBOSE_LOGS == 'false' || (github.event_name == 'workflow_dispatch' && (github.event.inputs.verbose_logs == false || github.event.inputs.verbose_logs == 'false')) || (github.event_name == 'workflow_call' && (inputs.verbose_logs == false || inputs.verbose_logs == 'false'))) && '' || '-v' }}
+  GO_TEST_V: ${{ (vars.CI_VERBOSE_LOGS == 'false' || inputs.verbose_logs == false || inputs.verbose_logs == 'false') && '' || '-v' }}
 
 jobs:
   linux:
@@ -43,7 +21,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
-      matrix: ${{ fromJson(( (github.event_name == 'workflow_dispatch' && (github.event.inputs.enable_go_prerelease == false || github.event.inputs.enable_go_prerelease == 'false')) || (github.event_name == 'workflow_call' && (inputs.enable_go_prerelease == false || inputs.enable_go_prerelease == 'false')) || vars.CI_ENABLE_GO_PRERELEASE == 'false') && '{"go":["1.22.x","1.23.x"]}' || '{"go":["1.22.x","1.23.x","1.24.x","1.25.x"]}') }}
+      matrix: ${{ fromJson(((inputs.enable_go_prerelease == false || inputs.enable_go_prerelease == 'false') || vars.CI_ENABLE_GO_PRERELEASE == 'false') && '{"go":["1.22.x","1.23.x"]}' || '{"go":["1.22.x","1.23.x","1.24.x","1.25.x"]}') }}
     env:
       PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/devops
     defaults:
@@ -82,7 +60,7 @@ jobs:
         run: ./dev build-go
       - name: Coverage Go
         env:
-          GOFLAGS: ${{ (vars.CI_VERBOSE_LOGS == 'false' || (github.event_name == 'workflow_dispatch' && (github.event.inputs.verbose_logs == false || github.event.inputs.verbose_logs == 'false')) || (github.event_name == 'workflow_call' && (inputs.verbose_logs == false || inputs.verbose_logs == 'false'))) && '' || '-v' }}
+          GOFLAGS: ${{ (vars.CI_VERBOSE_LOGS == 'false' || inputs.verbose_logs == false || inputs.verbose_logs == 'false') && '' || '-v' }}
         continue-on-error: true
         run: ./dev coverage-go
       - name: Vet Go
@@ -150,7 +128,7 @@ jobs:
     runs-on: macos-latest
     strategy:
       fail-fast: false
-      matrix: ${{ fromJson(( (github.event_name == 'workflow_dispatch' && (github.event.inputs.enable_go_prerelease == false || github.event.inputs.enable_go_prerelease == 'false')) || (github.event_name == 'workflow_call' && (inputs.enable_go_prerelease == false || inputs.enable_go_prerelease == 'false')) || vars.CI_ENABLE_GO_PRERELEASE == 'false') && '{"go":["1.22.x","1.23.x"]}' || '{"go":["1.22.x","1.23.x","1.24.x","1.25.x"]}') }}
+      matrix: ${{ fromJson(((inputs.enable_go_prerelease == false || inputs.enable_go_prerelease == 'false') || vars.CI_ENABLE_GO_PRERELEASE == 'false') && '{"go":["1.22.x","1.23.x"]}' || '{"go":["1.22.x","1.23.x","1.24.x","1.25.x"]}') }}
     env:
       PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/devops
     defaults:
@@ -243,7 +221,7 @@ jobs:
     runs-on: windows-latest
     strategy:
       fail-fast: false
-      matrix: ${{ fromJson(( (github.event_name == 'workflow_dispatch' && (github.event.inputs.enable_go_prerelease == false || github.event.inputs.enable_go_prerelease == 'false')) || (github.event_name == 'workflow_call' && (inputs.enable_go_prerelease == false || inputs.enable_go_prerelease == 'false')) || vars.CI_ENABLE_GO_PRERELEASE == 'false') && '{"go":["1.22.x","1.23.x"]}' || '{"go":["1.22.x","1.23.x","1.24.x","1.25.x"]}') }}
+      matrix: ${{ fromJson(((inputs.enable_go_prerelease == false || inputs.enable_go_prerelease == 'false') || vars.CI_ENABLE_GO_PRERELEASE == 'false') && '{"go":["1.22.x","1.23.x"]}' || '{"go":["1.22.x","1.23.x","1.24.x","1.25.x"]}') }}
     env:
       PYTHON: python
       PYTHONPATH: ${{ github.workspace }};${{ github.workspace }}/devops

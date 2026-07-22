@@ -7,26 +7,6 @@ on:
         description: "Enable verbose test output"
         type: boolean
         default: true
-  push:
-    branches-ignore:
-      - main
-    paths:
-      - "java/**"
-      - "devops/**"
-      - "tools/ci/**"
-      - ".github/workflows/java.yml"
-  pull_request:
-    paths:
-      - "java/**"
-      - "devops/**"
-      - "tools/ci/**"
-      - ".github/workflows/java.yml"
-  workflow_dispatch:
-    inputs:
-      verbose_logs:
-        description: "Enable verbose test output"
-        type: boolean
-        default: true
 
 env:
   JAVA_COVER_LINES: "none"

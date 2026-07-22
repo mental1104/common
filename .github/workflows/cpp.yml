@@ -7,28 +7,10 @@ on:
         description: "Enable verbose test output"
         type: boolean
         default: true
-  push:
-    branches-ignore:
-      - main
-    paths:
-      - "cpp/**"
-      - "devops/**"
-      - ".github/workflows/cpp.yml"
-  pull_request:
-    paths:
-      - "cpp/**"
-      - "devops/**"
-      - ".github/workflows/cpp.yml"
-  workflow_dispatch:
-    inputs:
-      verbose_logs:
-        description: "Enable verbose test output"
-        type: boolean
-        default: true
 
 env:
   PYTHONPATH: "${{ github.workspace }}:${{ github.workspace }}/devops"
-  CTEST_V: "${{ (vars.CI_VERBOSE_LOGS == 'false' || (github.event_name == 'workflow_dispatch' && (github.event.inputs.verbose_logs == false || github.event.inputs.verbose_logs == 'false')) || (github.event_name == 'workflow_call' && (inputs.verbose_logs == false || inputs.verbose_logs == 'false'))) && '' || '-V' }}"
+  CTEST_V: "${{ (vars.CI_VERBOSE_LOGS == 'false' || inputs.verbose_logs == false || inputs.verbose_logs == 'false') && '' || '-V' }}"
 
 jobs:
   linux:
