@@ -51,7 +51,7 @@ type HTTPOutcomeObserver func(request *http.Request, outcome HTTPOutcome)
 
 // ClassifyHTTPOutcome 根据 net/http 返回的 response 和 error 区分 HTTP 层失败与网络层失败。
 // err 非 nil 时网络层失败优先，即使 response 也非 nil；这与 http.Client.Do 的错误处理约定一致。
-// response 非 nil且 err 为 nil 时，状态码大于等于 400 归类为 HTTP 层失败，其他状态归类为成功。
+// response 非 nil 且 err 为 nil 时，状态码大于等于 400 归类为 HTTP 层失败，其他状态归类为成功。
 func ClassifyHTTPOutcome(response *http.Response, err error) HTTPOutcome {
 	if err != nil {
 		return HTTPOutcome{
