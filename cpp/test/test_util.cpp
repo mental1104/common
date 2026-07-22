@@ -3,6 +3,7 @@
 #include <chrono>
 #include <list>
 #include <map>
+#include <random>
 #include <set>
 #include <string>
 #include <vector>
@@ -68,4 +69,33 @@ TEST(ExponentialBackoffTest, IntegralCtorDefaultsAndCap) {
   EXPECT_EQ(backoff_int.next(), std::chrono::milliseconds(12)); // capped
   mental1104::ExponentialBackoff backoff_default; // 使用默认参数 10,200,2
   EXPECT_EQ(backoff_default.next(), std::chrono::milliseconds(10));
+}
+
+TEST(ExponentialBackoffTest, SymmetricJitterKeepsZeroRatioDeterministic) {
+  std::mt19937 rng(123);
+  mental1104::ExponentialBackoff backoff(10, 50, 2);
+
+  EXPECT_EQ(backoff.next(0.0, rng), std::chrono::milliseconds(10));
+  EXPECT_EQ(backoff.next(0.0, rng), std::chrono::milliseconds(20));
+  EXPECT_EQ(backoff.next(0.0, rng), std::chrono::milliseconds(40));
+  EXPECT_EQ(backoff.next(0.0, rng), std::chrono::milliseconds(50));
+}
+
+TEST(ExponentialBackoffTest, SymmetricJitterStaysWithinConfiguredWindow) {
+  std::mt19937 rng(123);
+  mental1104::ExponentialBackoff backoff(100, 100, 2);
+
+  for (int i = 0; i < 1000; ++i) {
+    auto delay = backoff.next(0.2, rng);
+    EXPECT_GE(delay, std::chrono::milliseconds(80));
+    EXPECT_LE(delay, std::chrono::milliseconds(120));
+  }
+}
+
+TEST(ExponentialBackoffTest, SymmetricJitterRejectsInvalidRatio) {
+  std::mt19937 rng(123);
+  mental1104::ExponentialBackoff backoff(10, 50, 2);
+
+  EXPECT_THROW((void)backoff.next(-0.1, rng), std::invalid_argument);
+  EXPECT_THROW((void)backoff.next(1.1, rng), std::invalid_argument);
 }
