@@ -1,17 +1,23 @@
 #include "mental1104/mq/backend.h"
+
 namespace mental1104 {
 namespace mq {
-ReceiveResult ReceiveResult::success(const BackendMessage &v) {
-  ReceiveResult r;
-  r.ok = true;
-  r.value = v;
-  return r;
+
+/// 创建包含 BackendMessage 副本的成功接收结果。
+ReceiveResult ReceiveResult::success(const BackendMessage &value) {
+  ReceiveResult result;
+  result.ok = true;
+  result.value = value;
+  return result;
 }
-ReceiveResult ReceiveResult::failure(const MQError &e) {
-  ReceiveResult r;
-  r.ok = false;
-  r.error = e;
-  return r;
+
+/// 创建包含统一错误的失败接收结果。
+ReceiveResult ReceiveResult::failure(const MQError &error) {
+  ReceiveResult result;
+  result.ok = false;
+  result.error = error;
+  return result;
 }
+
 } // namespace mq
 } // namespace mental1104
