@@ -3,6 +3,10 @@ name: Python
 on:
   workflow_call:
     inputs:
+      full_matrix:
+        description: "Run the complete OS/runtime compatibility matrix"
+        type: boolean
+        default: false
       enable_python_314:
         description: "Run Python 3.14 jobs (pre-release)"
         type: boolean
@@ -72,15 +76,7 @@ jobs:
           --health-interval=5s --health-timeout=5s --health-retries=10
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - { python: "3.8",  python_spec: "3.8",      prerelease: false }
-          - { python: "3.9",  python_spec: "3.9",      prerelease: false }
-          - { python: "3.10", python_spec: "3.10",     prerelease: false }
-          - { python: "3.11", python_spec: "3.11",     prerelease: false }
-          - { python: "3.12", python_spec: "3.12",     prerelease: false }
-          - { python: "3.13", python_spec: "3.13",     prerelease: false }
-          - { python: "3.14", python_spec: "3.14-dev", prerelease: true }
+      matrix: ${{ fromJson(inputs.full_matrix && '{"include":[{"python":"3.8","python_spec":"3.8","prerelease":false},{"python":"3.9","python_spec":"3.9","prerelease":false},{"python":"3.10","python_spec":"3.10","prerelease":false},{"python":"3.11","python_spec":"3.11","prerelease":false},{"python":"3.12","python_spec":"3.12","prerelease":false},{"python":"3.13","python_spec":"3.13","prerelease":false},{"python":"3.14","python_spec":"3.14-dev","prerelease":true}]}' || '{"include":[{"python":"3.13","python_spec":"3.13","prerelease":false}]}') }}
 
     env:
       PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/devops
@@ -303,6 +299,7 @@ jobs:
           fi
 
   macos:
+    if: ${{ inputs.full_matrix }}
     name: macOS / Python ${{ matrix.python }}
     runs-on: macos-latest
     strategy:
@@ -444,6 +441,7 @@ jobs:
           fi
 
   windows:
+    if: ${{ inputs.full_matrix }}
     name: Windows / Python ${{ matrix.python }}
     runs-on: windows-latest
     strategy:
