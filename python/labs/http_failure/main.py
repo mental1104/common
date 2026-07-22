@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import http.client
 import socket
 import threading
@@ -30,17 +31,15 @@ class FailureHandler(BaseHTTPRequestHandler):
             return
         if self.path == "/eof":
             # 在 HTTP 状态行出现前关闭连接，使客户端只能得到网络层异常。
-            try:
+            with contextlib.suppress(OSError):
                 self.connection.shutdown(socket.SHUT_RDWR)
-            except OSError:
-                pass
             self.connection.close()
             self.close_connection = True
             return
 
         self._send_empty_response(204)
 
-    def log_message(self, format_string: str, *args: object) -> None:
+    def log_message(self, _format_string: str, *_args: object) -> None:
         """关闭 BaseHTTPRequestHandler 的默认标准错误日志，保持实验输出稳定。"""
 
     def _send_empty_response(self, status_code: int) -> None:
