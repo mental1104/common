@@ -22,8 +22,8 @@ class FakeProducerBackend : public IProducerBackend {
 public:
   FakeProducerBackend() : reject(false), duplicate(false), close_count(0) {}
 
-  /// 析构时复用幂等 close，保证测试提前失败也回收线程。
-  ~FakeProducerBackend() { close(); }
+  /// 析构时直接回收 worker，不调用虚方法，保证测试提前失败也不会泄漏线程。
+  ~FakeProducerBackend() override { this->join_workers(); }
 
   /// 记录最后一条消息并按 reject 开关返回同步结果。
   SendResult send(const Message &message) override {
@@ -48,15 +48,22 @@ public:
     return OperationResult::success();
   }
 
-  /// 幂等语义由 Bridge 验证；本 fake 记录实际调用次数并 join 全部 worker。
+  /// 记录实际调用次数，并回收所有已接受异步请求对应的 worker。
   OperationResult close() override {
     ++close_count;
-    for (std::size_t i = 0; i < workers.size(); ++i)
-      if (workers[i].joinable())
-        workers[i].join();
+    this->join_workers();
     return OperationResult::success();
   }
 
+private:
+  /// Join 尚未完成的 worker；可在显式 close 后由析构函数重复安全调用。
+  void join_workers() {
+    for (std::size_t i = 0; i < workers.size(); ++i)
+      if (workers[i].joinable())
+        workers[i].join();
+  }
+
+public:
   bool reject;
   bool duplicate;
   std::atomic<int> close_count;
