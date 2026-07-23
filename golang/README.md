@@ -9,8 +9,8 @@
 ## 分类
 
 - 集合与字符串包含判断
-- 重试与退避
 - CLI 与实验
+- 重试与退避
 
 ## 用法索引
 
@@ -22,9 +22,8 @@
 | 集合与字符串包含判断 | `InMapValue` | 泛型函数 | `github.com/mental1104/common/golang` | 以类型安全方式检查 map 值中是否存在指定值。 |
 | 集合与字符串包含判断 | `InString` | 函数 | `github.com/mental1104/common/golang` | 检查字符串是否包含子串。 |
 | 集合与字符串包含判断 | `InRune` | 函数 | `github.com/mental1104/common/golang` | 检查字符串是否包含指定 rune。 |
-| 并发与限流 | `TokenBucket`, `ErrNilContext` | 结构体 / 错误值 | `github.com/mental1104/common/golang` | 单进程内阻塞获取令牌，并支持 Context 取消。 |
-| 重试与退避 | `retry.Do` | 函数 | `github.com/mental1104/common/golang/mental1104/retry` | 以最大尝试次数、指数退避、抖动、错误分类和 context deadline 控制重试。 |
 | CLI 与实验 | `labctl`, `labs/*` | 命令 | `./golang/cmd/labctl`, `./golang/labs/*` | 可运行的实验 / 演示入口。 |
+| 重试与退避 | `retry.Do` | 函数 | `github.com/mental1104/common/golang/mental1104/retry` | 以最大尝试次数、指数退避、抖动、错误分类和 context deadline 控制重试。 |
 
 ## 详情
 
@@ -219,43 +218,32 @@ func main() {
 true
 ```
 
-### `TokenBucket`
+### 实验命令
 
-- **类别：** 并发与限流
-- **类型：** 结构体、构造函数、方法、错误值
-- **定义位置：** `golang/mental1104/token_bucket.go`
-- **导入：** `mental1104 "github.com/mental1104/common/golang"`
-- **用途：** 在单个 Go 进程内按长期速率和突发容量阻塞获取执行资格；等待过程支持 `context.Context` 取消。
+- **类别：** CLI 与实验
+- **类型：** 命令包
+- **定义位置：** `golang/cmd/labctl`, `golang/labs/*`
+- **导入 / 路径：** 在 `golang/` 下通过 `go run ./cmd/labctl` 或具体实验目录运行
+- **用途：** 运行本地调度器、网络、内存和 GC 实验演示。
 
 **基础用法：**
 
-```go
-package main
+```bash
+cd golang
+go run ./cmd/labctl
+go run ./labs/gc/minimal
+```
 
-import (
-	"context"
-	mental1104 "github.com/mental1104/common/golang"
-)
+**示例输出：**
 
-func main() {
-	bucket, err := mental1104.NewTokenBucket(20, 3)
-	if err != nil {
-		panic(err)
-	}
-
-	if err := bucket.Acquire(context.Background()); err != nil {
-		panic(err)
-	}
-	bucket.Release()
-}
+```text
+labctl demo run: docs/labs/_verify/<YYYYMMDDTHHMMSSZ>
+gc minimal demo: <YYYYMMDDTHHMMSSZ>
 ```
 
 **备注：**
 
-- 创建时为满桶；`Acquire` 每次消费一个令牌，令牌通过单调时间按需补充，不创建后台 goroutine。
-- `Release` 是空操作，完成任务后不会归还速率额度。
-- `nil` Context 返回 `ErrNilContext`；取消返回 `context.Canceled` 或 `context.DeadlineExceeded`，且不消费令牌。
-- 状态仅在单进程内有效；每个等待者拥有独立 Timer，不保证严格公平，也不提供 `TryAcquire`、批量获取或指标。
+- 待复核：实验是可运行演示，不是稳定的可复用库 API。
 
 ### `retry.Do`
 
@@ -303,30 +291,3 @@ func callRemoteService() error { return nil }
 - 下一次退避放不进剩余 deadline 时直接返回 `context.DeadlineExceeded`，不会继续 sleep。
 - `Sleep`、`Now` 和 `Random` 是测试注入点，普通调用通常留空。
 - `Retryable` 应由业务区分临时错误和永久错误；参数错误、认证失败等通常不应重试。
-
-### 实验命令
-
-- **类别：** CLI 与实验
-- **类型：** 命令包
-- **定义位置：** `golang/cmd/labctl`, `golang/labs/*`
-- **导入 / 路径：** 在 `golang/` 下通过 `go run ./cmd/labctl` 或具体实验目录运行
-- **用途：** 运行本地调度器、网络、内存和 GC 实验演示。
-
-**基础用法：**
-
-```bash
-cd golang
-go run ./cmd/labctl
-go run ./labs/gc/minimal
-```
-
-**示例输出：**
-
-```text
-labctl demo run: docs/labs/_verify/<YYYYMMDDTHHMMSSZ>
-gc minimal demo: <YYYYMMDDTHHMMSSZ>
-```
-
-**备注：**
-
-- 待复核：实验是可运行演示，不是稳定的可复用库 API。
