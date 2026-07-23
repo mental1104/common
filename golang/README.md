@@ -10,6 +10,7 @@
 
 - 集合与字符串包含判断
 - CLI 与实验
+- 重试与退避
 
 ## 用法索引
 
@@ -23,6 +24,7 @@
 | 集合与字符串包含判断 | `InRune` | 函数 | `github.com/mental1104/common/golang` | 检查字符串是否包含指定 rune。 |
 | 并发与限流 | `TokenBucket`, `ErrNilContext` | 结构体 / 错误值 | `github.com/mental1104/common/golang` | 单进程内阻塞获取令牌，并支持 Context 取消。 |
 | CLI 与实验 | `labctl`, `labs/*` | 命令 | `./golang/cmd/labctl`, `./golang/labs/*` | 可运行的实验 / 演示入口。 |
+| 重试与退避 | `retry.Do` | 函数 | `github.com/mental1104/common/golang/mental1104/retry` | 以最大尝试次数、指数退避、抖动、错误分类和 context deadline 控制重试。 |
 
 ## 详情
 
@@ -282,3 +284,50 @@ gc minimal demo: <YYYYMMDDTHHMMSSZ>
 **备注：**
 
 - 待复核：实验是可运行演示，不是稳定的可复用库 API。
+
+### `retry.Do`
+
+- **类别：** 重试与退避
+- **类型：** 函数与配置类型
+- **定义位置：** `golang/mental1104/retry`
+- **导入：** `github.com/mental1104/common/golang/mental1104/retry`
+- **用途：** 对短暂网络失败等可重试错误执行指数退避，并由 context 限制总体 deadline。
+
+**基础用法：**
+
+```go
+package main
+
+import (
+	"context"
+	"time"
+
+	"github.com/mental1104/common/golang/mental1104/retry"
+)
+
+func main() {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	_ = retry.Do(ctx, retry.Options{
+		MaxAttempts: 4,
+		BaseDelay:   100 * time.Millisecond,
+		MaxDelay:    time.Second,
+		JitterRatio: 0.2,
+		Retryable: func(err error) bool {
+			return err != nil
+		},
+	}, func() error {
+		return callRemoteService()
+	})
+}
+
+func callRemoteService() error { return nil }
+```
+
+**备注：**
+
+- `MaxAttempts` 包含第一次调用，因此 4 次尝试最多只会等待 3 次。
+- 下一次退避放不进剩余 deadline 时直接返回 `context.DeadlineExceeded`，不会继续 sleep。
+- `Sleep`、`Now` 和 `Random` 是测试注入点，普通调用通常留空。
+- `Retryable` 应由业务区分临时错误和永久错误；参数错误、认证失败等通常不应重试。
