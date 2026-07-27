@@ -1,6 +1,23 @@
 name: Main Gate
 
 on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths:
+      - "cpp/**"
+      - "python/**"
+      - "golang/**"
+      - "rust/**"
+      - "dotnet/**"
+      - "java/**"
+      - "export/**"
+      - "devops/**"
+      - "tools/ci/**"
+      - "tools/walkthrough/**"
+      - ".github/actions/**"
+      - ".github/workflows/**"
+      - "dev"
   push:
     branches: [main]
     paths:
@@ -23,12 +40,19 @@ permissions:
   contents: read
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event_name == 'workflow_dispatch' && github.run_id || github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'push' }}
+  group: ${{ github.workflow }}-${{ github.event_name == 'workflow_dispatch' && github.run_id || github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'workflow_dispatch' }}
 
 jobs:
+  pr:
+    name: Ready PR fast gate
+    if: github.event_name == 'pull_request' && github.event.pull_request.draft == false
+    uses: ./.github/workflows/ci-pr.yml
+    secrets: inherit
+
   validate:
     name: Validate main ref
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     steps:
       - name: Require main branch
@@ -96,7 +120,8 @@ jobs:
   cpp:
     needs: [validate, changes]
     if: >-
-      always() && needs.validate.result == 'success' &&
+      always() && github.event_name != 'pull_request' &&
+      needs.validate.result == 'success' &&
       (github.event_name == 'workflow_dispatch' ||
        (needs.changes.result == 'success' &&
         (needs.changes.outputs.cpp == 'true' || needs.changes.outputs.pages == 'true')))
@@ -108,7 +133,8 @@ jobs:
   python:
     needs: [validate, changes]
     if: >-
-      always() && needs.validate.result == 'success' &&
+      always() && github.event_name != 'pull_request' &&
+      needs.validate.result == 'success' &&
       (github.event_name == 'workflow_dispatch' ||
        (needs.changes.result == 'success' &&
         (needs.changes.outputs.python == 'true' || needs.changes.outputs.pages == 'true')))
@@ -120,7 +146,8 @@ jobs:
   golang:
     needs: [validate, changes]
     if: >-
-      always() && needs.validate.result == 'success' &&
+      always() && github.event_name != 'pull_request' &&
+      needs.validate.result == 'success' &&
       (github.event_name == 'workflow_dispatch' ||
        (needs.changes.result == 'success' &&
         (needs.changes.outputs.golang == 'true' || needs.changes.outputs.pages == 'true')))
@@ -132,7 +159,8 @@ jobs:
   rust:
     needs: [validate, changes]
     if: >-
-      always() && needs.validate.result == 'success' &&
+      always() && github.event_name != 'pull_request' &&
+      needs.validate.result == 'success' &&
       (github.event_name == 'workflow_dispatch' ||
        (needs.changes.result == 'success' &&
         (needs.changes.outputs.rust == 'true' || needs.changes.outputs.pages == 'true')))
@@ -144,7 +172,8 @@ jobs:
   dotnet:
     needs: [validate, changes]
     if: >-
-      always() && needs.validate.result == 'success' &&
+      always() && github.event_name != 'pull_request' &&
+      needs.validate.result == 'success' &&
       (github.event_name == 'workflow_dispatch' ||
        (needs.changes.result == 'success' &&
         (needs.changes.outputs.dotnet == 'true' || needs.changes.outputs.pages == 'true')))
@@ -156,7 +185,8 @@ jobs:
   java:
     needs: [validate, changes]
     if: >-
-      always() && needs.validate.result == 'success' &&
+      always() && github.event_name != 'pull_request' &&
+      needs.validate.result == 'success' &&
       (github.event_name == 'workflow_dispatch' ||
        (needs.changes.result == 'success' &&
         (needs.changes.outputs.java == 'true' || needs.changes.outputs.pages == 'true')))
