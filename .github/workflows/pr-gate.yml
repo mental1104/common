@@ -24,6 +24,7 @@ on:
 
 permissions:
   contents: read
+  statuses: write
 
 concurrency:
   group: common-ready-pr-${{ github.event.pull_request.number || github.ref }}
@@ -138,3 +139,39 @@ jobs:
     with:
       full_matrix: false
     secrets: inherit
+
+  report_bootstrap:
+    name: Report bootstrap result
+    needs: [cpp, python, golang, rust, dotnet, java]
+    if: always() && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      CPP_RESULT: ${{ needs.cpp.result }}
+      PYTHON_RESULT: ${{ needs.python.result }}
+      GOLANG_RESULT: ${{ needs.golang.result }}
+      RUST_RESULT: ${{ needs.rust.result }}
+      DOTNET_RESULT: ${{ needs.dotnet.result }}
+      JAVA_RESULT: ${{ needs.java.result }}
+    steps:
+      - name: Publish commit status
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          state="success"
+          for result in \
+            "${CPP_RESULT}" "${PYTHON_RESULT}" "${GOLANG_RESULT}" \
+            "${RUST_RESULT}" "${DOTNET_RESULT}" "${JAVA_RESULT}"; do
+            if [[ "${result}" == "failure" || "${result}" == "cancelled" ]]; then
+              state="failure"
+            fi
+          done
+
+          gh api --method POST \
+            "repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}" \
+            -f state="${state}" \
+            -f context="common/bootstrap-ready-pr-gate" \
+            -f description="Ready PR fast matrices: ${state}"
+
+          test "${state}" = "success"
