@@ -18,18 +18,21 @@ on:
       - ".github/actions/**"
       - ".github/workflows/**"
       - "dev"
+  # 仅用于当前迁移 PR 首次注册并自证新 Workflow；分支删除后不会产生运行。
+  push:
+    branches: [fix/restore-ready-pr-ci-20260727]
 
 permissions:
   contents: read
 
 concurrency:
-  group: common-ready-pr-${{ github.event.pull_request.number }}
+  group: common-ready-pr-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
   changes:
     name: Detect affected pipelines
-    if: github.event.pull_request.draft == false
+    if: github.event_name == 'pull_request' && github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     outputs:
       cpp: ${{ steps.routes.outputs.cpp }}
@@ -78,7 +81,9 @@ jobs:
 
   cpp:
     needs: changes
-    if: needs.changes.outputs.cpp == 'true'
+    if: >-
+      always() &&
+      (github.event_name == 'push' || needs.changes.outputs.cpp == 'true')
     uses: ./.github/workflows/cpp.yml
     with:
       full_matrix: false
@@ -86,7 +91,9 @@ jobs:
 
   python:
     needs: changes
-    if: needs.changes.outputs.python == 'true'
+    if: >-
+      always() &&
+      (github.event_name == 'push' || needs.changes.outputs.python == 'true')
     uses: ./.github/workflows/python.yml
     with:
       full_matrix: false
@@ -94,7 +101,9 @@ jobs:
 
   golang:
     needs: changes
-    if: needs.changes.outputs.golang == 'true'
+    if: >-
+      always() &&
+      (github.event_name == 'push' || needs.changes.outputs.golang == 'true')
     uses: ./.github/workflows/golang.yml
     with:
       full_matrix: false
@@ -102,7 +111,9 @@ jobs:
 
   rust:
     needs: changes
-    if: needs.changes.outputs.rust == 'true'
+    if: >-
+      always() &&
+      (github.event_name == 'push' || needs.changes.outputs.rust == 'true')
     uses: ./.github/workflows/rust.yml
     with:
       full_matrix: false
@@ -110,7 +121,9 @@ jobs:
 
   dotnet:
     needs: changes
-    if: needs.changes.outputs.dotnet == 'true'
+    if: >-
+      always() &&
+      (github.event_name == 'push' || needs.changes.outputs.dotnet == 'true')
     uses: ./.github/workflows/dotnet.yml
     with:
       full_matrix: false
@@ -118,7 +131,9 @@ jobs:
 
   java:
     needs: changes
-    if: needs.changes.outputs.java == 'true'
+    if: >-
+      always() &&
+      (github.event_name == 'push' || needs.changes.outputs.java == 'true')
     uses: ./.github/workflows/java.yml
     with:
       full_matrix: false
