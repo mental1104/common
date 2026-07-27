@@ -44,7 +44,7 @@ concurrency:
   cancel-in-progress: ${{ github.event_name != 'workflow_dispatch' }}
 
 jobs:
-  validate-manual:
+  validate_manual:
     name: Validate manual main ref
     if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
@@ -115,10 +115,10 @@ jobs:
           route pages '^(tools/walkthrough/|\.github/workflows/)'
 
   cpp:
-    needs: [validate-manual, changes]
+    needs: [validate_manual, changes]
     if: >-
       always() &&
-      (github.event_name != 'workflow_dispatch' || needs.validate-manual.result == 'success') &&
+      (github.event_name != 'workflow_dispatch' || needs.validate_manual.result == 'success') &&
       (github.event_name == 'workflow_dispatch' ||
        (needs.changes.result == 'success' && needs.changes.outputs.cpp == 'true'))
     uses: ./.github/workflows/cpp.yml
@@ -127,10 +127,10 @@ jobs:
     secrets: inherit
 
   python:
-    needs: [validate-manual, changes]
+    needs: [validate_manual, changes]
     if: >-
       always() &&
-      (github.event_name != 'workflow_dispatch' || needs.validate-manual.result == 'success') &&
+      (github.event_name != 'workflow_dispatch' || needs.validate_manual.result == 'success') &&
       (github.event_name == 'workflow_dispatch' ||
        (needs.changes.result == 'success' && needs.changes.outputs.python == 'true'))
     uses: ./.github/workflows/python.yml
@@ -139,10 +139,10 @@ jobs:
     secrets: inherit
 
   golang:
-    needs: [validate-manual, changes]
+    needs: [validate_manual, changes]
     if: >-
       always() &&
-      (github.event_name != 'workflow_dispatch' || needs.validate-manual.result == 'success') &&
+      (github.event_name != 'workflow_dispatch' || needs.validate_manual.result == 'success') &&
       (github.event_name == 'workflow_dispatch' ||
        (needs.changes.result == 'success' && needs.changes.outputs.golang == 'true'))
     uses: ./.github/workflows/golang.yml
@@ -151,10 +151,10 @@ jobs:
     secrets: inherit
 
   rust:
-    needs: [validate-manual, changes]
+    needs: [validate_manual, changes]
     if: >-
       always() &&
-      (github.event_name != 'workflow_dispatch' || needs.validate-manual.result == 'success') &&
+      (github.event_name != 'workflow_dispatch' || needs.validate_manual.result == 'success') &&
       (github.event_name == 'workflow_dispatch' ||
        (needs.changes.result == 'success' && needs.changes.outputs.rust == 'true'))
     uses: ./.github/workflows/rust.yml
@@ -163,10 +163,10 @@ jobs:
     secrets: inherit
 
   dotnet:
-    needs: [validate-manual, changes]
+    needs: [validate_manual, changes]
     if: >-
       always() &&
-      (github.event_name != 'workflow_dispatch' || needs.validate-manual.result == 'success') &&
+      (github.event_name != 'workflow_dispatch' || needs.validate_manual.result == 'success') &&
       (github.event_name == 'workflow_dispatch' ||
        (needs.changes.result == 'success' && needs.changes.outputs.dotnet == 'true'))
     uses: ./.github/workflows/dotnet.yml
@@ -175,10 +175,10 @@ jobs:
     secrets: inherit
 
   java:
-    needs: [validate-manual, changes]
+    needs: [validate_manual, changes]
     if: >-
       always() &&
-      (github.event_name != 'workflow_dispatch' || needs.validate-manual.result == 'success') &&
+      (github.event_name != 'workflow_dispatch' || needs.validate_manual.result == 'success') &&
       (github.event_name == 'workflow_dispatch' ||
        (needs.changes.result == 'success' && needs.changes.outputs.java == 'true'))
     uses: ./.github/workflows/java.yml
@@ -204,7 +204,7 @@ jobs:
 
   notify-manual-failure:
     name: Notify manual failure
-    needs: [validate-manual, cpp, python, golang, rust, dotnet, java]
+    needs: [validate_manual, cpp, python, golang, rust, dotnet, java]
     if: >-
       always() && github.event_name == 'workflow_dispatch' &&
       github.ref == 'refs/heads/main' &&
