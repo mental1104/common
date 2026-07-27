@@ -1,48 +1,14 @@
 name: PR Gate
 
 on:
-  pull_request:
-    branches: [main]
-    types: [opened, synchronize, reopened, ready_for_review]
-    paths:
-      - "cpp/**"
-      - "python/**"
-      - "golang/**"
-      - "rust/**"
-      - "dotnet/**"
-      - "java/**"
-      - "export/**"
-      - "devops/**"
-      - "tools/ci/**"
-      - "tools/walkthrough/**"
-      - ".github/actions/**"
-      - ".github/workflows/**"
-      - "dev"
+  workflow_call:
 
 permissions:
   contents: read
 
-concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
-  cancel-in-progress: true
-
 jobs:
-  validate:
-    name: Validate Ready PR target
-    if: github.event.pull_request.draft == false
-    runs-on: ubuntu-latest
-    steps:
-      - name: Require main target
-        shell: bash
-        run: |
-          if [[ "${GITHUB_BASE_REF}" != "main" ]]; then
-            echo "::error::PR Gate only supports the main target."
-            exit 1
-          fi
-
   changes:
     name: Detect affected pipelines
-    needs: validate
     runs-on: ubuntu-latest
     outputs:
       cpp: ${{ steps.routes.outputs.cpp }}
