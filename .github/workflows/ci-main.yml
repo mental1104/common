@@ -1,4 +1,4 @@
-name: Main Gate
+name: CI Gate
 
 on:
   pull_request:
@@ -44,29 +44,24 @@ concurrency:
   cancel-in-progress: ${{ github.event_name != 'workflow_dispatch' }}
 
 jobs:
-  pr:
-    name: Ready PR fast gate
-    if: github.event_name == 'pull_request' && github.event.pull_request.draft == false
-    uses: ./.github/workflows/ci-pr.yml
-    secrets: inherit
-
-  validate:
-    name: Validate main ref
-    if: github.event_name != 'pull_request'
+  validate-manual:
+    name: Validate manual main ref
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - name: Require main branch
         shell: bash
         run: |
           if [[ "${GITHUB_REF}" != "refs/heads/main" ]]; then
-            echo "::error::Main Gate can only run against main."
+            echo "::error::CI Gate manual runs can only target main."
             exit 1
           fi
 
   changes:
     name: Detect affected pipelines
-    needs: validate
-    if: github.event_name == 'push'
+    if: >-
+      github.event_name == 'push' ||
+      (github.event_name == 'pull_request' && github.event.pull_request.draft == false)
     runs-on: ubuntu-latest
     outputs:
       cpp: ${{ steps.routes.outputs.cpp }}
@@ -86,19 +81,20 @@ jobs:
         id: routes
         shell: bash
         env:
-          BASE_SHA: ${{ github.event.before }}
-          HEAD_SHA: ${{ github.sha }}
+          BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+          HEAD_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
         run: |
           set -euo pipefail
 
+          # PR 比较真实 base/head；main push 比较 before/head，避免临时 merge commit 干扰。
           if [[ "${BASE_SHA}" =~ ^0+$ ]]; then
             changed_files="$(git show --pretty='' --name-only "${HEAD_SHA}")"
           else
+            git fetch --no-tags origin "${BASE_SHA}" "${HEAD_SHA}"
             changed_files="$(git diff --name-only "${BASE_SHA}" "${HEAD_SHA}")"
           fi
           printf '%s\n' "${changed_files}"
 
-          # main 路由只决定哪些完整语言矩阵需要验证本次合入。
           route() {
             local name="$1"
             local pattern="$2"
@@ -109,97 +105,91 @@ jobs:
             printf '%s=%s\n' "${name}" "${matched}" >> "${GITHUB_OUTPUT}"
           }
 
-          route cpp '^(cpp/|export/|devops/|tools/ci/|\.github/actions/cpp-coverage-artifact/|\.github/workflows/(cpp|ci-main|ci-pr)\.yml$|dev$)'
-          route python '^(python/|devops/|tools/ci/|\.github/workflows/(python|ci-main|ci-pr)\.yml$|dev$)'
-          route golang '^(golang/|devops/|tools/ci/|\.github/workflows/(golang|ci-main|ci-pr)\.yml$|dev$)'
-          route rust '^(rust/|devops/|tools/ci/|\.github/workflows/(rust|ci-main|ci-pr)\.yml$|dev$)'
-          route dotnet '^(dotnet/|devops/|tools/ci/|\.github/workflows/(dotnet|ci-main|ci-pr)\.yml$|dev$)'
-          route java '^(java/|devops/|tools/ci/|\.github/workflows/(java|ci-main|ci-pr)\.yml$|dev$)'
-          route pages '^(tools/walkthrough/|\.github/workflows/(walkthrough-pages|ci-main)\.yml$)'
+          # CI 路由或展示输入变化会验证全部语言；业务改动只验证对应语言。
+          route cpp '^(cpp/|export/|devops/|tools/ci/|tools/walkthrough/|\.github/actions/|\.github/workflows/|dev$)'
+          route python '^(python/|devops/|tools/ci/|tools/walkthrough/|\.github/workflows/|dev$)'
+          route golang '^(golang/|devops/|tools/ci/|tools/walkthrough/|\.github/workflows/|dev$)'
+          route rust '^(rust/|devops/|tools/ci/|tools/walkthrough/|\.github/workflows/|dev$)'
+          route dotnet '^(dotnet/|devops/|tools/ci/|tools/walkthrough/|\.github/workflows/|dev$)'
+          route java '^(java/|devops/|tools/ci/|tools/walkthrough/|\.github/workflows/|dev$)'
+          route pages '^(tools/walkthrough/|\.github/workflows/)'
 
   cpp:
-    needs: [validate, changes]
+    needs: [validate-manual, changes]
     if: >-
-      always() && github.event_name != 'pull_request' &&
-      needs.validate.result == 'success' &&
+      always() &&
+      (github.event_name != 'workflow_dispatch' || needs.validate-manual.result == 'success') &&
       (github.event_name == 'workflow_dispatch' ||
-       (needs.changes.result == 'success' &&
-        (needs.changes.outputs.cpp == 'true' || needs.changes.outputs.pages == 'true')))
+       (needs.changes.result == 'success' && needs.changes.outputs.cpp == 'true'))
     uses: ./.github/workflows/cpp.yml
     with:
-      full_matrix: true
+      full_matrix: ${{ github.event_name != 'pull_request' }}
     secrets: inherit
 
   python:
-    needs: [validate, changes]
+    needs: [validate-manual, changes]
     if: >-
-      always() && github.event_name != 'pull_request' &&
-      needs.validate.result == 'success' &&
+      always() &&
+      (github.event_name != 'workflow_dispatch' || needs.validate-manual.result == 'success') &&
       (github.event_name == 'workflow_dispatch' ||
-       (needs.changes.result == 'success' &&
-        (needs.changes.outputs.python == 'true' || needs.changes.outputs.pages == 'true')))
+       (needs.changes.result == 'success' && needs.changes.outputs.python == 'true'))
     uses: ./.github/workflows/python.yml
     with:
-      full_matrix: true
+      full_matrix: ${{ github.event_name != 'pull_request' }}
     secrets: inherit
 
   golang:
-    needs: [validate, changes]
+    needs: [validate-manual, changes]
     if: >-
-      always() && github.event_name != 'pull_request' &&
-      needs.validate.result == 'success' &&
+      always() &&
+      (github.event_name != 'workflow_dispatch' || needs.validate-manual.result == 'success') &&
       (github.event_name == 'workflow_dispatch' ||
-       (needs.changes.result == 'success' &&
-        (needs.changes.outputs.golang == 'true' || needs.changes.outputs.pages == 'true')))
+       (needs.changes.result == 'success' && needs.changes.outputs.golang == 'true'))
     uses: ./.github/workflows/golang.yml
     with:
-      full_matrix: true
+      full_matrix: ${{ github.event_name != 'pull_request' }}
     secrets: inherit
 
   rust:
-    needs: [validate, changes]
+    needs: [validate-manual, changes]
     if: >-
-      always() && github.event_name != 'pull_request' &&
-      needs.validate.result == 'success' &&
+      always() &&
+      (github.event_name != 'workflow_dispatch' || needs.validate-manual.result == 'success') &&
       (github.event_name == 'workflow_dispatch' ||
-       (needs.changes.result == 'success' &&
-        (needs.changes.outputs.rust == 'true' || needs.changes.outputs.pages == 'true')))
+       (needs.changes.result == 'success' && needs.changes.outputs.rust == 'true'))
     uses: ./.github/workflows/rust.yml
     with:
-      full_matrix: true
+      full_matrix: ${{ github.event_name != 'pull_request' }}
     secrets: inherit
 
   dotnet:
-    needs: [validate, changes]
+    needs: [validate-manual, changes]
     if: >-
-      always() && github.event_name != 'pull_request' &&
-      needs.validate.result == 'success' &&
+      always() &&
+      (github.event_name != 'workflow_dispatch' || needs.validate-manual.result == 'success') &&
       (github.event_name == 'workflow_dispatch' ||
-       (needs.changes.result == 'success' &&
-        (needs.changes.outputs.dotnet == 'true' || needs.changes.outputs.pages == 'true')))
+       (needs.changes.result == 'success' && needs.changes.outputs.dotnet == 'true'))
     uses: ./.github/workflows/dotnet.yml
     with:
-      full_matrix: true
+      full_matrix: ${{ github.event_name != 'pull_request' }}
     secrets: inherit
 
   java:
-    needs: [validate, changes]
+    needs: [validate-manual, changes]
     if: >-
-      always() && github.event_name != 'pull_request' &&
-      needs.validate.result == 'success' &&
+      always() &&
+      (github.event_name != 'workflow_dispatch' || needs.validate-manual.result == 'success') &&
       (github.event_name == 'workflow_dispatch' ||
-       (needs.changes.result == 'success' &&
-        (needs.changes.outputs.java == 'true' || needs.changes.outputs.pages == 'true')))
+       (needs.changes.result == 'success' && needs.changes.outputs.java == 'true'))
     uses: ./.github/workflows/java.yml
     with:
-      full_matrix: true
+      full_matrix: ${{ github.event_name != 'pull_request' }}
     secrets: inherit
 
   pages:
-    needs: [validate, changes, cpp, python, golang, rust, dotnet, java]
+    needs: [changes, cpp, python, golang, rust, dotnet, java]
     if: >-
       always() && github.event_name == 'push' &&
-      needs.validate.result == 'success' &&
       needs.changes.result == 'success' &&
       needs.changes.outputs.pages == 'true' &&
       !contains(needs.*.result, 'failure') &&
@@ -214,7 +204,7 @@ jobs:
 
   notify-manual-failure:
     name: Notify manual failure
-    needs: [validate, changes, cpp, python, golang, rust, dotnet, java]
+    needs: [validate-manual, cpp, python, golang, rust, dotnet, java]
     if: >-
       always() && github.event_name == 'workflow_dispatch' &&
       github.ref == 'refs/heads/main' &&
