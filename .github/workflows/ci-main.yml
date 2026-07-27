@@ -44,7 +44,7 @@ concurrency:
   cancel-in-progress: ${{ github.event_name != 'workflow_dispatch' }}
 
 jobs:
-  validate-target:
+  validate:
     name: Validate target ref
     if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     runs-on: ubuntu-latest
@@ -64,7 +64,7 @@ jobs:
 
   changes:
     name: Detect affected pipelines
-    needs: validate-target
+    needs: validate
     if: github.event_name != 'workflow_dispatch'
     runs-on: ubuntu-latest
     outputs:
@@ -99,83 +99,29 @@ jobs:
           fi
           printf '%s\n' "${changed_files}"
 
-          # 每个输出表示对应可复用 workflow 是否需要验证本次变更。
-          emit_route() {
-            local route="$1"
-            shift
-
+          # 将路径正则集中在路由层，语言 workflow 本身只负责执行快速或完整矩阵。
+          route() {
+            local name="$1"
+            local pattern="$2"
             local matched="false"
-            local pattern
-            for pattern in "$@"; do
-              if grep -Eq "${pattern}" <<<"${changed_files}"; then
-                matched="true"
-                break
-              fi
-            done
-
-            printf '%s=%s\n' "${route}" "${matched}" >> "${GITHUB_OUTPUT}"
+            if grep -Eq "${pattern}" <<<"${changed_files}"; then
+              matched="true"
+            fi
+            printf '%s=%s\n' "${name}" "${matched}" >> "${GITHUB_OUTPUT}"
           }
 
-          emit_route cpp \
-            '^cpp/' \
-            '^export/' \
-            '^devops/' \
-            '^tools/ci/' \
-            '^\.github/actions/cpp-coverage-artifact/' \
-            '^\.github/workflows/cpp\.yml$' \
-            '^\.github/workflows/ci-main\.yml$' \
-            '^dev$'
-
-          emit_route python \
-            '^python/' \
-            '^devops/' \
-            '^tools/ci/' \
-            '^\.github/workflows/python\.yml$' \
-            '^\.github/workflows/ci-main\.yml$' \
-            '^dev$'
-
-          emit_route golang \
-            '^golang/' \
-            '^devops/' \
-            '^tools/ci/' \
-            '^\.github/workflows/golang\.yml$' \
-            '^\.github/workflows/ci-main\.yml$' \
-            '^dev$'
-
-          emit_route rust \
-            '^rust/' \
-            '^devops/' \
-            '^tools/ci/' \
-            '^\.github/workflows/rust\.yml$' \
-            '^\.github/workflows/ci-main\.yml$' \
-            '^dev$'
-
-          emit_route dotnet \
-            '^dotnet/' \
-            '^devops/' \
-            '^tools/ci/' \
-            '^\.github/workflows/dotnet\.yml$' \
-            '^\.github/workflows/ci-main\.yml$' \
-            '^dev$'
-
-          emit_route java \
-            '^java/' \
-            '^devops/' \
-            '^tools/ci/' \
-            '^\.github/workflows/java\.yml$' \
-            '^\.github/workflows/ci-main\.yml$' \
-            '^dev$'
-
-          emit_route pages \
-            '^tools/walkthrough/' \
-            '^\.github/workflows/walkthrough-pages\.yml$' \
-            '^\.github/workflows/ci-main\.yml$'
+          route cpp '^(cpp/|export/|devops/|tools/ci/|\.github/actions/cpp-coverage-artifact/|\.github/workflows/(cpp|ci-main)\.yml$|dev$)'
+          route python '^(python/|devops/|tools/ci/|\.github/workflows/(python|ci-main)\.yml$|dev$)'
+          route golang '^(golang/|devops/|tools/ci/|\.github/workflows/(golang|ci-main)\.yml$|dev$)'
+          route rust '^(rust/|devops/|tools/ci/|\.github/workflows/(rust|ci-main)\.yml$|dev$)'
+          route dotnet '^(dotnet/|devops/|tools/ci/|\.github/workflows/(dotnet|ci-main)\.yml$|dev$)'
+          route java '^(java/|devops/|tools/ci/|\.github/workflows/(java|ci-main)\.yml$|dev$)'
+          route pages '^(tools/walkthrough/|\.github/workflows/(walkthrough-pages|ci-main)\.yml$)'
 
   cpp:
-    needs: [validate-target, changes]
+    needs: [validate, changes]
     if: >-
-      always() &&
-      needs.validate-target.result == 'success' &&
+      always() && needs.validate.result == 'success' &&
       (github.event_name == 'workflow_dispatch' ||
        (needs.changes.result == 'success' &&
         (needs.changes.outputs.cpp == 'true' || needs.changes.outputs.pages == 'true')))
@@ -185,10 +131,9 @@ jobs:
     secrets: inherit
 
   python:
-    needs: [validate-target, changes]
+    needs: [validate, changes]
     if: >-
-      always() &&
-      needs.validate-target.result == 'success' &&
+      always() && needs.validate.result == 'success' &&
       (github.event_name == 'workflow_dispatch' ||
        (needs.changes.result == 'success' &&
         (needs.changes.outputs.python == 'true' || needs.changes.outputs.pages == 'true')))
@@ -197,11 +142,22 @@ jobs:
       full_matrix: ${{ github.event_name != 'pull_request' }}
     secrets: inherit
 
-  rust:
-    needs: [validate-target, changes]
+  golang:
+    needs: [validate, changes]
     if: >-
-      always() &&
-      needs.validate-target.result == 'success' &&
+      always() && needs.validate.result == 'success' &&
+      (github.event_name == 'workflow_dispatch' ||
+       (needs.changes.result == 'success' &&
+        (needs.changes.outputs.golang == 'true' || needs.changes.outputs.pages == 'true')))
+    uses: ./.github/workflows/golang.yml
+    with:
+      full_matrix: ${{ github.event_name != 'pull_request' }}
+    secrets: inherit
+
+  rust:
+    needs: [validate, changes]
+    if: >-
+      always() && needs.validate.result == 'success' &&
       (github.event_name == 'workflow_dispatch' ||
        (needs.changes.result == 'success' &&
         (needs.changes.outputs.rust == 'true' || needs.changes.outputs.pages == 'true')))
@@ -211,10 +167,9 @@ jobs:
     secrets: inherit
 
   dotnet:
-    needs: [validate-target, changes]
+    needs: [validate, changes]
     if: >-
-      always() &&
-      needs.validate-target.result == 'success' &&
+      always() && needs.validate.result == 'success' &&
       (github.event_name == 'workflow_dispatch' ||
        (needs.changes.result == 'success' &&
         (needs.changes.outputs.dotnet == 'true' || needs.changes.outputs.pages == 'true')))
@@ -223,24 +178,10 @@ jobs:
       full_matrix: ${{ github.event_name != 'pull_request' }}
     secrets: inherit
 
-  golang:
-    needs: [validate-target, changes]
-    if: >-
-      always() &&
-      needs.validate-target.result == 'success' &&
-      (github.event_name == 'workflow_dispatch' ||
-       (needs.changes.result == 'success' &&
-        (needs.changes.outputs.golang == 'true' || needs.changes.outputs.pages == 'true')))
-    uses: ./.github/workflows/golang.yml
-    with:
-      full_matrix: ${{ github.event_name != 'pull_request' }}
-    secrets: inherit
-
   java:
-    needs: [validate-target, changes]
+    needs: [validate, changes]
     if: >-
-      always() &&
-      needs.validate-target.result == 'success' &&
+      always() && needs.validate.result == 'success' &&
       (github.event_name == 'workflow_dispatch' ||
        (needs.changes.result == 'success' &&
         (needs.changes.outputs.java == 'true' || needs.changes.outputs.pages == 'true')))
@@ -250,11 +191,10 @@ jobs:
     secrets: inherit
 
   pages:
-    needs: [validate-target, changes, cpp, python, rust, dotnet, golang, java]
+    needs: [validate, changes, cpp, python, golang, rust, dotnet, java]
     if: >-
-      always() &&
-      github.event_name == 'push' &&
-      needs.validate-target.result == 'success' &&
+      always() && github.event_name == 'push' &&
+      needs.validate.result == 'success' &&
       needs.changes.result == 'success' &&
       needs.changes.outputs.pages == 'true' &&
       !contains(needs.*.result, 'failure') &&
@@ -269,10 +209,9 @@ jobs:
 
   notify-manual-failure:
     name: Notify manual failure
-    needs: [validate-target, changes, cpp, python, rust, dotnet, golang, java]
+    needs: [validate, changes, cpp, python, golang, rust, dotnet, java]
     if: >-
-      always() &&
-      github.event_name == 'workflow_dispatch' &&
+      always() && github.event_name == 'workflow_dispatch' &&
       github.ref == 'refs/heads/main' &&
       contains(needs.*.result, 'failure')
     runs-on: ubuntu-latest
