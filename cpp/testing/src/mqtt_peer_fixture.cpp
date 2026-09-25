@@ -5,19 +5,19 @@
 namespace mental1104 {
 namespace testing {
 
+/// 初始化一份完整等待结果。
+MqttWaitResult::MqttWaitResult(const mqtt::Result &status_value,
+                               const mqtt::Message &message_value)
+    : status(status_value), message(message_value) {}
+
 /// 创建成功消息等待结果。
 MqttWaitResult MqttWaitResult::success(const mqtt::Message &message) {
-  MqttWaitResult result;
-  result.status = mqtt::Result::success();
-  result.message = message;
-  return result;
+  return MqttWaitResult(mqtt::Result::success(), message);
 }
 
 /// 创建失败消息等待结果。
 MqttWaitResult MqttWaitResult::failure(const mqtt::Result &status) {
-  MqttWaitResult result;
-  result.status = status;
-  return result;
+  return MqttWaitResult(status, mqtt::Message());
 }
 
 /// 注册内部 callback，把网络线程消息转换为可等待的测试队列。
