@@ -19,6 +19,7 @@
 - 计时
 - 并发
 - 网络与服务
+- MQTT
 - 调试
 - 数值计算器
 
@@ -47,6 +48,7 @@
 | 容器 | `BasicBloomFilter`, `BloomFilter`, `CoarseLockBloomFilter`, `CoarseLockStringBloomFilter` | 类 / 别名 | `mental1104/bloom_filter.h` | 用于字符串或自定义键成员判断的 Bloom filter 变体。 |
 | 网络与服务 | `RedisLock`, `create_redis_from_env` | 类 / 函数 | `mental1104/redis_lock.h` | 基于 Redis 的锁辅助工具。 |
 | 网络与服务 | `EpollServer` | 类 | `mental1104/net/epoll_server.h` | 注册文件描述符并分发事件回调。 |
+| MQTT | `mqtt::Client`, `mqtt::ClientOptions`, `mqtt::Message`, `mqtt::Result` | 类 / 结构体 | `mental1104/mqtt/client.h` | 提供不带测试语义的 MQTT connect / publish / subscribe / unsubscribe 原语。 |
 | 调试 | `st_options_t`, `st_init`, `st_shutdown`, `st_dump_current_thread` | C API | `mental1104/debug/stacktrace.h` | 初始化并输出原生 stacktrace。 |
 | 数值计算器 | `high_precision`, `InfiniteDecimalCalculator`, `ECalculator`, `FixedPointCalculator`, `PiCalculator` | 别名 / 类 | `mental1104/high_precision_decimal.h` | 从高精度计算器生成十进制字符串。 |
 
@@ -627,3 +629,50 @@ int main() {
 
 - 需要带 MPFR/GMP 支持的 Boost.Multiprecision。
 - 待复核：这些类目前位于全局命名空间，不同于本仓库多数 C++ API。
+
+
+### MQTT 原语客户端
+
+- **类别：** MQTT
+- **类型：** 类、结构体和枚举
+- **定义位置：** `cpp/include/mental1104/mqtt/client.h`
+- **包含：** `#include "mental1104/mqtt/client.h"`
+- **用途：** 通过稳定的公共类型封装 MQTT connect、publish、subscribe、unsubscribe 和消息 callback；公共接口不暴露 libmosquitto 类型。
+
+**基础用法：**
+
+```cpp
+#include "mental1104/mqtt/client.h"
+
+int main() {
+  mental1104::mqtt::ClientOptions options;
+  options.host = "127.0.0.1";
+  options.port = 1883;
+  options.client_id = "common-demo";
+
+  mental1104::mqtt::Client client(options);
+  if (!client.connect().ok)
+    return 1;
+
+  if (!client.subscribe("demo/events").ok)
+    return 2;
+
+  if (!client.publish("demo/events", "hello").ok)
+    return 3;
+
+  return client.disconnect().ok ? 0 : 4;
+}
+```
+
+**示例结果：**
+
+```text
+broker 可连接且请求被 libmosquitto 接受时无标准输出，进程退出码为 0。
+```
+
+**备注：**
+
+- libmosquitto 是可选后端；构建未发现头文件或库时 `mqtt::available()` 返回 false，公共接口仍可编译。
+- `publish()` / `subscribe()` 返回“底层客户端已接受请求”，不额外等待 PUBACK / SUBACK。
+- 消息 callback 在 libmosquitto 网络线程触发，跨线程保存数据时应复制 `mqtt::Message`。
+- 测试专属的消息等待和 request-response 能力位于 `cpp/testing`，不进入普通 `mental1104` target。
