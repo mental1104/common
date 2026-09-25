@@ -53,15 +53,13 @@ ClientOptions mqtt_options(const std::string &client_prefix) {
   return options;
 }
 
-/// 检查当前构建和环境是否允许运行真实 MQTT 集成测试。
+/// 检查当前构建和环境是否具备真实 MQTT 集成测试条件。
 ///
-/// 缺失 libmosquitto 或 MQTT_HOST/MQTT_PORT 时跳过，而不是把可选基础设施
-/// 缺失误报为公共代码回归。
-void require_mqtt_integration_environment() {
-  if (!mental1104::mqtt::available())
-    GTEST_SKIP() << "libmosquitto is unavailable in this build";
-  if (env_value("MQTT_HOST").empty() || env_value("MQTT_PORT").empty())
-    GTEST_SKIP() << "MQTT integration requires MQTT_HOST and MQTT_PORT";
+/// @return libmosquitto 可用且 MQTT_HOST/MQTT_PORT 均配置时返回 true。
+bool mqtt_integration_environment_available() {
+  return mental1104::mqtt::available() &&
+         !env_value("MQTT_HOST").empty() &&
+         !env_value("MQTT_PORT").empty();
 }
 
 /// 验证无 broker 时也能稳定检查原语参数，不把 SDK 错误覆盖到参数错误之上。
@@ -79,7 +77,8 @@ TEST(MqttClientDomain, RejectsEmptyPublishTopicBeforeConnection) {
 
 /// 验证 fixture 仍完整暴露 subscribe/publish/wait_message 原语。
 TEST(MqttPeerFixtureIntegration, PrimitivePublishSubscribeRoundTrip) {
-  require_mqtt_integration_environment();
+  if (!mqtt_integration_environment_available())
+    GTEST_SKIP() << "MQTT integration requires libmosquitto, MQTT_HOST and MQTT_PORT";
 
   MqttPeerFixture peer(mqtt_options("mqtt-peer-primitive"));
   ASSERT_TRUE(peer.start().ok);
@@ -97,7 +96,8 @@ TEST(MqttPeerFixtureIntegration, PrimitivePublishSubscribeRoundTrip) {
 
 /// 验证 request 显式接收 request/response topic，并由原语组合完成闭环。
 TEST(MqttPeerFixtureIntegration, RequestUsesExplicitTopicPair) {
-  require_mqtt_integration_environment();
+  if (!mqtt_integration_environment_available())
+    GTEST_SKIP() << "MQTT integration requires libmosquitto, MQTT_HOST and MQTT_PORT";
 
   MqttPeerFixture requester(mqtt_options("mqtt-requester"));
   MqttPeerFixture responder(mqtt_options("mqtt-responder"));
@@ -109,7 +109,9 @@ TEST(MqttPeerFixtureIntegration, RequestUsesExplicitTopicPair) {
   const std::string response_topic = base + "/response";
   ASSERT_TRUE(responder.subscribe(request_topic, QoS::AtLeastOnce).ok);
 
-  MqttWaitResult request_received;
+  MqttWaitResult request_received = MqttWaitResult::failure(
+      mental1104::mqtt::Result::failure(
+          ErrorCode::Backend, "responder thread did not receive request"));
   mental1104::mqtt::Result response_sent =
       mental1104::mqtt::Result::failure(
           ErrorCode::Backend, "responder thread did not run");
