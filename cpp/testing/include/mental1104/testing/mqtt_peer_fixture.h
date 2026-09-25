@@ -31,6 +31,13 @@ struct MqttWaitResult {
   /// @param status 必须是失败状态，通常为 InvalidArgument、Timeout 或 MQTT 原语错误。
   /// @return 不包含有效消息的失败结果。
   static MqttWaitResult failure(const mqtt::Result &status);
+
+private:
+  /// 只允许通过 success/failure 创建完整等待结果。
+  ///
+  /// @param status MQTT 等待状态。
+  /// @param message 成功时的消息副本；失败时传入默认消息。
+  MqttWaitResult(const mqtt::Result &status, const mqtt::Message &message);
 };
 
 /// 可组合的 MQTT 对端测试资产。
