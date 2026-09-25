@@ -46,6 +46,15 @@ struct Result {
   /// @param message 面向调用方的失败原因。
   /// @return 包含错误类型和说明的失败结果。
   static Result failure(ErrorCode code, const std::string &message);
+
+private:
+  /// 仅允许通过 success/failure 创建结果，避免默认构造出未初始化状态。
+  ///
+  /// @param ok_value 操作是否成功。
+  /// @param code_value 稳定错误类型；成功时必须为 ErrorCode::None。
+  /// @param message_value 失败说明；成功时通常为空。
+  Result(bool ok_value, ErrorCode code_value,
+         const std::string &message_value);
 };
 
 /// MQTT 客户端连接参数。
