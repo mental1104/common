@@ -16,21 +16,19 @@
 namespace mental1104 {
 namespace mqtt {
 
+/// 初始化一个完整 MQTT 操作结果。
+Result::Result(bool ok_value, ErrorCode code_value,
+               const std::string &message_value)
+    : ok(ok_value), code(code_value), message(message_value) {}
+
 /// 创建公共成功结果。
 Result Result::success() {
-  Result result;
-  result.ok = true;
-  result.code = ErrorCode::None;
-  return result;
+  return Result(true, ErrorCode::None, std::string());
 }
 
 /// 创建公共失败结果。
 Result Result::failure(ErrorCode code, const std::string &message) {
-  Result result;
-  result.ok = false;
-  result.code = code;
-  result.message = message;
-  return result;
+  return Result(false, code, message);
 }
 
 /// 初始化 MQTT 默认连接参数。
