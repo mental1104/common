@@ -95,6 +95,8 @@ Use this reference after `SKILL.md` triggers. Load only the sections relevant to
 
 ## Devops, CI, Coverage
 
+`./dev setup-cpp` 在准备子模块前检查宿主机编译依赖；调整 C++ 的必需系统依赖或覆盖率工具时，同步更新该预检及 `cpp/README.md`。
+
 - Devtool command modules live under `devops/devtool/commands/...`; register commands through the existing `configure(subparsers)` and alias patterns.
 - If adding a language-facing workflow, wire build/test/coverage/install/verify behavior through `./dev` first, then update CI to call the wrapper.
 - Each language workflow exposes `full_matrix` through `workflow_call`. Keep one shared set of steps: callers use `full_matrix: true` for affected `main` updates and repository-level manual validation. Do not create parallel `quick-*` and `full-*` workflow copies.
