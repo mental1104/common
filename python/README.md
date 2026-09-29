@@ -48,6 +48,7 @@
 | 上下文与 ASGI | `request_ctx_from_headers`, `RequestCtxMiddlewareFactory`, `RequestCtxContextVarMiddlewareFactory`, `register_request_ctx_middleware`, `register_all_request_ctx_middlewares` | 函数 / 类 | `from mental1104 import ...` | 从 FastAPI/Starlette 请求填充请求上下文。 |
 | 并发 | `CoroutinePool`, `GatherStrategy`, `AsCompletedStrategy`, `FirstSuccessfulStrategy`, `ThreadExecutorCoroutinePool`, `ProcessExecutorCoroutinePool`, `TaskExecutionStrategy` | 类 | `from mental1104 import ...` | 用可配置结果策略运行 async callable 批次。 |
 | 并发 | `ThreadWorkerPool`, `ProcessWorkerPool`, `MPStartMethod`, `delay`, `async_delay` | 类 / 枚举 / 函数 | `from mental1104 import ...` | 运行同步 worker pool 和简单延迟。 |
+| 并发与缓存协调 | `SingleFlightGroup`, `SingleFlightResult`, `RedisSingleFlight`, `RedisSingleFlightOptions`, `CacheLookup`, `RebuildTimeoutError` | 类 / dataclass / 异常 | `from mental1104.concurrency.singleflight import ...` | 合并进程内同 Key 请求，并以 Redis 锁协调多实例缓存重建。 |
 | SQL 数据库 | `DBKind`, `ClickHouseProfile`, `ConnParams`, `SASettings`, `conn_params_from_env` | 枚举 / 类 / 函数 | `from mental1104.db import ...` | 构建数据库连接参数。 |
 | SQL 数据库 | `SQLAlchemyClient`, `AsyncSQLAlchemyClient`, `make_sqlalchemy_client`, `make_async_sqlalchemy_client` | 类 / 函数 | `from mental1104.db import ...` | 创建带 session scope 的 SQLAlchemy client。 |
 | SQL 数据库 | `DBRegistry`, `register_db`, `get_engine`, `get_async_engine`, `get_session_factory`, `get_async_session_factory`, `get_clickhouse_executor` | 类 / 函数 | `from mental1104.db import ...` | 注册并获取引擎 / session factory。 |
@@ -406,6 +407,90 @@ True
 
 - `ProcessExecutorCoroutinePool` 和 `ProcessWorkerPool` 需要可被 pickle 的 callable。
 
+### Singleflight 与 Redis 缓存重建协调
+
+- **类别：** 并发与缓存协调
+- **类型：** 类、dataclass、异常
+- **定义位置：** `python/mental1104/concurrency/singleflight.py`
+- **导入：** `from mental1104.concurrency.singleflight import CacheLookup, RebuildTimeoutError, RedisSingleFlight, RedisSingleFlightOptions, SingleFlightGroup, SingleFlightResult`
+- **用途：** `SingleFlightGroup` 合并同一进程内同 Key 的并发调用；`RedisSingleFlight` 再通过 Redis 缓存和按 Key 分布式锁协调多个服务实例。
+
+**本地 singleflight：**
+
+```python
+from mental1104.concurrency.singleflight import SingleFlightGroup
+
+group = SingleFlightGroup[str, dict]()
+result = group.do(
+    "product:123",
+    lambda: {"id": 123, "name": "keyboard"},
+)
+print(result.value, result.shared)
+```
+
+**Redis 集群级 singleflight：**
+
+```python
+import json
+from mental1104.concurrency.singleflight import (
+    CacheLookup,
+    RedisSingleFlight,
+    RedisSingleFlightOptions,
+)
+
+
+def cache_get(key):
+    raw = redis_client.get(key)
+    if raw is None:
+        return CacheLookup.miss()
+    return CacheLookup.hit(json.loads(raw))
+
+
+def cache_set(key, value, ttl_seconds):
+    redis_client.set(key, json.dumps(value), ex=ttl_seconds)
+
+
+singleflight = RedisSingleFlight(
+    redis_client,
+    cache_get,
+    cache_set,
+    options=RedisSingleFlightOptions(
+        lock_ttl_seconds=3,
+        cache_ttl_seconds=600,
+        wait_timeout_seconds=0.5,
+        poll_min_seconds=0.02,
+        poll_max_seconds=0.05,
+    ),
+)
+
+result = singleflight.get_or_load(
+    "product:123",
+    lambda: query_product_from_database(123),
+)
+product = result.value
+```
+
+**REPL 用法：**
+
+```python
+>>> from mental1104.concurrency.singleflight import CacheLookup, SingleFlightGroup
+>>> CacheLookup.miss().found
+False
+>>> group = SingleFlightGroup[str, int]()
+>>> group.do("answer", lambda: 42).value
+42
+```
+
+**行为与限制：**
+
+- 执行顺序为：Redis 首读 → 本地 singleflight → Redis 二次检查 → `RedisLock.try_lock_once()` → 持锁后再次检查 → loader → 写缓存；未持锁实例以带 jitter 的短间隔轮询缓存。
+- `CacheLookup.found` 明确区分缓存 miss 与缓存中的 `None` 等合法值；序列化由调用方回调负责。
+- leader 执行结束后会清理本地 in-flight 状态；同一批等待者复用相同值或相同异常，不同 Key 不互相阻塞。
+- Redis 读取、写入和锁操作异常会向调用方传播，不会静默伪装成 miss。
+- 等待超时后可以通过 `stale_get` 返回旧值，此时 `SingleFlightResult.stale=True`；没有旧值时抛出 `RebuildTimeoutError`。
+- 默认锁 TTL 为 3 秒、缓存 TTL 为 10 分钟、最长等待 500ms、轮询间隔 20～50ms；TTL、等待和轮询边界会在构造配置时校验。
+- 该方案是集群级回源抑制，不是 exactly-once。网络分区、进程暂停或 loader 超过锁 TTL 时仍可能重复回源；支付、扣款等业务必须使用业务唯一键、数据库约束和幂等记录。
+
 ### SQL 数据库注册表、作用域、DAO 和工作单元
 
 - **类别：** SQL 数据库、DAO 和工作单元
@@ -535,6 +620,7 @@ bloom.exists("alice")
 
 **备注：**
 
+- `RedisLock.try_lock_once()` 只执行一次 `SET NX EX`，适合由上层 singleflight 自行控制轮询；`try_lock()` 保留原有重试等待语义。
 - 实际调用需要 `redis` 依赖和可访问的 Redis 服务。
 
 ### MongoDB 辅助工具
