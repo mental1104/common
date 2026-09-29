@@ -43,6 +43,7 @@
 | 并发 | `IExecutor` | 接口类 | `mental1104/concurrency/executor.h` | 通用 fire-and-forget 执行器接口。 |
 | 并发 | `sleep_for`, `sleep_for_ms`, `ThreadPool` | 函数 / 类 | `mental1104/concurrency/thread/thread_util.h` | 睡眠辅助函数和返回 future 的线程池。 |
 | 并发 | `ThreadPoolExecutor`, `BoostAsioExecutor` | 类 | `mental1104/concurrency/thread/*.h` | 基于本地线程池或 Boost.Asio 线程池的 `IExecutor` 适配器。 |
+| 并发 | `barrier` | 类模板 | `mental1104/concurrency/barrier.h` | C++11 起提供可复用阶段屏障；C++20 标准库可用时直接映射 `std::barrier`。 |
 | 并发 | `Task`, `ICoroutineScheduler`, `BasicCoroutineScheduler`, `MnCoroutinePoolT`, `MnCoroutinePool`, `BoostMnCoroutinePool` | 类 / 别名 | `mental1104/concurrency/coroutine/*.h`, `mental1104/concurrency/mn/*.h` | 在执行器适配器上调度 C++20 coroutine。 |
 | 容器 | `BasicBloomFilter`, `BloomFilter`, `CoarseLockBloomFilter`, `CoarseLockStringBloomFilter` | 类 / 别名 | `mental1104/bloom_filter.h` | 用于字符串或自定义键成员判断的 Bloom filter 变体。 |
 | 网络与服务 | `RedisLock`, `create_redis_from_env` | 类 / 函数 | `mental1104/redis_lock.h` | 基于 Redis 的锁辅助工具。 |
@@ -417,6 +418,56 @@ int main() {
 **备注：**
 
 - `BoostAsioExecutor` 需要 Boost.Asio。
+
+### 可复用阶段屏障 `barrier`
+
+- **类别：** 并发
+- **类型：** 类模板
+- **定义位置：** `cpp/include/mental1104/concurrency/barrier.h`
+- **包含：** `#include "mental1104/concurrency/barrier.h"`
+- **用途：** 让固定数量的参与者在多个阶段反复会合，并在每轮完成时可选执行一次 completion function。
+
+**基础用法：**
+
+```cpp
+#include "mental1104/concurrency/barrier.h"
+
+#include <atomic>
+#include <iostream>
+#include <thread>
+
+struct CountPhase {
+  explicit CountPhase(std::atomic<int> *count) : count(count) {}
+
+  void operator()() noexcept { count->fetch_add(1); }
+
+  std::atomic<int> *count;
+};
+
+int main() {
+  std::atomic<int> completed(0);
+  mental1104::barrier<CountPhase> sync(2, CountPhase(&completed));
+
+  std::thread worker([&] { sync.arrive_and_wait(); });
+  sync.arrive_and_wait();
+  worker.join();
+
+  std::cout << completed.load() << "\n";
+}
+```
+
+**示例输出：**
+
+```text
+1
+```
+
+**备注：**
+
+- API 与 C++20 `std::barrier` 对齐，提供 `arrive`、`wait`、`arrive_and_wait`、`arrive_and_drop` 和 `max`。
+- C++20+ 且标准库真正提供 `<barrier>` / `__cpp_lib_barrier` 时，`mental1104::barrier` 直接映射 `std::barrier`；其他环境使用 header-only C++11 回退实现。
+- completion function 必须可无异常调用；barrier 析构前必须确保没有线程仍在等待或访问它。
+- C++11/14 没有类模板参数推导，自定义 completion function 时需要像示例一样显式写出模板参数。
 
 ### C++20 coroutine 辅助工具
 
