@@ -190,38 +190,27 @@ RUN set -eux; \
     ln -sf /usr/local/cargo/bin/rustup /usr/local/bin/rustup
 
 # -----------------------------
-# E) 低频：Okteto + Syncthing（官网最新）
+# E) 低频：Okteto + Syncthing（固定版本并校验官方发布资产）
 # -----------------------------
+ARG SYNCTHING_VERSION=2.1.5
+ARG SYNCTHING_SHA256=3d222b609f7ab2944e02748cb10488b4160d446b49e0eafc107ef2a525ab3486
+ARG OKTETO_VERSION=3.23.0
+ARG OKTETO_SHA256=192106125449018f769935706a6cb9f1cdd370ffdea0d6a98758a9e68ae290e5
 RUN set -eux; \
     mkdir -p /root/.okteto; \
     CURL_RETRY="--retry 5 --retry-delay 2 --retry-connrefused"; \
-    syncthing_tag="$(curl -fsSL $CURL_RETRY -o /dev/null -w '%{url_effective}' https://github.com/syncthing/syncthing/releases/latest | awk -F/ '{print $NF}')"; \
-    if [ -z "$syncthing_tag" ]; then \
-        syncthing_tag="$(curl -fsSL $CURL_RETRY https://github.com/syncthing/syncthing/releases/latest | grep -Eo 'syncthing-linux-amd64-v[0-9]+\\.[0-9]+\\.[0-9]+\\.tar\\.gz' | head -n 1 | sed 's/^syncthing-linux-amd64-//; s/\\.tar\\.gz$//')"; \
-    fi; \
-    test -n "$syncthing_tag"; \
+    syncthing_tag="v${SYNCTHING_VERSION}"; \
     syncthing_url="https://github.com/syncthing/syncthing/releases/download/${syncthing_tag}/syncthing-linux-amd64-${syncthing_tag}.tar.gz"; \
     curl -fsSL $CURL_RETRY "$syncthing_url" -o /tmp/syncthing.tar.gz; \
+    printf '%s  %s\n' "$SYNCTHING_SHA256" /tmp/syncthing.tar.gz | sha256sum -c -; \
     syncthing_dir="$(tar -tf /tmp/syncthing.tar.gz | head -n 1 | cut -d/ -f1)"; \
     tar -xzf /tmp/syncthing.tar.gz -C /tmp; \
     install -m 0755 "/tmp/${syncthing_dir}/syncthing" /root/.okteto/syncthing; \
     ln -sf /root/.okteto/syncthing /usr/local/bin/syncthing; \
     rm -rf /tmp/syncthing.tar.gz "/tmp/${syncthing_dir}"; \
     okteto_tmp="$(mktemp)"; \
-    okteto_ok=0; \
-    for url in \
-      "https://downloads.okteto.com/cli/okteto-Linux-x86_64" \
-      "https://github.com/okteto/okteto/releases/latest/download/okteto-Linux-x86_64" \
-      "https://github.com/okteto/okteto/releases/latest/download/okteto-linux-amd64"; do \
-        if curl -fsSL $CURL_RETRY "$url" -o "$okteto_tmp"; then \
-            okteto_ok=1; \
-            break; \
-        fi; \
-    done; \
-    if [ "$okteto_ok" != "1" ]; then \
-        echo "[error] failed to download okteto CLI"; \
-        exit 1; \
-    fi; \
+    curl -fsSL $CURL_RETRY "https://github.com/okteto/okteto/releases/download/${OKTETO_VERSION}/okteto-Linux-x86_64" -o "$okteto_tmp"; \
+    printf '%s  %s\n' "$OKTETO_SHA256" "$okteto_tmp" | sha256sum -c -; \
     install -m 0755 "$okteto_tmp" /root/.okteto/okteto; \
     rm -f "$okteto_tmp"; \
     ln -sf /root/.okteto/okteto /usr/local/bin/okteto

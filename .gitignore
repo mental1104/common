@@ -36,6 +36,18 @@ infer-out/
 # 本地工具/编辑器临时文件（可选）
 **/*.rs.bk
 *.swp
+
+# 安装根目录中只排除下载物和 IDE 生成状态，保留配置及脚本。
+**/INSTALLROOT/**/tmp/*.tar.gz
+**/INSTALLROOT/**/tmp/*.tgz
+**/INSTALLROOT/**/tmp/*.tar.xz
+**/INSTALLROOT/**/.vscode-server/
+**/INSTALLROOT/**/.local/share/nvim/mason/
+**/INSTALLROOT/**/.okteto/syncthing
+**/INSTALLROOT/**/usr/local/bin/okteto
+**/INSTALLROOT/**/usr/local/bin/kubectl
+**/INSTALLROOT/**/usr/local/bin/htop
+**/INSTALLROOT/newer/*.tar.gz
 *.swo
 .DS_Store
 
