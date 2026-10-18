@@ -10,8 +10,9 @@ services:
         DEV_UID: ${DEV_UID:-1000}
         DEV_GID: ${DEV_GID:-1000}
     init: true
-    command: ["sleep", "infinity"]
     working_dir: /workspace/workflow
+    ports:
+      - "${DEVCONTAINER_SSH_BIND:-0.0.0.0}:${DEVCONTAINER_SSH_PORT:-2222}:22"
     environment:
       TZ: Asia/Shanghai
       GOWORK: /opt/mental1104/go.work
@@ -27,6 +28,19 @@ services:
       - type: bind
         source: ${WORKFLOW_ROOT:-/volume2/workflow}/common
         target: /opt/mental1104
+        bind:
+          create_host_path: false
+      # SSH 公钥只读挂载到开发用户；客户端私钥不进入 NAS 或容器。
+      - type: bind
+        source: ${DEVCONTAINER_DATA_ROOT:-/volume2/workflow/.devcontainer-state}/ssh/authorized_keys
+        target: /home/developer/.ssh/authorized_keys
+        read_only: true
+        bind:
+          create_host_path: false
+      # 持久化 SSH 主机密钥，重建容器后客户端不会遇到主机身份变化。
+      - type: bind
+        source: ${DEVCONTAINER_DATA_ROOT:-/volume2/workflow/.devcontainer-state}/ssh/hostkeys
+        target: /var/lib/sshd-hostkeys
         bind:
           create_host_path: false
       # 工具缓存和 VS Code 扩展保存在 SSD 工作区，容器重建后仍可复用。
