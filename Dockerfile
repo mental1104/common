@@ -1,6 +1,9 @@
 ARG BASE_IMAGE=ubuntu:24.04
 FROM ${BASE_IMAGE}
 
+ARG DEV_UID=1026
+ARG DEV_GID=100
+
 ARG HTTP_PROXY
 ARG HTTPS_PROXY
 ARG NO_PROXY
@@ -91,6 +94,20 @@ RUN --mount=type=cache,target=/var/cache/apt \
     ln -sf /lib/x86_64-linux-gnu/libtinfo.so.6 /lib/x86_64-linux-gnu/libtinfow.so.6; \
     ldconfig; \
     cd /usr/src/googletest && cmake . && make -j"$(nproc)" && make install
+
+# 创建与 NAS 工作区所有者匹配的非 root 开发账号，避免容器写入后污染宿主机文件权限。
+RUN set -eux; \
+    if getent passwd dev >/dev/null 2>&1; then \
+      echo "[error] user dev already exists"; exit 1; \
+    fi; \
+    if getent passwd "$DEV_UID" >/dev/null 2>&1; then \
+      echo "[error] DEV_UID is already assigned to another account"; exit 1; \
+    fi; \
+    if ! getent group "$DEV_GID" >/dev/null 2>&1; then \
+      groupadd --gid "$DEV_GID" dev; \
+    fi; \
+    useradd --uid "$DEV_UID" --gid "$DEV_GID" --create-home --shell /bin/bash dev; \
+    install -d -o dev -g "$(id -gn dev)" -m 700 /home/dev/.ssh /home/dev/.vscode-server
 
 # -----------------------------
 # A2) 低频：webbench（版本可参数化）
@@ -231,9 +248,9 @@ RUN set -eux; \
         $APT_ENV apt-get install -y --no-install-recommends curl tar ca-certificates; \
         rm -rf /var/lib/apt/lists/*; \
     fi; \
-    mkdir -p /root/.vscode-server/cli/servers /root/.vscode-server/data /root/.vscode-server/extensions; \
-    rm -rf "/root/.vscode-server/cli/servers/Stable-${VSCODE_COMMIT}"; \
-    rm -f "/root/.vscode-server/code-${VSCODE_COMMIT}"; \
+    mkdir -p /home/dev/.vscode-server/cli/servers /home/dev/.vscode-server/data /home/dev/.vscode-server/extensions; \
+    rm -rf "/home/dev/.vscode-server/cli/servers/Stable-${VSCODE_COMMIT}"; \
+    rm -f "/home/dev/.vscode-server/code-${VSCODE_COMMIT}"; \
     case "${TARGETARCH}" in \
       amd64|x86_64) \
         server_url="https://vscode.download.prss.microsoft.com/dbazure/download/stable/${VSCODE_COMMIT}/vscode-server-linux-x64.tar.gz"; \
@@ -254,12 +271,12 @@ RUN set -eux; \
     tar -xzf "$tmp_dir/vscode-server.tar.gz" -C "$tmp_dir"; \
     server_dir="$(find "$tmp_dir" -maxdepth 1 -type d -name 'vscode-server-linux-*' | head -n 1)"; \
     test -n "$server_dir"; \
-    mkdir -p "/root/.vscode-server/cli/servers/Stable-${VSCODE_COMMIT}"; \
-    mv "$server_dir" "/root/.vscode-server/cli/servers/Stable-${VSCODE_COMMIT}/server"; \
+    mkdir -p "/home/dev/.vscode-server/cli/servers/Stable-${VSCODE_COMMIT}"; \
+    mv "$server_dir" "/home/dev/.vscode-server/cli/servers/Stable-${VSCODE_COMMIT}/server"; \
     tar -xzf "$tmp_dir/vscode-cli.tar.gz" -C "$tmp_dir"; \
     cli_bin="$(find "$tmp_dir" -maxdepth 2 -type f -name code | head -n 1)"; \
     test -n "$cli_bin"; \
-    install -m 0755 "$cli_bin" "/root/.vscode-server/code-${VSCODE_COMMIT}"; \
+    install -m 0755 "$cli_bin" "/home/dev/.vscode-server/code-${VSCODE_COMMIT}"; \
     rm -rf "$tmp_dir"
 
 # -----------------------------
@@ -269,7 +286,7 @@ COPY devops/INSTALLROOT/root/extensions.json /root/vscode-extensions.json
 COPY devops/INSTALLROOT/root/vscode_extensions.py /root/vscode-extensions.py
 
 RUN set -eux; \
-    server_dir="/root/.vscode-server/cli/servers/Stable-${VSCODE_COMMIT}/server"; \
+    server_dir="/home/dev/.vscode-server/cli/servers/Stable-${VSCODE_COMMIT}/server"; \
     install_cli="${server_dir}/bin/code-server"; \
     if [ ! -x "$install_cli" ]; then \
         install_cli="$(find "$server_dir" -maxdepth 3 -type f \( -name code-server -o -name code \) | head -n 1)"; \
@@ -281,8 +298,8 @@ RUN set -eux; \
     python3 /root/vscode-extensions.py \
         --install \
         --install-cli "$install_cli" \
-        --data-dir /root/.vscode-server/data \
-        --extensions-dir /root/.vscode-server/extensions; \
+        --data-dir /home/dev/.vscode-server/data \
+        --extensions-dir /home/dev/.vscode-server/extensions; \
     rm -f /root/vscode-extensions.json /root/vscode-extensions.py
 
 # -----------------------------
@@ -299,11 +316,11 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 # -----------------------------
 # I) 低频：配置文件（htop/clang-format/时区）
 # -----------------------------
-COPY devops/INSTALLROOT/root/.config /root/.config
+COPY devops/INSTALLROOT/root/.config /home/dev/.config
 
 # clang-format 放置（低频）
 COPY devops/INSTALLROOT/root/.clang-format /usr/lib/llvm-18/bin
-COPY devops/INSTALLROOT/root/.clang-format /root
+COPY devops/INSTALLROOT/root/.clang-format /home/dev
 
 # 时区/缓存（低频）
 RUN set -eux; \
@@ -337,11 +354,11 @@ RUN set -eux; \
     cd /opt/mental1104; \
     ./dev build rust; \
     ./dev install rust; \
-    mkdir -p /root/.cargo; \
+    mkdir -p /usr/local/cargo; \
     printf '%s\n' \
       '[patch.crates-io]' \
       'mental1104 = { path = "/opt/mental1104/rust/mental1104" }' \
-      > /root/.cargo/config.toml
+      > /usr/local/cargo/config.toml
 
 RUN set -eux; \
     cd /opt/mental1104; \
@@ -367,32 +384,60 @@ COPY devops/INSTALLROOT/root/extensions.json /root/vscode-extensions.json
 COPY devops/INSTALLROOT/root/vscode_extensions.py /root/vscode-extensions.py
 
 RUN set -eux; \
-    python3 /root/vscode-extensions.py --settings; \
-    rm -f /root/vscode-extensions.py
+    python3 /root/vscode-extensions.py --settings --data-dir /home/dev/.vscode-server/data; \
+    rm -f /root/vscode-extensions.py /root/vscode-extensions.json
 
 # -----------------------------
-# L) 高频/变量层：SSH 密码注入与 sshd 配置（必须放到最后，避免打爆缓存）
+# L) 高频/变量层：开发用户、运行时缓存与 SSH 公钥认证
 # -----------------------------
-ARG SSH_PRIVATE_KEY
-ENV SSH_PRIVATE_KEY=${SSH_PRIVATE_KEY}
+ENV GOPATH=/home/dev/go \
+    GOBIN=/home/dev/go/bin \
+    GOCACHE=/home/dev/.cache/go-build \
+    CARGO_HOME=/home/dev/.cargo \
+    PIP_CACHE_DIR=/home/dev/.cache/pip \
+    PATH=/home/dev/go/bin:/usr/local/cargo/bin:/usr/local/go/bin:/go/bin:$PATH
+
+COPY devops/remote-dev/entrypoint.sh /usr/local/bin/common-dev-entrypoint
 
 RUN set -eux; \
-    git config --global core.editor "vim"; \
-    echo "PS1='\\[\033[32;1m\]\\u@\\[\033[38;5;214;1m\]\\h:\\[\033[01;34m\]\\w\\[\033[00m\] \$ '" >> /root/.bashrc; \
-    touch /root/.env; \
-    echo "MENTAL1104_NOENVRION=TRUE" >> /root/.env; \
-    echo "export \$(grep -v '^#' ~/.env | xargs)" >> /root/.bashrc; \
-    echo "alias vi='vim'" >> /root/.bashrc; \
-    echo "alias view='vim -R'" >> /root/.bashrc; \
-    echo "alias python='python3'" >> /root/.bashrc; \
-    echo 'alias redis="redis-cli -h ${REDIS_HOST} -p ${REDIS_PORT}"' >> /root/.bashrc; \
-    echo 'alias clickhouse="clickhouse-client -h ${CLICKHOUSE_HOST} --port ${CLICKHOUSE_PORT} -d ${CLICKHOUSE_DATABASE} -u ${CLICKHOUSE_USER}"' >> /root/.bashrc; \
-    echo 'alias mongodb="mongo --host ${MONGO_HOST} --port ${MONGO_PORT}"' >> /root/.bashrc; \
-    echo "root:${SSH_PRIVATE_KEY}" | chpasswd; \
-    mkdir -p /run/sshd; \
-    echo 'PasswordAuthentication yes' >> /etc/ssh/sshd_config; \
-    echo 'PermitRootLogin yes' >> /etc/ssh/sshd_config
+    mkdir -p /home/dev/.config/NuGet /home/dev/.cargo /home/dev/.cache /home/dev/go /home/dev/.ssh /home/dev/.vscode-server; \
+    cp /root/.config/NuGet/NuGet.Config /home/dev/.config/NuGet/NuGet.Config; \
+    cp /usr/local/cargo/config.toml /home/dev/.cargo/config.toml; \
+    git config --file /home/dev/.gitconfig core.editor "vim"; \
+    touch /home/dev/.env; \
+    echo "MENTAL1104_NOENVRION=TRUE" >> /home/dev/.env; \
+    echo "PS1='\\\\[\\033[32;1m\\]\\\\u@\\\\[\\033[38;5;214;1m\\]\\\\h:\\\\[\\033[01;34m\\]\\\\w\\\\[\\033[00m\\] \\$ '" >> /home/dev/.bashrc; \
+    echo "export \$(grep -v '^#' ~/.env | xargs)" >> /home/dev/.bashrc; \
+    echo "alias vi='vim'" >> /home/dev/.bashrc; \
+    echo "alias view='vim -R'" >> /home/dev/.bashrc; \
+    echo "alias python='python3'" >> /home/dev/.bashrc; \
+    echo 'alias redis="redis-cli -h ${REDIS_HOST} -p ${REDIS_PORT}"' >> /home/dev/.bashrc; \
+    echo 'alias clickhouse="clickhouse-client -h ${CLICKHOUSE_HOST} --port ${CLICKHOUSE_PORT} -d ${CLICKHOUSE_DATABASE} -u ${CLICKHOUSE_USER}"' >> /home/dev/.bashrc; \
+    echo 'alias mongodb="mongo --host ${MONGO_HOST} --port ${MONGO_PORT}"' >> /home/dev/.bashrc; \
+    mkdir -p /etc/ssh/sshd_config.d /etc/ssh/hostkeys /run/sshd /opt/common-dev-seed/vscode-server/extensions /opt/common-dev-seed/vscode-server/data; \
+    cp -a /home/dev/.vscode-server/extensions/. /opt/common-dev-seed/vscode-server/extensions/; \
+    cp -a /home/dev/.vscode-server/data/. /opt/common-dev-seed/vscode-server/data/; \
+    chmod -R a+rX /opt/common-dev-seed; \
+    printf '%s\n' \
+      'HostKey /etc/ssh/hostkeys/ssh_host_ed25519_key' \
+      'PermitRootLogin no' \
+      'PasswordAuthentication no' \
+      'KbdInteractiveAuthentication no' \
+      'PubkeyAuthentication yes' \
+      'AuthorizedKeysFile /home/dev/.ssh/authorized_keys' \
+      'AllowUsers dev' \
+      'AllowTcpForwarding yes' \
+      'X11Forwarding no' \
+      'PermitTunnel no' \
+      'GatewayPorts no' \
+      'UsePAM no' \
+      > /etc/ssh/sshd_config.d/99-remote-dev.conf; \
+    chmod 644 /etc/ssh/sshd_config.d/99-remote-dev.conf; \
+    chown -R dev:"$(id -gn dev)" /home/dev; \
+    chmod 700 /home/dev/.ssh; \
+    chmod 0755 /usr/local/bin/common-dev-entrypoint
 
 EXPOSE 22
-WORKDIR /root
-CMD ["/usr/sbin/sshd", "-D"]
+WORKDIR /workspace/workflow
+ENTRYPOINT ["/usr/local/bin/common-dev-entrypoint"]
+CMD ["/usr/sbin/sshd", "-D", "-e"]

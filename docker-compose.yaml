@@ -1,34 +1,41 @@
-version: '3.3'
-
 services:
   mental1104_dev:
     image: mental1104_dev:latest
+    pull_policy: never
     container_name: mental1104_dev
-    security_opt:
-      - seccomp=unconfined
+    init: true
+    cap_add:
+      - SYS_PTRACE
     ports:
-      - "127.0.0.1:31104:22"
-      - "8080:8080"
-    command: ["/usr/sbin/sshd", "-D"]
+      - "127.0.0.1:${COMMON_DEV_SSH_PORT:-31104}:22"
+      - "127.0.0.1:${COMMON_DEV_HTTP_PORT:-8080}:8080"
     volumes:
-      - /home/espeon/:/data
-      - ~/.ssh:/root/.ssh:rw  # 将宿主机的 .ssh 目录挂载到容器中
-      - ~/.kube:/root/.kube # k8s配置映射到容器中
-      - ./.env:/root/.env:rw
-      - /var/run/docker.sock:/var/run/docker.sock
-    # env_file:
-    #   - .env
-    # Some environment variable can be set in the .env file in the current directory, such as: 
-    #  - GIT_AUTHOR_NAME=  # 设置 Git 提交的用户名
-    #  - GIT_AUTHOR_EMAIL=  # 设置 Git 提交的邮箱
-    #  - GIT_COMMITTER_NAME=  # 设置 Git 提交的用户名
-    #  - GIT_COMMITTER_EMAIL=  # 设置 Git 提交的邮箱
-    restart: always
-    networks:
-      - offline
-
-networks:
-  offline:
-    driver: bridge
-    driver_opts:
-      com.docker.network.bridge.enable_ip_masquerade: "false"
+      # 整个 workflow 以统一工作区的形式提供给开发容器。
+      - "${WORKFLOW_ROOT:-/volume2/workflow}:/workspace/workflow:rw"
+      # 将 common 源码映射到镜像构建时使用的固定路径，避免编辑和构建两份代码。
+      - "${COMMON_REPO_ROOT:-/volume2/workflow/common}:/opt/mental1104:rw"
+      # 只注入公钥列表，不把客户端私钥或整个 .ssh 目录暴露给容器。
+      - "${DEV_DATA_ROOT:-/volume2/docker/common-dev}/ssh/authorized_keys:/home/dev/.ssh/authorized_keys:ro"
+      - "${DEV_DATA_ROOT:-/volume2/docker/common-dev}/ssh/hostkeys:/etc/ssh/hostkeys:rw"
+      # 本地开发凭据和缓存都留在 SSD，不进入 Git 或镜像。
+      - "${DEV_DATA_ROOT:-/volume2/docker/common-dev}/config/dev.env:/home/dev/.env:ro"
+      - "${DEV_DATA_ROOT:-/volume2/docker/common-dev}/cache/go-mod:/home/dev/go/pkg/mod:rw"
+      - "${DEV_DATA_ROOT:-/volume2/docker/common-dev}/cache/go-build:/home/dev/.cache/go-build:rw"
+      - "${DEV_DATA_ROOT:-/volume2/docker/common-dev}/cache/pip:/home/dev/.cache/pip:rw"
+      - "${DEV_DATA_ROOT:-/volume2/docker/common-dev}/cache/cargo-registry:/home/dev/.cargo/registry:rw"
+      - "${DEV_DATA_ROOT:-/volume2/docker/common-dev}/cache/cargo-git:/home/dev/.cargo/git:rw"
+      - "${DEV_DATA_ROOT:-/volume2/docker/common-dev}/vscode-server/data:/home/dev/.vscode-server/data:rw"
+      - "${DEV_DATA_ROOT:-/volume2/docker/common-dev}/vscode-server/extensions:/home/dev/.vscode-server/extensions:rw"
+      # 保留 common 当前 CMake Tools 配置使用的 /data 构建目录。
+      - "${DEV_DATA_ROOT:-/volume2/docker/common-dev}/build:/data:rw"
+    environment:
+      HOME: /home/dev
+      GOPATH: /home/dev/go
+      GOBIN: /home/dev/go/bin
+      GOCACHE: /home/dev/.cache/go-build
+      CARGO_HOME: /home/dev/.cargo
+      PIP_CACHE_DIR: /home/dev/.cache/pip
+      GOWORK: /opt/mental1104/go.work
+    restart: unless-stopped
+    mem_limit: ${COMMON_DEV_MEM_LIMIT:-3g}
+    cpus: ${COMMON_DEV_CPUS:-2.0}

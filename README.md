@@ -33,3 +33,7 @@
 Python 条目还必须包含 REPL 用法。如果某个符号在代码中是公开的，但预期稳定性不明确，请将其记录为候选项，并在备注中加入 `待复核`。
 
 旧版小写 [readme.md](./readme.md) 保留历史 dev 命令和覆盖率细节。请将此 `README.md` 作为能力索引入口。
+
+## 远程开发工作站
+
+基于现有多语言工具链构建的 VS Code Remote-SSH 开发环境，支持访问 NAS 的整个 `/volume2/workflow` 工作区，并将 VS Code 数据、语言缓存和 CMake 构建目录持久化到 SSD。部署、镜像传输与 SSH 配置见[远程开发工作站说明](./devops/remote-dev/README.md)。

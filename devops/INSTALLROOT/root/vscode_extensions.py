@@ -242,7 +242,20 @@ def _collect_extensions(data: dict) -> list[str]:
     return extensions
 
 
-def _write_settings(data: dict, comments: dict[str, list[str]], header_comments: list[str]) -> None:
+def _write_settings(
+    data: dict,
+    comments: dict[str, list[str]],
+    header_comments: list[str],
+    data_dir: str,
+) -> None:
+    """将通用设置和扩展专属设置合并后写入指定的 VS Code 用户数据目录。
+
+    Args:
+        data: 已解析的扩展配置对象，包含 common 和各扩展的设置映射。
+        comments: 配置键对应的 JSONC 注释列表，用于保留原始说明。
+        header_comments: 配置文件开头的注释列表。
+        data_dir: VS Code 用户数据目录，设置文件写入其 Machine 子目录。
+    """
     common = data.get("common", {})
     if common is None:
         common = {}
@@ -257,7 +270,7 @@ def _write_settings(data: dict, comments: dict[str, list[str]], header_comments:
             raise SystemExit(f"extension '{key}' must map to a JSON object")
         settings.update(value)
 
-    settings_path = Path("/root/.vscode-server/data/Machine/settings.json")
+    settings_path = Path(data_dir) / "Machine" / "settings.json"
     settings_path.parent.mkdir(parents=True, exist_ok=True)
     settings_path.write_text(
         _format_settings_jsonc(settings, comments, header_comments),
@@ -292,12 +305,13 @@ def _install_extensions(
 
 
 def main() -> None:
+    """解析扩展清单，并按命令行参数安装扩展或生成 VS Code 设置文件。"""
     parser = argparse.ArgumentParser()
     parser.add_argument("--install", action="store_true", help="Install extensions")
     parser.add_argument("--settings", action="store_true", help="Write settings.json")
     parser.add_argument("--install-cli", default="", help="VSCode CLI path")
     parser.add_argument(
-        "--data-dir", default="/root/.vscode-server/data", help="VSCode user data dir"
+        "--data-dir", default="/home/dev/.vscode-server/data", help="VSCode user data dir"
     )
     parser.add_argument(
         "--extensions-dir",
@@ -315,7 +329,7 @@ def main() -> None:
         args.settings = True
 
     if args.settings:
-        _write_settings(data, comments, header_comments)
+        _write_settings(data, comments, header_comments, args.data_dir)
 
     if args.install:
         if not args.install_cli:
