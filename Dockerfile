@@ -373,26 +373,42 @@ RUN set -eux; \
 # -----------------------------
 # L) 高频/变量层：SSH 密码注入与 sshd 配置（必须放到最后，避免打爆缓存）
 # -----------------------------
-ARG SSH_PRIVATE_KEY
-ENV SSH_PRIVATE_KEY=${SSH_PRIVATE_KEY}
-
+# 远程开发用户使用构建参数与 NAS 上的工作区文件保持 UID/GID 一致，避免 bind mount 后无法写入。
+ARG DEV_UID=1000
+ARG DEV_GID=1000
 RUN set -eux; \
+    groupadd --gid "${DEV_GID}" dev; \
+    useradd --uid "${DEV_UID}" --gid "${DEV_GID}" --create-home --shell /bin/bash dev; \
+    install -d -m 0700 -o dev -g dev /home/dev/.ssh; \
+    touch /home/dev/.ssh/authorized_keys; \
+    chown dev:dev /home/dev/.ssh/authorized_keys; \
+    chmod 0600 /home/dev/.ssh/authorized_keys; \
     git config --global core.editor "vim"; \
-    echo "PS1='\\[\033[32;1m\]\\u@\\[\033[38;5;214;1m\]\\h:\\[\033[01;34m\]\\w\\[\033[00m\] \$ '" >> /root/.bashrc; \
-    touch /root/.env; \
-    echo "MENTAL1104_NOENVRION=TRUE" >> /root/.env; \
-    echo "export \$(grep -v '^#' ~/.env | xargs)" >> /root/.bashrc; \
-    echo "alias vi='vim'" >> /root/.bashrc; \
-    echo "alias view='vim -R'" >> /root/.bashrc; \
-    echo "alias python='python3'" >> /root/.bashrc; \
-    echo 'alias redis="redis-cli -h ${REDIS_HOST} -p ${REDIS_PORT}"' >> /root/.bashrc; \
-    echo 'alias clickhouse="clickhouse-client -h ${CLICKHOUSE_HOST} --port ${CLICKHOUSE_PORT} -d ${CLICKHOUSE_DATABASE} -u ${CLICKHOUSE_USER}"' >> /root/.bashrc; \
-    echo 'alias mongodb="mongo --host ${MONGO_HOST} --port ${MONGO_PORT}"' >> /root/.bashrc; \
-    echo "root:${SSH_PRIVATE_KEY}" | chpasswd; \
-    mkdir -p /run/sshd; \
-    echo 'PasswordAuthentication yes' >> /etc/ssh/sshd_config; \
-    echo 'PermitRootLogin yes' >> /etc/ssh/sshd_config
+    printf '%s\\n' "alias vi='vim'" "alias view='vim -R'" "alias python='python3'" >> /home/dev/.bashrc; \
+    chown dev:dev /home/dev/.bashrc; \
+    mkdir -p /run/sshd /var/lib/ssh-host-keys; \
+    rm -f /etc/ssh/ssh_host_*; \
+    sed -i \
+      -e 's/^#\\?PasswordAuthentication .*/PasswordAuthentication no/' \
+      -e 's/^#\\?KbdInteractiveAuthentication .*/KbdInteractiveAuthentication no/' \
+      -e 's/^#\\?PubkeyAuthentication .*/PubkeyAuthentication yes/' \
+      -e 's/^#\\?PermitRootLogin .*/PermitRootLogin no/' \
+      /etc/ssh/sshd_config; \
+    printf '%s\\n' \
+      'AllowUsers dev' \
+      'AuthorizedKeysFile .ssh/authorized_keys' \
+      'HostKey /var/lib/ssh-host-keys/ssh_host_ed25519_key' \
+      'PasswordAuthentication no' \
+      'KbdInteractiveAuthentication no' \
+      'PubkeyAuthentication yes' \
+      'PermitRootLogin no' \
+      'PermitEmptyPasswords no' \
+      >> /etc/ssh/sshd_config; \
+    sshd -t
+
+COPY devops/remote-workstation/entrypoint.sh /usr/local/sbin/dev-workstation-entrypoint
+RUN chmod 0755 /usr/local/sbin/dev-workstation-entrypoint
 
 EXPOSE 22
-WORKDIR /root
-CMD ["/usr/sbin/sshd", "-D"]
+WORKDIR /workspace/workflow
+CMD ["/usr/local/sbin/dev-workstation-entrypoint"]
