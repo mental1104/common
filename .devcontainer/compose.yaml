@@ -1,0 +1,51 @@
+name: common-dev
+
+services:
+  common-dev:
+    container_name: common-dev
+    build:
+      context: ..
+      dockerfile: .devcontainer/Dockerfile
+      args:
+        DEV_UID: ${DEV_UID:-1000}
+        DEV_GID: ${DEV_GID:-1000}
+    init: true
+    command: ["sleep", "infinity"]
+    working_dir: /workspace/workflow
+    environment:
+      TZ: Asia/Shanghai
+      GOWORK: /opt/mental1104/go.work
+      GOPROXY: https://goproxy.cn,direct
+    volumes:
+      # 整个 workflow 以读写方式挂载，VS Code 可在不同仓库间切换。
+      - type: bind
+        source: ${WORKFLOW_ROOT:-/volume2/workflow}
+        target: /workspace/workflow
+        bind:
+          create_host_path: false
+      # common 额外挂载到镜像已有工具链约定的路径，保持 Go / Rust 配置兼容。
+      - type: bind
+        source: ${WORKFLOW_ROOT:-/volume2/workflow}/common
+        target: /opt/mental1104
+        bind:
+          create_host_path: false
+      # 工具缓存和 VS Code 扩展保存在 SSD 工作区，容器重建后仍可复用。
+      - type: bind
+        source: ${DEVCONTAINER_DATA_ROOT:-/volume2/workflow/.devcontainer-state}/vscode-server
+        target: /home/developer/.vscode-server
+      - type: bind
+        source: ${DEVCONTAINER_DATA_ROOT:-/volume2/workflow/.devcontainer-state}/go-bin
+        target: /home/developer/go/bin
+      - type: bind
+        source: ${DEVCONTAINER_DATA_ROOT:-/volume2/workflow/.devcontainer-state}/go-mod
+        target: /home/developer/go/pkg/mod
+      - type: bind
+        source: ${DEVCONTAINER_DATA_ROOT:-/volume2/workflow/.devcontainer-state}/cargo-registry
+        target: /home/developer/.cargo/registry
+      - type: bind
+        source: ${DEVCONTAINER_DATA_ROOT:-/volume2/workflow/.devcontainer-state}/cargo-git
+        target: /home/developer/.cargo/git
+      - type: bind
+        source: ${DEVCONTAINER_DATA_ROOT:-/volume2/workflow/.devcontainer-state}/cache
+        target: /home/developer/.cache
+    restart: unless-stopped
