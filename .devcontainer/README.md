@@ -16,7 +16,7 @@
      "$DEVCONTAINER_DATA_ROOT/go-bin" "$DEVCONTAINER_DATA_ROOT/go-mod" \\
      "$DEVCONTAINER_DATA_ROOT/cargo-registry" "$DEVCONTAINER_DATA_ROOT/cargo-git" \\
      "$DEVCONTAINER_DATA_ROOT/cache"
-   chown -R "$DEV_UID:$DEV_GID" "$DEVCONTAINER_DATA_ROOT"
+   sudo chown -R "$DEV_UID:$DEV_GID" "$DEVCONTAINER_DATA_ROOT"
    ```
 
 4. 在 NAS SSH 中构建并启动容器：
