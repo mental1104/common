@@ -371,7 +371,7 @@ RUN set -eux; \
     rm -f /root/vscode-extensions.py
 
 # -----------------------------
-# L) 高频/变量层：SSH 密码注入与 sshd 配置（必须放到最后，避免打爆缓存）
+# L) 高频/变量层：远程开发用户与 SSH 公钥认证配置
 # -----------------------------
 # 远程开发用户使用构建参数与 NAS 上的工作区文件保持 UID/GID 一致，避免 bind mount 后无法写入。
 ARG DEV_UID=1000
@@ -384,7 +384,7 @@ RUN set -eux; \
     chown "${DEV_UID}:${DEV_GID}" /home/dev/.ssh/authorized_keys; \
     chmod 0600 /home/dev/.ssh/authorized_keys; \
     git config --global core.editor "vim"; \
-    printf '%s\\n' "alias vi='vim'" "alias view='vim -R'" "alias python='python3'" >> /home/dev/.bashrc; \
+    printf '%s\n' "alias vi='vim'" "alias view='vim -R'" "alias python='python3'" >> /home/dev/.bashrc; \
     chown "${DEV_UID}:${DEV_GID}" /home/dev/.bashrc; \
     mkdir -p /run/sshd /var/lib/ssh-host-keys; \
     rm -f /etc/ssh/ssh_host_*; \
@@ -394,7 +394,7 @@ RUN set -eux; \
       -e 's/^#\\?PubkeyAuthentication .*/PubkeyAuthentication yes/' \
       -e 's/^#\\?PermitRootLogin .*/PermitRootLogin no/' \
       /etc/ssh/sshd_config; \
-    printf '%s\\n' \
+    printf '%s\n' \
       'AllowUsers dev' \
       'AuthorizedKeysFile .ssh/authorized_keys' \
       'HostKey /var/lib/ssh-host-keys/ssh_host_ed25519_key' \
