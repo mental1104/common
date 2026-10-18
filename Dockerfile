@@ -403,7 +403,7 @@ RUN set -eux; \
       'PubkeyAuthentication yes' \
       'PermitRootLogin no' \
       'PermitEmptyPasswords no' \
-      >> /etc/ssh/sshd_config; \
+      >> /etc/ssh/sshd_config
 
 COPY devops/remote-workstation/entrypoint.sh /usr/local/sbin/dev-workstation-entrypoint
 RUN chmod 0755 /usr/local/sbin/dev-workstation-entrypoint
