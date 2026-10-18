@@ -76,7 +76,6 @@ RUN set -eux; \
 RUN set -eux; \
     if ! getent group "${DEV_GID}" >/dev/null; then groupadd --gid "${DEV_GID}" developer; fi; \
     useradd --uid "${DEV_UID}" --gid "${DEV_GID}" --create-home --shell /bin/bash developer; \
-    # 允许公钥认证的 SSH 账号通过 OpenSSH 账户检查；密码认证仍由 sshd_config 禁用。\
     passwd -d developer; \
     mkdir -p /home/developer/.cargo/registry /home/developer/.cargo/git \
       /home/developer/.cache /home/developer/go/bin /home/developer/go/pkg/mod; \
