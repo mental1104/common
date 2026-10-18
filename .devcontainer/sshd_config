@@ -6,6 +6,7 @@ HostKey /var/lib/sshd-hostkeys/ssh_host_ed25519_key
 PubkeyAuthentication yes
 AuthenticationMethods publickey
 PasswordAuthentication no
+PermitEmptyPasswords no
 KbdInteractiveAuthentication no
 PermitRootLogin no
 AllowUsers developer
