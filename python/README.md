@@ -65,6 +65,7 @@
 | i18n 工具 | `PoEntry`, `parse_po`, `write_mo`, `po_text_to_mo_bytes`, `compile_po_tree`, `check_po_tree`, `main` | 类 / 函数 / CLI | `from mental1104.common.i18n.tools...` | 解析、编译并检查 PO/MO 树。 |
 | 绘图 | `BenchTestType`, `BenchmarkRecord`, `BenchmarkSuite`, `PytestBenchmarkSuite`, `GoogleBenchmarkSuite`, `load_benchmark_suite`, `BenchmarkPlotter`, `TrendPlotBase`, `TimeBasedTrendPlot` | 类 / 函数 | `from mental1104 import ...` | 加载基准测试 payload 并渲染图表。 |
 | 调试与网络 | `trace_if`, `deciprobe`, `fetch_status` | 装饰器 / 函数 | `from mental1104 import ...` | 条件式跟踪调用并获取 HTTP 状态码。 |
+| 调试与网络 | `HTTPOutcomeKind`, `HTTPOutcome`, `classify_http_outcome`, `observe_http_outcomes` | 枚举 / dataclass / 函数 / 装饰器 | `from mental1104.network.http_failure import ...` | 区分 HTTP 状态失败与网络失败，并观察同步或异步 HTTP 调用。 |
 | Schema 辅助工具 | `JsonSerializable` | 类 | `from mental1104 import JsonSerializable` | 将简单对象转换为 dict。 |
 | CLI 与脚本 | `python/tools/render_bench_plots.py`, `python/tools/assemble_bench_gallery.py`, `mental1104.common.i18n.tools.cli.main` | 脚本 / 函数 | 通过 Python 运行或导入 `main` | 渲染基准测试资源并运行 i18n 工具。 |
 | 候选或仅示例 API | `User`, `UserDAO`, `AsyncUserDAO`, `bootstrap`, `example_read`, `example_write`, `example_read_then_write`, `example_threads`, `example_chunk_read`, `example_async_read`, `example_async_write` | 示例类 / 函数 | `from mental1104.db.examples import ...` | 演示数据库注册、DAO 和作用域用法。 |
@@ -710,6 +711,74 @@ def build():
 **备注：**
 
 - `fetch_status` 需要 `aiohttp.ClientSession`。
+
+### HTTP 调用结果分类与观察装饰器
+
+- **类别：** 调试与网络
+- **名称：** `HTTPOutcomeKind`, `HTTPOutcome`, `classify_http_outcome`, `observe_http_outcomes`
+- **类型：** 枚举、dataclass、函数、同步 / 异步装饰器
+- **定义位置：** `python/mental1104/network/http_failure.py`
+- **导入：** `from mental1104.network.http_failure import HTTPOutcome, HTTPOutcomeKind, classify_http_outcome, observe_http_outcomes`
+- **用途：** 在网关或其他出站 HTTP 调用中区分“已经收到失败状态码”和“尚未获得有效 HTTP 响应的网络错误”。
+
+**基础用法：**
+
+```python
+from dataclasses import dataclass
+from mental1104.network.http_failure import observe_http_outcomes
+
+@dataclass
+class Response:
+    status_code: int
+
+observed = []
+
+@observe_http_outcomes(observed.append)
+def call_gateway() -> Response:
+    return Response(status_code=503)
+
+response = call_gateway()
+assert response.status_code == 503
+assert observed[-1].kind.value == "http_status_failure"
+```
+
+**REPL 用法：**
+
+```python
+>>> from dataclasses import dataclass
+>>> from mental1104.network.http_failure import classify_http_outcome
+>>> @dataclass
+... class Response:
+...     status_code: int
+>>> classify_http_outcome(Response(503)).kind.value
+'http_status_failure'
+>>> classify_http_outcome(error=EOFError("EOF")).kind.value
+'network_failure'
+```
+
+**429/503 vs EOF 实验：**
+
+```bash
+cd python
+PYTHONPATH=. python labs/http_failure/main.py
+```
+
+**实验输出：**
+
+```text
+scenario=429 request_error=False status_readable=True status_code=429 kind=http_status_failure
+scenario=503 request_error=False status_readable=True status_code=503 kind=http_status_failure
+scenario=eof request_error=True status_readable=False status_code=0 kind=network_failure
+```
+
+**备注：**
+
+- 响应对象可使用整数类型的 `status_code` 或 `status` 属性，分别兼容常见同步与异步客户端响应模型。
+- `429` 和 `503` 已经形成合法 HTTP 响应，因此状态码可读；装饰器不会主动把它们转换为异常。
+- EOF 场景在收到 HTTP 状态行前断连，因此客户端抛出网络异常且没有可依赖的状态码。
+- 装饰器原样返回响应或重新抛出原异常，不读取或关闭响应体。
+- 本能力不实现自动重试；是否重试仍需结合请求幂等性、请求体可重放性和业务语义决定。
+- observer 可能在不同线程或事件循环任务中被调用，并且其异常会向外传播。
 
 ### CLI 和脚本
 
