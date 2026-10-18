@@ -404,7 +404,6 @@ RUN set -eux; \
       'PermitRootLogin no' \
       'PermitEmptyPasswords no' \
       >> /etc/ssh/sshd_config; \
-    sshd -t
 
 COPY devops/remote-workstation/entrypoint.sh /usr/local/sbin/dev-workstation-entrypoint
 RUN chmod 0755 /usr/local/sbin/dev-workstation-entrypoint
