@@ -19,7 +19,7 @@ ENV LANG=C.UTF-8 \
     RUSTUP_HOME=/usr/local/rustup \
     GOPATH=/home/developer/go \
     GOBIN=/home/developer/go/bin \
-    CARGO_HOME=/home/developer/.cargo \
+    CARGO_HOME=/usr/local/cargo \
     GOWORK=/opt/mental1104/go.work \
     PATH=/home/developer/go/bin:/usr/local/go/bin:/usr/local/cargo/bin:/usr/local/bin:$PATH
 
@@ -90,6 +90,7 @@ RUN set -eux; \
       'export MENTAL1104_NOENVRION=TRUE' \
       >> /home/developer/.bashrc
 
+ENV CARGO_HOME=/home/developer/.cargo
 WORKDIR /workspace/workflow
 USER developer
 CMD ["sleep", "infinity"]
