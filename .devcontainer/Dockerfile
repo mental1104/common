@@ -36,7 +36,7 @@ RUN set -eux; \
       libgtest-dev libbenchmark-dev libboost-all-dev lcov \
       libmpfr-dev libgmp-dev libtirpc-dev \
       git git-lfs tree unzip gzip zip jq netcat-openbsd telnet tcpdump \
-      iptables iputils-ping openssh-client redis-tools postgresql-client \
+      iptables iputils-ping openssh-client openssh-server redis-tools postgresql-client \
       python3 python3-pip python3-venv python3-dev nodejs npm lua5.3 \
       exuberant-ctags ffmpeg pandoc vim \
       qemu-system-misc gcc-riscv64-linux-gnu binutils-riscv64-linux-gnu bison \
@@ -88,9 +88,19 @@ RUN set -eux; \
       "alias vi='vim'" \
       "alias python='python3'" \
       'export MENTAL1104_NOENVRION=TRUE' \
-      >> /home/developer/.bashrc
+      >> /home/developer/.bashrc; \
+    mkdir -p /home/developer/.ssh /var/lib/sshd-hostkeys /etc/ssh/sshd_config.d; \
+    touch /home/developer/.ssh/authorized_keys; \
+    chown -R developer:"$(id -gn developer)" /home/developer/.ssh; \
+    chmod 700 /home/developer/.ssh; \
+    chmod 600 /home/developer/.ssh/authorized_keys
+
+COPY sshd_config /etc/ssh/sshd_config.d/99-devcontainer.conf
+COPY sshd-entrypoint.sh /usr/local/sbin/sshd-entrypoint
+RUN chmod 0755 /usr/local/sbin/sshd-entrypoint
 
 ENV CARGO_HOME=/home/developer/.cargo
 WORKDIR /workspace/workflow
-USER developer
-CMD ["sleep", "infinity"]
+# sshd 需要 root 启动；SSH 登录后仍以 developer 用户运行开发工具。
+USER root
+CMD ["/usr/local/sbin/sshd-entrypoint"]
