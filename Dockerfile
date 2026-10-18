@@ -377,15 +377,15 @@ RUN set -eux; \
 ARG DEV_UID=1000
 ARG DEV_GID=1000
 RUN set -eux; \
-    groupadd --gid "${DEV_GID}" dev; \
+    if ! getent group "${DEV_GID}" >/dev/null; then groupadd --gid "${DEV_GID}" dev; fi; \
     useradd --uid "${DEV_UID}" --gid "${DEV_GID}" --create-home --shell /bin/bash dev; \
-    install -d -m 0700 -o dev -g dev /home/dev/.ssh; \
+    install -d -m 0700 -o "${DEV_UID}:${DEV_GID}" /home/dev/.ssh; \
     touch /home/dev/.ssh/authorized_keys; \
-    chown dev:dev /home/dev/.ssh/authorized_keys; \
+    chown "${DEV_UID}:${DEV_GID}" /home/dev/.ssh/authorized_keys; \
     chmod 0600 /home/dev/.ssh/authorized_keys; \
     git config --global core.editor "vim"; \
     printf '%s\\n' "alias vi='vim'" "alias view='vim -R'" "alias python='python3'" >> /home/dev/.bashrc; \
-    chown dev:dev /home/dev/.bashrc; \
+    chown "${DEV_UID}:${DEV_GID}" /home/dev/.bashrc; \
     mkdir -p /run/sshd /var/lib/ssh-host-keys; \
     rm -f /etc/ssh/ssh_host_*; \
     sed -i \
