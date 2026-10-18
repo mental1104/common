@@ -1,0 +1,20 @@
+# 仅允许开发用户通过公钥登录，禁止密码和 root 登录。
+Port 22
+AddressFamily any
+ListenAddress 0.0.0.0
+ListenAddress ::
+HostKey /var/lib/sshd-hostkeys/ssh_host_ed25519_key
+PubkeyAuthentication yes
+AuthenticationMethods publickey
+PasswordAuthentication no
+KbdInteractiveAuthentication no
+PermitRootLogin no
+AllowUsers developer
+AuthorizedKeysFile .ssh/authorized_keys
+StrictModes yes
+AllowTcpForwarding yes
+X11Forwarding no
+PermitTunnel no
+UsePAM no
+PrintMotd no
+LogLevel VERBOSE
