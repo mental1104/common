@@ -95,7 +95,7 @@ RUN set -eux; \
     chmod 700 /home/developer/.ssh; \
     chmod 600 /home/developer/.ssh/authorized_keys
 
-COPY sshd_config /etc/ssh/sshd_config.d/99-devcontainer.conf
+COPY sshd_config /etc/ssh/sshd_config
 COPY sshd-entrypoint.sh /usr/local/sbin/sshd-entrypoint
 RUN chmod 0755 /usr/local/sbin/sshd-entrypoint
 
