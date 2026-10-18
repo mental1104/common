@@ -4,6 +4,8 @@ set -eu
 # 首次启动时生成并持久化容器 SSH 主机密钥，避免重建容器后身份变化。
 host_key=/var/lib/sshd-hostkeys/ssh_host_ed25519_key
 mkdir -p /run/sshd /var/lib/sshd-hostkeys
+chown root:root /var/lib/sshd-hostkeys
+chmod 700 /var/lib/sshd-hostkeys
 if [ ! -s "$host_key" ]; then
     ssh-keygen -q -t ed25519 -N "" -f "$host_key"
 fi
