@@ -12,7 +12,10 @@
    set -a
    . /volume2/workflow/common/.devcontainer/.env
    set +a
-   mkdir -p "$DEVCONTAINER_DATA_ROOT"/{vscode-server,go-bin,go-mod,cargo-registry,cargo-git,cache}
+   mkdir -p "$DEVCONTAINER_DATA_ROOT/vscode-server" \\
+     "$DEVCONTAINER_DATA_ROOT/go-bin" "$DEVCONTAINER_DATA_ROOT/go-mod" \\
+     "$DEVCONTAINER_DATA_ROOT/cargo-registry" "$DEVCONTAINER_DATA_ROOT/cargo-git" \\
+     "$DEVCONTAINER_DATA_ROOT/cache"
    chown -R "$DEV_UID:$DEV_GID" "$DEVCONTAINER_DATA_ROOT"
    ```
 
