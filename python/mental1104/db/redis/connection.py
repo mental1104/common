@@ -102,10 +102,21 @@ class RedisLock:
         self.lock_expire = lock_expire
         self.lock_value = str(uuid.uuid4())
 
+    def try_lock_once(self) -> bool:
+        """Attempt ``SET NX EX`` once without sleeping."""
+        return bool(
+            self.redis_client.set(
+                self.name,
+                self.lock_value,
+                nx=True,
+                ex=self.lock_expire,
+            )
+        )
+
     def try_lock(self, wait_timeout: float = 5, retry_delay: float = 0.01) -> bool:
         end_time = time.time() + wait_timeout
         while time.time() < end_time:
-            if self.redis_client.set(self.name, self.lock_value, nx=True, ex=self.lock_expire):
+            if self.try_lock_once():
                 return True
             time.sleep(retry_delay)
         return False
