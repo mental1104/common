@@ -94,7 +94,10 @@ RUN set -eux; \
     touch /home/developer/.ssh/authorized_keys; \
     chown -R developer:"$(id -gn developer)" /home/developer/.ssh; \
     chmod 700 /home/developer/.ssh; \
-    chmod 600 /home/developer/.ssh/authorized_keys
+    chmod 600 /home/developer/.ssh/authorized_keys; \
+    printf '%s\n' 'export PATH="/home/developer/go/bin:/usr/local/go/bin:/usr/local/cargo/bin:/usr/local/bin:$PATH"' \
+      > /etc/profile.d/devcontainer-path.sh; \
+    chmod 0644 /etc/profile.d/devcontainer-path.sh
 
 COPY sshd_config /etc/ssh/sshd_config
 COPY sshd-entrypoint.sh /usr/local/sbin/sshd-entrypoint
