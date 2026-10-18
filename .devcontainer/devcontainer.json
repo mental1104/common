@@ -1,0 +1,23 @@
+{
+  "name": "common-dev",
+  "dockerComposeFile": "compose.yaml",
+  "service": "common-dev",
+  "workspaceFolder": "/workspace/workflow",
+  "shutdownAction": "none",
+  "remoteUser": "developer",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-vscode.cpptools",
+        "llvm-vs-code-extensions.vscode-clangd",
+        "ms-vscode.cmake-tools",
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+        "golang.go",
+        "rust-lang.rust-analyzer",
+        "ms-dotnettools.csharp",
+        "redhat.java"
+      ]
+    }
+  }
+}
