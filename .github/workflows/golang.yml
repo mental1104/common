@@ -11,13 +11,6 @@ on:
         description: "Enable verbose test output"
         type: boolean
         default: true
-  push:
-    branches-ignore:
-      - main
-    paths:
-      - "golang/**"
-      - "devops/**"
-      - ".github/workflows/golang.yml"
   pull_request:
     paths:
       - "golang/**"
