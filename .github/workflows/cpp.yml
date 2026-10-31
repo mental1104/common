@@ -25,8 +25,8 @@ env:
 
 jobs:
   linux:
-    name: Linux / ${{ matrix.compiler == 'clang' && 'clang++' || 'g++' }} / C++${{ matrix.cxx_std }}
-    runs-on: ubuntu-latest
+    name: Linux / ${{ matrix.arch || 'x86_64' }} / ${{ matrix.compiler == 'clang' && 'clang++' || 'g++' }} / C++${{ matrix.cxx_std }}
+    runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
     services:
       redis:
         image: redis/redis-stack-server:7.2.0-v7
@@ -40,6 +40,11 @@ jobs:
       matrix:
         compiler: [gcc, clang]
         cxx_std: ["11", "14", "17", "20", "23"]
+        arch: ["x86_64"]
+        include:
+          - compiler: gcc
+            cxx_std: "23"
+            arch: arm64
     env:
       CMAKE_BUILD_PARALLEL_LEVEL: 4
       GCOV: gcov
@@ -150,7 +155,7 @@ jobs:
           compiler: ${{ env.COMPILER_LABEL }}
           compiler-key: ${{ env.COMPILER_KEY }}
           cxx-std: ${{ matrix.cxx_std }}
-          artifact-name: cpp-cov-linux-${{ env.COMPILER_KEY }}-cxx${{ matrix.cxx_std }}
+          artifact-name: cpp-cov-linux-${{ matrix.arch || 'x86_64' }}-${{ env.COMPILER_KEY }}-cxx${{ matrix.cxx_std }}
 
       - name: Vet C++
         if: ${{ matrix.compiler == 'gcc' && matrix.cxx_std == '23' }}
