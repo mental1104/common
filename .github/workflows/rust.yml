@@ -59,13 +59,11 @@ jobs:
           rustup default ${{ matrix.toolchain }}
       - name: Add rustfmt/clippy
         if: ${{ matrix.toolchain == 'stable' }}
-        continue-on-error: true
         run: rustup component add rustfmt clippy
       - name: Setup Rust
         run: ./dev setup-rust
       - name: Format Rust
         if: ${{ matrix.toolchain == 'stable' }}
-        continue-on-error: true
         run: ./dev fmt-rust
       - name: Build Rust
         run: ./dev build-rust
@@ -73,11 +71,9 @@ jobs:
         run: ./dev coverage-rust
       - name: Vet Rust
         if: ${{ matrix.toolchain == 'stable' }}
-        continue-on-error: true
         run: ./dev vet-rust
       - name: Guard Rust
         if: ${{ matrix.toolchain == 'stable' }}
-        continue-on-error: true
         run: ./dev guard-rust
       - name: Export coverage.xml (never fail)
         if: always()
