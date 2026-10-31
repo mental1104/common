@@ -48,6 +48,7 @@
 | 上下文与 ASGI | `request_ctx_from_headers`, `RequestCtxMiddlewareFactory`, `RequestCtxContextVarMiddlewareFactory`, `register_request_ctx_middleware`, `register_all_request_ctx_middlewares` | 函数 / 类 | `from mental1104 import ...` | 从 FastAPI/Starlette 请求填充请求上下文。 |
 | 并发 | `CoroutinePool`, `GatherStrategy`, `AsCompletedStrategy`, `FirstSuccessfulStrategy`, `ThreadExecutorCoroutinePool`, `ProcessExecutorCoroutinePool`, `TaskExecutionStrategy` | 类 | `from mental1104 import ...` | 用可配置结果策略运行 async callable 批次。 |
 | 并发 | `ThreadWorkerPool`, `ProcessWorkerPool`, `MPStartMethod`, `delay`, `async_delay` | 类 / 枚举 / 函数 | `from mental1104 import ...` | 运行同步 worker pool 和简单延迟。 |
+| 并发与韧性 | `CircuitBreaker`, `CircuitBreakerConfig`, `CircuitPermit`, `CircuitOpenError`, `CircuitBreakerSnapshot` | 枚举 / dataclass / 类 / 异常 | `from mental1104.concurrency.circuit_breaker import ...` | 基于失败率和慢调用率保护本地的下游接口调用。 |
 | SQL 数据库 | `DBKind`, `ClickHouseProfile`, `ConnParams`, `SASettings`, `conn_params_from_env` | 枚举 / 类 / 函数 | `from mental1104.db import ...` | 构建数据库连接参数。 |
 | SQL 数据库 | `SQLAlchemyClient`, `AsyncSQLAlchemyClient`, `make_sqlalchemy_client`, `make_async_sqlalchemy_client` | 类 / 函数 | `from mental1104.db import ...` | 创建带 session scope 的 SQLAlchemy client。 |
 | SQL 数据库 | `DBRegistry`, `register_db`, `get_engine`, `get_async_engine`, `get_session_factory`, `get_async_session_factory`, `get_clickhouse_executor` | 类 / 函数 | `from mental1104.db import ...` | 注册并获取引擎 / session factory。 |
@@ -781,3 +782,48 @@ rows = example_read()
 ```
 
 旧版包说明仍然适用：新增顶层导出后，请在打包前使用仓库的 init 生成流程重新生成 `python/mental1104/__init__.py`。
+
+### `CircuitBreaker`
+
+- **类别：** 并发与韧性
+- **类型：** 状态枚举、配置、熔断器、许可、快照和异常
+- **定义位置：** `python/mental1104/concurrency/circuit_breaker.py`
+- **导入：** `from mental1104.concurrency.circuit_breaker import CircuitBreaker, CircuitBreakerConfig, CircuitOpenError`
+- **用途：** 在调用方进程内按下游服务与接口维护 Closed / Open / Half-Open 状态，基于精确时间滑窗统计系统失败和慢调用。
+
+**基础用法：**
+
+```python
+from mental1104.concurrency.circuit_breaker import (
+    CircuitBreaker,
+    CircuitBreakerConfig,
+)
+
+breaker = CircuitBreaker(CircuitBreakerConfig())
+result = breaker.call(
+    reserve_stock,
+    is_failure=lambda exc: not isinstance(exc, InventoryShortage),
+    fallback=lambda _: cached_unavailable_result(),
+)
+```
+
+**REPL 用法：**
+
+```python
+>>> from mental1104.concurrency.circuit_breaker import CircuitBreaker, CircuitState
+>>> breaker = CircuitBreaker()
+>>> breaker.try_acquire().record_success()
+True
+>>> breaker.snapshot().state is CircuitState.CLOSED
+True
+```
+
+**备注：**
+
+- `CircuitOutcome.IGNORED` 用于库存不足、参数错误等正常业务结果；它不进入 Closed 统计窗口，在 Half-Open 中只要不超慢阈值就视为健康探针。
+- 系统异常由 `is_failure` 分类；默认所有普通异常都计为失败。同步 `call` 和异步 `call_async` 只在本地拒绝时执行 fallback。
+- Half-Open 每轮最多发放配置数量的探针；任一失败或慢探针立即重新 Open，达到成功条件且没有在途探针后 Closed。
+- 状态基于 `time.monotonic`，线程安全且无后台线程；`snapshot` 与状态变更回调用于接入日志和指标。
+- 熔断器不负责超时、限并发或重试。Open 状态应禁止重试，并与超时、Bulkhead、有限重试和 jitter 配套使用。
+- 应按“下游服务 + 接口 + 调用类型”创建实例，不要做成 Redis 集中式熔断器，也不要按高基数业务 ID 建实例。
+
