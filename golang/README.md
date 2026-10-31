@@ -9,7 +9,12 @@
 ## 分类
 
 - 集合与字符串包含判断
+- HTTP 调用结果分类
 - CLI 与实验
+- 重试与退避
+- Redis 与缓存协调
+- 并发与缓存协调
+- 并发与韧性
 
 ## 用法索引
 
@@ -23,7 +28,13 @@
 | 集合与字符串包含判断 | `InRune` | 函数 | `github.com/mental1104/common/golang` | 检查字符串是否包含指定 rune。 |
 | 并发与限流 | `TokenBucket`, `ErrNilContext` | 结构体 / 错误值 | `github.com/mental1104/common/golang` | 单进程内阻塞获取令牌，并支持 Context 取消。 |
 | 并发与韧性 | `CircuitBreaker`, `CircuitBreakerConfig`, `CircuitPermit`, `ErrCircuitOpen`, `Execute` | 状态 / 结构体 / 错误值 / 泛型函数 | `github.com/mental1104/common/golang/mental1104` | 基于失败率和慢调用率保护本地的下游接口调用。 |
+| HTTP 调用结果分类 | `ClassifyHTTPOutcome`, `WrapHTTPTransport`, `HTTPOutcome` | 函数 / 类型 | `github.com/mental1104/common/golang/mental1104` | 区分 HTTP 状态失败与网络失败，并包装现有 `http.RoundTripper` 上报结果。 |
 | CLI 与实验 | `labctl`, `labs/*` | 命令 | `./golang/cmd/labctl`, `./golang/labs/*` | 可运行的实验 / 演示入口。 |
+| 重试与退避 | `retry.Do` | 函数 | `github.com/mental1104/common/golang/mental1104/retry` | 以最大尝试次数、指数退避、抖动、错误分类和 context deadline 控制重试。 |
+
+| 并发与缓存协调 | `SingleFlightGroup`, `SingleFlightResult`, `ErrSingleFlightNilContext` | 泛型结构体 / 错误值 | `github.com/mental1104/common/golang` | 合并同一进程内同 Key 的并发调用，等待者可取消等待。 |
+| Redis 与缓存协调 | `RedisLock`, `NewRedisLock`, `ErrRedisLockNilContext` | 结构体 / 构造函数 / 错误值 | `github.com/mental1104/common/golang` | 使用 `SET NX PX` 与 owner-check Lua 脚本实现非可重入 Redis 分布式锁。 |
+| Redis 与缓存协调 | `RedisSingleFlight`, `NewRedisSingleFlight`, `RedisSingleFlightOptions`, `CacheLookup`, `CacheHit`, `CacheMiss`, `ErrRebuildTimeout` | 泛型结构体 / 函数 / 错误值 | `github.com/mental1104/common/golang` | 组合本地 singleflight、Redis 缓存、分布式锁、轮询等待与可选旧值兜底。 |
 
 ## 详情
 
@@ -257,32 +268,73 @@ func main() {
 - `nil` Context 返回 `ErrNilContext`；取消返回 `context.Canceled` 或 `context.DeadlineExceeded`，且不消费令牌。
 - 状态仅在单进程内有效；每个等待者拥有独立 Timer，不保证严格公平，也不提供 `TryAcquire`、批量获取或指标。
 
-### 实验命令
+### HTTP 调用结果分类
 
-- **类别：** CLI 与实验
-- **类型：** 命令包
-- **定义位置：** `golang/cmd/labctl`, `golang/labs/*`
-- **导入 / 路径：** 在 `golang/` 下通过 `go run ./cmd/labctl` 或具体实验目录运行
-- **用途：** 运行本地调度器、网络、内存和 GC 实验演示。
+- **类别：** HTTP 调用结果分类
+- **名称：** `HTTPOutcomeKind`, `HTTPOutcome`, `ClassifyHTTPOutcome`, `WrapHTTPTransport`
+- **类型：** 枚举类型、结构体、函数、`http.RoundTripper` 中间件
+- **定义位置：** `golang/mental1104/http_failure.go`
+- **导入：** `mental1104 "github.com/mental1104/common/golang/mental1104"`
+- **用途：** 在网关或其他出站 HTTP 调用中区分“已经收到失败状态码”和“尚未获得有效 HTTP 响应的网络错误”。
 
 **基础用法：**
 
-```bash
-cd golang
-go run ./cmd/labctl
-go run ./labs/gc/minimal
+```go
+package main
+
+import (
+	"fmt"
+	"net/http"
+
+	mental1104 "github.com/mental1104/common/golang/mental1104"
+)
+
+func main() {
+	client := &http.Client{
+		Transport: mental1104.WrapHTTPTransport(
+			http.DefaultTransport,
+			func(request *http.Request, outcome mental1104.HTTPOutcome) {
+				fmt.Println(request.URL.Host, outcome.Kind.String(), outcome.StatusCode)
+			},
+		),
+	}
+
+	response, err := client.Get("https://example.com")
+	if response != nil {
+		defer response.Body.Close()
+	}
+	_ = err
+}
 ```
 
-**示例输出：**
+**示例结果：**
 
 ```text
-labctl demo run: docs/labs/_verify/<YYYYMMDDTHHMMSSZ>
-gc minimal demo: <YYYYMMDDTHHMMSSZ>
+example.com success 200
+```
+
+**429/503 vs EOF 实验：**
+
+```bash
+cd golang
+go run ./labs/http_failure
+```
+
+**实验输出：**
+
+```text
+scenario=429 do_error=false status_readable=true status_code=429 kind=http_status_failure
+scenario=503 do_error=false status_readable=true status_code=503 kind=http_status_failure
+scenario=eof do_error=true status_readable=false status_code=0 kind=network_failure
 ```
 
 **备注：**
 
-- 待复核：实验是可运行演示，不是稳定的可复用库 API。
+- `429` 和 `503` 已经形成合法 HTTP 响应，因此 `client.Do` 不返回网络 error，`resp.StatusCode` 可读。
+- 直接断连发生在服务端写出 HTTP 状态行之前，因此 `client.Do` 返回 error，通常没有可读取的 response。
+- 包装器不消费响应体、不关闭连接，也不把 `4xx/5xx` 转换成 Go error。
+- 本能力不实现自动重试；是否重试仍需结合请求幂等性、请求体可重放性和业务语义决定。
+- observer 可能被并发调用，并且其 panic 不会被包装器恢复。
 
 ### `CircuitBreaker`
 
@@ -318,4 +370,218 @@ result, err := mental1104.ExecuteOrFallback(
 - 统计使用 Go `time.Time` 的单调部分；实现线程安全、无后台 goroutine，并提供 `Snapshot` 与 `WithStateChangeListener`。
 - 熔断器不负责超时、限并发或重试。Open 状态应禁止重试，并与 Context 超时、Bulkhead、有限重试和 jitter 配套使用。
 - 应按“下游服务 + 接口 + 调用类型”创建实例，不要做成 Redis 集中式熔断器，也不要按高基数业务 ID 建实例。
+
+### 实验命令
+
+- **类别：** CLI 与实验
+- **类型：** 命令包
+- **定义位置：** `golang/cmd/labctl`, `golang/labs/*`
+- **导入 / 路径：** 在 `golang/` 下通过 `go run ./cmd/labctl` 或具体实验目录运行
+- **用途：** 运行本地调度器、网络、内存、GC 和 HTTP 失败语义实验演示。
+
+**基础用法：**
+
+```bash
+cd golang
+go run ./cmd/labctl
+go run ./labs/gc/minimal
+go run ./labs/http_failure
+```
+
+**示例输出：**
+
+```text
+labctl demo run: docs/labs/_verify/<YYYYMMDDTHHMMSSZ>
+gc minimal demo: <YYYYMMDDTHHMMSSZ>
+scenario=429 do_error=false status_readable=true status_code=429 kind=http_status_failure
+```
+
+**备注：**
+
+- 待复核：实验是可运行演示，不是稳定的可复用库 API。
+
+### `retry.Do`
+
+- **类别：** 重试与退避
+- **类型：** 函数与配置类型
+- **定义位置：** `golang/mental1104/retry`
+- **导入：** `github.com/mental1104/common/golang/mental1104/retry`
+- **用途：** 对短暂网络失败等可重试错误执行指数退避，并由 context 限制总体 deadline。
+
+**基础用法：**
+
+```go
+package main
+
+import (
+	"context"
+	"time"
+
+	"github.com/mental1104/common/golang/mental1104/retry"
+)
+
+func main() {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	_ = retry.Do(ctx, retry.Options{
+		MaxAttempts: 4,
+		BaseDelay:   100 * time.Millisecond,
+		MaxDelay:    time.Second,
+		JitterRatio: 0.2,
+		Retryable: func(err error) bool {
+			return err != nil
+		},
+	}, func() error {
+		return callRemoteService()
+	})
+}
+
+func callRemoteService() error { return nil }
+```
+
+**备注：**
+
+- `MaxAttempts` 包含第一次调用，因此 4 次尝试最多只会等待 3 次。
+- 下一次退避放不进剩余 deadline 时直接返回 `context.DeadlineExceeded`，不会继续 sleep。
+- `Sleep`、`Now` 和 `Random` 是测试注入点，普通调用通常留空。
+- `Retryable` 应由业务区分临时错误和永久错误；参数错误、认证失败等通常不应重试。
+
+### `SingleFlightGroup`
+
+- **类别：** 并发与缓存协调
+- **类型：** 泛型结构体、方法、结果结构体、错误值
+- **定义位置：** `golang/mental1104/singleflight.go`
+- **导入：** `mental1104 "github.com/mental1104/common/golang"`
+- **用途：** 按 Key 合并同一进程内的并发调用；首个调用者执行 loader，等待者复用同一值或同一错误。
+
+**基础用法：**
+
+```go
+package main
+
+import (
+	"context"
+	"fmt"
+
+	mental1104 "github.com/mental1104/common/golang"
+)
+
+func main() {
+	var group mental1104.SingleFlightGroup[string, string]
+	result, err := group.Do(context.Background(), "product:123", func(context.Context) (string, error) {
+		return `{"id":123}`, nil
+	})
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println(result.Value, result.Shared)
+}
+```
+
+**备注：**
+
+- `Shared=false` 表示当前调用执行了 loader；同一 in-flight 调用的等待者得到 `Shared=true`。
+- 等待者取消 Context 只停止自己的等待，不会删除或破坏正在执行的共享调用。
+- leader 的 loader 使用 leader 调用方传入的 Context；loader 返回错误或 panic 后，in-flight 状态会清理，后续调用可以重试。
+- 该能力只在当前 Go 进程内生效，不能协调其他 Pod。
+
+
+### `RedisLock`
+
+- **类别：** Redis 与缓存协调
+- **类型：** 结构体、构造函数、方法、错误值
+- **定义位置：** `golang/mental1104/redis_lock.go`
+- **导入：** `mental1104 "github.com/mental1104/common/golang"`
+- **用途：** 使用随机 owner token、`SET key token NX PX ttl` 和 Lua 校验删除实现非可重入 Redis 分布式锁。
+
+**基础用法：**
+
+```go
+lock, err := mental1104.NewRedisLock(client, "singleflight:lock:product:123", 3*time.Second)
+if err != nil {
+	return err
+}
+locked, err := lock.TryLock(ctx)
+if err != nil {
+	return err
+}
+if locked {
+	defer lock.Unlock(context.Background())
+	// 重建共享缓存。
+}
+```
+
+**备注：**
+
+- `TryLock` 只尝试一次，不在库内自旋；调用方决定等待策略。
+- `Unlock` 仅在 Redis 中的 token 仍属于当前锁实例时删除 key。
+- 锁没有自动续期，也不是可重入锁；任务耗时超过 TTL 时，其他实例可能重新获得锁。
+
+
+### `RedisSingleFlight`
+
+- **类别：** Redis 与缓存协调
+- **类型：** 泛型结构体、构造函数、配置结构体、回调类型、结果结构体、错误值
+- **定义位置：** `golang/mental1104/redis_singleflight.go`
+- **导入：** `mental1104 "github.com/mental1104/common/golang"`
+- **用途：** 在 Redis 缓存 miss 时，以本地 singleflight 合并当前实例请求，再用 Redis 锁选择一个集群级缓存重建者；未持锁实例轮询缓存并复用结果。
+
+**基础用法：**
+
+```go
+package main
+
+import (
+	"context"
+	"errors"
+	"time"
+
+	mental1104 "github.com/mental1104/common/golang"
+	redis "github.com/redis/go-redis/v9"
+)
+
+func build(client redis.UniversalClient) (*mental1104.RedisSingleFlight[string], error) {
+	options := mental1104.DefaultRedisSingleFlightOptions()
+	return mental1104.NewRedisSingleFlight[string](
+		client,
+		func(ctx context.Context, key string) (mental1104.CacheLookup[string], error) {
+			value, err := client.Get(ctx, key).Result()
+			if errors.Is(err, redis.Nil) {
+				return mental1104.CacheMiss[string](), nil
+			}
+			if err != nil {
+				return mental1104.CacheLookup[string]{}, err
+			}
+			return mental1104.CacheHit(value), nil
+		},
+		func(ctx context.Context, key, value string, ttl time.Duration) error {
+			return client.Set(ctx, key, value, ttl).Err()
+		},
+		nil, // 可选 stale getter。
+		options,
+	)
+}
+```
+
+调用：
+
+```go
+result, err := singleflight.GetOrLoad(ctx, "product:123", func(ctx context.Context) (string, error) {
+	return queryProductJSON(ctx, 123)
+})
+if err != nil {
+	return err
+}
+useProductJSON(result.Value)
+```
+
+**行为与限制：**
+
+- 顺序为：Redis 首读 → 本地 singleflight → Redis 二次检查 → 尝试锁 → 持锁后再次检查 → loader → 写缓存；未持锁者以 `PollMin`～`PollMax` jitter 轮询。
+- `CacheLookup.Found` 明确区分缓存 miss 与缓存中的零值 / 空字符串。
+- Redis 读写和锁错误会原样返回，不会静默伪装成 miss。
+- 等待超过 `WaitTimeout` 时，若提供 stale getter 且命中，则返回 `Stale=true`；否则返回 `ErrRebuildTimeout`。
+- `LockTTL`、`CacheTTL`、等待和轮询参数必须有效；默认锁 TTL 3 秒、缓存 TTL 10 分钟、等待 500ms、轮询 20～50ms。
+- 这是集群级回源抑制，不是 exactly-once。网络分区、进程暂停或 loader 超过锁 TTL 时仍可能重复回源；支付、扣款等业务必须使用业务唯一键、数据库约束和幂等记录。
 

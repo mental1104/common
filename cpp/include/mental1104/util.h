@@ -6,7 +6,10 @@
 #include <algorithm>
 #include <cctype>
 #include <chrono>
+#include <cmath>
 #include <map>
+#include <random>
+#include <stdexcept>
 #include <string>
 #include <unordered_map>
 
@@ -64,6 +67,30 @@ public:
     auto next_delay = std::chrono::milliseconds(current_.count() * factor_);
     current_ = std::min(next_delay, max_);
     return delay;
+  }
+
+  template <typename UniformRandomBitGenerator>
+  std::chrono::milliseconds next(double jitter_ratio,
+                                 UniformRandomBitGenerator &rng) {
+    return with_symmetric_jitter(next(), jitter_ratio, rng);
+  }
+
+  template <typename UniformRandomBitGenerator>
+  static std::chrono::milliseconds
+  with_symmetric_jitter(std::chrono::milliseconds delay, double jitter_ratio,
+                        UniformRandomBitGenerator &rng) {
+    if (jitter_ratio < 0.0 || jitter_ratio > 1.0) {
+      throw std::invalid_argument("jitter_ratio must be in [0, 1]");
+    }
+    if (jitter_ratio == 0.0 || delay.count() == 0) {
+      return delay;
+    }
+
+    std::uniform_real_distribution<double> multiplier(1.0 - jitter_ratio,
+                                                      1.0 + jitter_ratio);
+    auto jittered =
+        static_cast<long long>(std::llround(delay.count() * multiplier(rng)));
+    return std::chrono::milliseconds(std::max<long long>(0, jittered));
   }
 
   void reset() { current_ = initial_; }
