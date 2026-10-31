@@ -48,6 +48,8 @@
 | 上下文与 ASGI | `request_ctx_from_headers`, `RequestCtxMiddlewareFactory`, `RequestCtxContextVarMiddlewareFactory`, `register_request_ctx_middleware`, `register_all_request_ctx_middlewares` | 函数 / 类 | `from mental1104 import ...` | 从 FastAPI/Starlette 请求填充请求上下文。 |
 | 并发 | `CoroutinePool`, `GatherStrategy`, `AsCompletedStrategy`, `FirstSuccessfulStrategy`, `ThreadExecutorCoroutinePool`, `ProcessExecutorCoroutinePool`, `TaskExecutionStrategy` | 类 | `from mental1104 import ...` | 用可配置结果策略运行 async callable 批次。 |
 | 并发 | `ThreadWorkerPool`, `ProcessWorkerPool`, `MPStartMethod`, `delay`, `async_delay` | 类 / 枚举 / 函数 | `from mental1104 import ...` | 运行同步 worker pool 和简单延迟。 |
+| 并发与缓存协调 | `SingleFlightGroup`, `SingleFlightResult`, `RedisSingleFlight`, `RedisSingleFlightOptions`, `CacheLookup`, `RebuildTimeoutError` | 类 / dataclass / 异常 | `from mental1104.concurrency.singleflight import ...` | 合并进程内同 Key 请求，并以 Redis 锁协调多实例缓存重建。 |
+| 并发与韧性 | `CircuitBreaker`, `CircuitBreakerConfig`, `CircuitPermit`, `CircuitOpenError`, `CircuitBreakerSnapshot` | 枚举 / dataclass / 类 / 异常 | `from mental1104.concurrency.circuit_breaker import ...` | 基于失败率和慢调用率保护本地的下游接口调用。 |
 | SQL 数据库 | `DBKind`, `ClickHouseProfile`, `ConnParams`, `SASettings`, `conn_params_from_env` | 枚举 / 类 / 函数 | `from mental1104.db import ...` | 构建数据库连接参数。 |
 | SQL 数据库 | `SQLAlchemyClient`, `AsyncSQLAlchemyClient`, `make_sqlalchemy_client`, `make_async_sqlalchemy_client` | 类 / 函数 | `from mental1104.db import ...` | 创建带 session scope 的 SQLAlchemy client。 |
 | SQL 数据库 | `DBRegistry`, `register_db`, `get_engine`, `get_async_engine`, `get_session_factory`, `get_async_session_factory`, `get_clickhouse_executor` | 类 / 函数 | `from mental1104.db import ...` | 注册并获取引擎 / session factory。 |
@@ -65,6 +67,7 @@
 | i18n 工具 | `PoEntry`, `parse_po`, `write_mo`, `po_text_to_mo_bytes`, `compile_po_tree`, `check_po_tree`, `main` | 类 / 函数 / CLI | `from mental1104.common.i18n.tools...` | 解析、编译并检查 PO/MO 树。 |
 | 绘图 | `BenchTestType`, `BenchmarkRecord`, `BenchmarkSuite`, `PytestBenchmarkSuite`, `GoogleBenchmarkSuite`, `load_benchmark_suite`, `BenchmarkPlotter`, `TrendPlotBase`, `TimeBasedTrendPlot` | 类 / 函数 | `from mental1104 import ...` | 加载基准测试 payload 并渲染图表。 |
 | 调试与网络 | `trace_if`, `deciprobe`, `fetch_status` | 装饰器 / 函数 | `from mental1104 import ...` | 条件式跟踪调用并获取 HTTP 状态码。 |
+| 调试与网络 | `HTTPOutcomeKind`, `HTTPOutcome`, `classify_http_outcome`, `observe_http_outcomes` | 枚举 / dataclass / 函数 / 装饰器 | `from mental1104.network.http_failure import ...` | 区分 HTTP 状态失败与网络失败，并观察同步或异步 HTTP 调用。 |
 | Schema 辅助工具 | `JsonSerializable` | 类 | `from mental1104 import JsonSerializable` | 将简单对象转换为 dict。 |
 | CLI 与脚本 | `python/tools/render_bench_plots.py`, `python/tools/assemble_bench_gallery.py`, `mental1104.common.i18n.tools.cli.main` | 脚本 / 函数 | 通过 Python 运行或导入 `main` | 渲染基准测试资源并运行 i18n 工具。 |
 | 候选或仅示例 API | `User`, `UserDAO`, `AsyncUserDAO`, `bootstrap`, `example_read`, `example_write`, `example_read_then_write`, `example_threads`, `example_chunk_read`, `example_async_read`, `example_async_write` | 示例类 / 函数 | `from mental1104.db.examples import ...` | 演示数据库注册、DAO 和作用域用法。 |
@@ -406,6 +409,90 @@ True
 
 - `ProcessExecutorCoroutinePool` 和 `ProcessWorkerPool` 需要可被 pickle 的 callable。
 
+### Singleflight 与 Redis 缓存重建协调
+
+- **类别：** 并发与缓存协调
+- **类型：** 类、dataclass、异常
+- **定义位置：** `python/mental1104/concurrency/singleflight.py`
+- **导入：** `from mental1104.concurrency.singleflight import CacheLookup, RebuildTimeoutError, RedisSingleFlight, RedisSingleFlightOptions, SingleFlightGroup, SingleFlightResult`
+- **用途：** `SingleFlightGroup` 合并同一进程内同 Key 的并发调用；`RedisSingleFlight` 再通过 Redis 缓存和按 Key 分布式锁协调多个服务实例。
+
+**本地 singleflight：**
+
+```python
+from mental1104.concurrency.singleflight import SingleFlightGroup
+
+group = SingleFlightGroup[str, dict]()
+result = group.do(
+    "product:123",
+    lambda: {"id": 123, "name": "keyboard"},
+)
+print(result.value, result.shared)
+```
+
+**Redis 集群级 singleflight：**
+
+```python
+import json
+from mental1104.concurrency.singleflight import (
+    CacheLookup,
+    RedisSingleFlight,
+    RedisSingleFlightOptions,
+)
+
+
+def cache_get(key):
+    raw = redis_client.get(key)
+    if raw is None:
+        return CacheLookup.miss()
+    return CacheLookup.hit(json.loads(raw))
+
+
+def cache_set(key, value, ttl_seconds):
+    redis_client.set(key, json.dumps(value), ex=ttl_seconds)
+
+
+singleflight = RedisSingleFlight(
+    redis_client,
+    cache_get,
+    cache_set,
+    options=RedisSingleFlightOptions(
+        lock_ttl_seconds=3,
+        cache_ttl_seconds=600,
+        wait_timeout_seconds=0.5,
+        poll_min_seconds=0.02,
+        poll_max_seconds=0.05,
+    ),
+)
+
+result = singleflight.get_or_load(
+    "product:123",
+    lambda: query_product_from_database(123),
+)
+product = result.value
+```
+
+**REPL 用法：**
+
+```python
+>>> from mental1104.concurrency.singleflight import CacheLookup, SingleFlightGroup
+>>> CacheLookup.miss().found
+False
+>>> group = SingleFlightGroup[str, int]()
+>>> group.do("answer", lambda: 42).value
+42
+```
+
+**行为与限制：**
+
+- 执行顺序为：Redis 首读 → 本地 singleflight → Redis 二次检查 → `RedisLock.try_lock_once()` → 持锁后再次检查 → loader → 写缓存；未持锁实例以带 jitter 的短间隔轮询缓存。
+- `CacheLookup.found` 明确区分缓存 miss 与缓存中的 `None` 等合法值；序列化由调用方回调负责。
+- leader 执行结束后会清理本地 in-flight 状态；同一批等待者复用相同值或相同异常，不同 Key 不互相阻塞。
+- Redis 读取、写入和锁操作异常会向调用方传播，不会静默伪装成 miss。
+- 等待超时后可以通过 `stale_get` 返回旧值，此时 `SingleFlightResult.stale=True`；没有旧值时抛出 `RebuildTimeoutError`。
+- 默认锁 TTL 为 3 秒、缓存 TTL 为 10 分钟、最长等待 500ms、轮询间隔 20～50ms；TTL、等待和轮询边界会在构造配置时校验。
+- 该方案是集群级回源抑制，不是 exactly-once。网络分区、进程暂停或 loader 超过锁 TTL 时仍可能重复回源；支付、扣款等业务必须使用业务唯一键、数据库约束和幂等记录。
+
 ### SQL 数据库注册表、作用域、DAO 和工作单元
 
 - **类别：** SQL 数据库、DAO 和工作单元
@@ -535,6 +622,7 @@ bloom.exists("alice")
 
 **备注：**
 
+- `RedisLock.try_lock_once()` 只执行一次 `SET NX EX`，适合由上层 singleflight 自行控制轮询；`try_lock()` 保留原有重试等待语义。
 - 实际调用需要 `redis` 依赖和可访问的 Redis 服务。
 
 ### MongoDB 辅助工具
@@ -711,6 +799,74 @@ def build():
 
 - `fetch_status` 需要 `aiohttp.ClientSession`。
 
+### HTTP 调用结果分类与观察装饰器
+
+- **类别：** 调试与网络
+- **名称：** `HTTPOutcomeKind`, `HTTPOutcome`, `classify_http_outcome`, `observe_http_outcomes`
+- **类型：** 枚举、dataclass、函数、同步 / 异步装饰器
+- **定义位置：** `python/mental1104/network/http_failure.py`
+- **导入：** `from mental1104.network.http_failure import HTTPOutcome, HTTPOutcomeKind, classify_http_outcome, observe_http_outcomes`
+- **用途：** 在网关或其他出站 HTTP 调用中区分“已经收到失败状态码”和“尚未获得有效 HTTP 响应的网络错误”。
+
+**基础用法：**
+
+```python
+from dataclasses import dataclass
+from mental1104.network.http_failure import observe_http_outcomes
+
+@dataclass
+class Response:
+    status_code: int
+
+observed = []
+
+@observe_http_outcomes(observed.append)
+def call_gateway() -> Response:
+    return Response(status_code=503)
+
+response = call_gateway()
+assert response.status_code == 503
+assert observed[-1].kind.value == "http_status_failure"
+```
+
+**REPL 用法：**
+
+```python
+>>> from dataclasses import dataclass
+>>> from mental1104.network.http_failure import classify_http_outcome
+>>> @dataclass
+... class Response:
+...     status_code: int
+>>> classify_http_outcome(Response(503)).kind.value
+'http_status_failure'
+>>> classify_http_outcome(error=EOFError("EOF")).kind.value
+'network_failure'
+```
+
+**429/503 vs EOF 实验：**
+
+```bash
+cd python
+PYTHONPATH=. python labs/http_failure/main.py
+```
+
+**实验输出：**
+
+```text
+scenario=429 request_error=False status_readable=True status_code=429 kind=http_status_failure
+scenario=503 request_error=False status_readable=True status_code=503 kind=http_status_failure
+scenario=eof request_error=True status_readable=False status_code=0 kind=network_failure
+```
+
+**备注：**
+
+- 响应对象可使用整数类型的 `status_code` 或 `status` 属性，分别兼容常见同步与异步客户端响应模型。
+- `429` 和 `503` 已经形成合法 HTTP 响应，因此状态码可读；装饰器不会主动把它们转换为异常。
+- EOF 场景在收到 HTTP 状态行前断连，因此客户端抛出网络异常且没有可依赖的状态码。
+- 装饰器原样返回响应或重新抛出原异常，不读取或关闭响应体。
+- 本能力不实现自动重试；是否重试仍需结合请求幂等性、请求体可重放性和业务语义决定。
+- observer 可能在不同线程或事件循环任务中被调用，并且其异常会向外传播。
+
 ### CLI 和脚本
 
 - **类别：** CLI 与脚本
@@ -781,3 +937,48 @@ rows = example_read()
 ```
 
 旧版包说明仍然适用：新增顶层导出后，请在打包前使用仓库的 init 生成流程重新生成 `python/mental1104/__init__.py`。
+
+### `CircuitBreaker`
+
+- **类别：** 并发与韧性
+- **类型：** 状态枚举、配置、熔断器、许可、快照和异常
+- **定义位置：** `python/mental1104/concurrency/circuit_breaker.py`
+- **导入：** `from mental1104.concurrency.circuit_breaker import CircuitBreaker, CircuitBreakerConfig, CircuitOpenError`
+- **用途：** 在调用方进程内按下游服务与接口维护 Closed / Open / Half-Open 状态，基于精确时间滑窗统计系统失败和慢调用。
+
+**基础用法：**
+
+```python
+from mental1104.concurrency.circuit_breaker import (
+    CircuitBreaker,
+    CircuitBreakerConfig,
+)
+
+breaker = CircuitBreaker(CircuitBreakerConfig())
+result = breaker.call(
+    reserve_stock,
+    is_failure=lambda exc: not isinstance(exc, InventoryShortage),
+    fallback=lambda _: cached_unavailable_result(),
+)
+```
+
+**REPL 用法：**
+
+```python
+>>> from mental1104.concurrency.circuit_breaker import CircuitBreaker, CircuitState
+>>> breaker = CircuitBreaker()
+>>> breaker.try_acquire().record_success()
+True
+>>> breaker.snapshot().state is CircuitState.CLOSED
+True
+```
+
+**备注：**
+
+- `CircuitOutcome.IGNORED` 用于库存不足、参数错误等正常业务结果；它不进入 Closed 统计窗口，在 Half-Open 中只要不超慢阈值就视为健康探针。
+- 系统异常由 `is_failure` 分类；默认所有普通异常都计为失败。同步 `call` 和异步 `call_async` 只在本地拒绝时执行 fallback。
+- Half-Open 每轮最多发放配置数量的探针；任一失败或慢探针立即重新 Open，达到成功条件且没有在途探针后 Closed。
+- 状态基于 `time.monotonic`，线程安全且无后台线程；`snapshot` 与状态变更回调用于接入日志和指标。
+- 熔断器不负责超时、限并发或重试。Open 状态应禁止重试，并与超时、Bulkhead、有限重试和 jitter 配套使用。
+- 应按“下游服务 + 接口 + 调用类型”创建实例，不要做成 Redis 集中式熔断器，也不要按高基数业务 ID 建实例。
+
