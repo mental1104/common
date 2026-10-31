@@ -148,7 +148,10 @@ jobs:
 
   gate-result:
     name: PR Gate Result
-    if: always()
+    if: >-
+      always() &&
+      ((github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') ||
+       (github.event_name == 'pull_request' && github.event.pull_request.draft == false))
     needs: [changes, cpp, python, golang, rust, dotnet, java]
     runs-on: ubuntu-latest
     steps:
