@@ -1,10 +1,12 @@
-// redis_lock_test.cpp
-#include <atomic>
+#pragma once
+
 #include <chrono>
-#include <gtest/gtest.h>
+#include <cstdlib>
 #include <iostream>
-#include <random>
-#include <sstream>
+#include <memory>
+#include <string>
+#include <type_traits>
+
 #include "mental1104/meta/compiler_support.h"
 #if defined(M1104_REDISPP_CXX_STANDARD)
 #if M1104_REDISPP_CXX_STANDARD < 17
@@ -18,12 +20,13 @@
 #include <sw/redis++/cxx11/sw/redis++/cxx_utils.h>
 #endif
 #include <sw/redis++/redis++.h>
-#include <thread>
-#include <type_traits>
-#include <vector>
 
 #include "mental1104/random.h"
 using namespace sw::redis;
+
+namespace mental1104 {
+class RedisSingleFlightLock;
+}
 
 // 读图索引：
 // - 这个类用 Redis 的 SET NX PX 做分布式互斥锁，value_ 是本客户端的唯一标识。
@@ -68,10 +71,9 @@ public:
     return try_lock_impl(ms);
   }
 
-  template <typename T,
-            typename = std::enable_if_t<std::is_integral_v<
-                T>>> // SFINAE 约束：仅限整数类型重载（避免与 duration 冲突）
-  bool try_lock(T expire_ms) {
+  template <typename T>
+  typename std::enable_if<std::is_integral<T>::value, bool>::type
+  try_lock(T expire_ms) {
     if (expire_ms < 0)
       expire_ms = 0;
     return try_lock_impl(
@@ -79,22 +81,25 @@ public:
   }
 
 private:
+  friend class mental1104::RedisSingleFlightLock;
+
+  bool try_lock_or_throw(std::chrono::milliseconds expire) {
+    // 使用 SET key value NX PX expire 来实现分布式锁。
+    bool result = redis_->set(
+        key_, value_, expire,
+        UpdateType::NOT_EXIST); // NX 语义：只在 key 不存在时写入。
+    if (result) {
+      locked_ = true;
+    }
+    return result;
+  }
+
   bool try_lock_impl(std::chrono::milliseconds expire) {
     try {
-      // 使用 SET key value NX PX expire 来实现分布式锁
-      bool result = redis_->set(
-          key_, value_, expire,
-          UpdateType::NOT_EXIST); // NX 语义：只在 key
-                                  // 不存在时写入，确保只有第一个调用者持锁
-      if (result) {
-        locked_ = true;
-      }
-      // result == true 表示 SET 成功写入（锁获取成功）；false 表示 key
-      // 已存在或命令失败（未持锁）
-      return result;
+      return try_lock_or_throw(expire);
     } catch (const Error &err) {
-      // 进入这里通常是 Redis
-      // 命令执行异常（连接断开/超时、序列化错误、鉴权失败等），此时未持锁
+      // 保留现有兼容行为：普通 RedisLock 调用把 Redis 异常视为未持锁并记录日志。
+      // RedisSingleFlightLock 通过友元入口保留异常，以区分锁竞争和 Redis 故障。
       std::cerr << "try_lock error: " << err.what() << std::endl;
       return false;
     }
@@ -164,7 +169,7 @@ private:
 //   REDIS_HOST=192.168.31.239
 //   REDIS_PORT=6379
 // ======================================================================
-std::shared_ptr<Redis> create_redis_from_env() {
+inline std::shared_ptr<Redis> create_redis_from_env() {
   // std::getenv 从进程环境取变量，未设置时返回 nullptr/NULL；C 和 C++
   // 共用这个接口。缺失必需的 host/port 就直接返回 nullptr（未设置默认值）。
   // 若需默认值，可在取出后判空填入默认，如 host_env ? host_env :

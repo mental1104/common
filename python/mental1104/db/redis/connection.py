@@ -103,7 +103,7 @@ class RedisLock:
         self.lock_value = str(uuid.uuid4())
 
     def try_lock_once(self) -> bool:
-        """Attempt ``SET NX EX`` once without sleeping."""
+        """单次尝试获取 Redis 锁，不在失败时休眠。"""
         return bool(
             self.redis_client.set(
                 self.name,
