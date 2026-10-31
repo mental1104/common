@@ -3,30 +3,10 @@ name: Python
 on:
   workflow_call:
     inputs:
-      enable_python_314:
-        description: "Run Python 3.14 jobs (pre-release)"
+      full_matrix:
+        description: "Run the complete OS/runtime compatibility matrix"
         type: boolean
-        default: true
-      verbose_logs:
-        description: "Enable verbose test output"
-        type: boolean
-        default: true
-  push:
-    branches-ignore:
-      - main
-    paths:
-      - "python/**"
-      - "devops/**"
-      - "tools/ci/**"
-      - ".github/workflows/python.yml"
-  pull_request:
-    paths:
-      - "python/**"
-      - "devops/**"
-      - "tools/ci/**"
-      - ".github/workflows/python.yml"
-  workflow_dispatch:
-    inputs:
+        default: false
       enable_python_314:
         description: "Run Python 3.14 jobs (pre-release)"
         type: boolean
@@ -37,8 +17,8 @@ on:
         default: true
 
 env:
-  PYTEST_ADDOPTS: ${{ (vars.CI_VERBOSE_LOGS == 'false' || (github.event_name == 'workflow_dispatch' && (github.event.inputs.verbose_logs == false || github.event.inputs.verbose_logs == 'false')) || (github.event_name == 'workflow_call' && (inputs.verbose_logs == false || inputs.verbose_logs == 'false'))) && '' || '-s -vv' }}
-  PYTHONUNBUFFERED: ${{ (vars.CI_VERBOSE_LOGS == 'false' || (github.event_name == 'workflow_dispatch' && (github.event.inputs.verbose_logs == false || github.event.inputs.verbose_logs == 'false')) || (github.event_name == 'workflow_call' && (inputs.verbose_logs == false || inputs.verbose_logs == 'false'))) && '' || '1' }}
+  PYTEST_ADDOPTS: ${{ (vars.CI_VERBOSE_LOGS == 'false' || inputs.verbose_logs == false || inputs.verbose_logs == 'false') && '' || '-s -vv' }}
+  PYTHONUNBUFFERED: ${{ (vars.CI_VERBOSE_LOGS == 'false' || inputs.verbose_logs == false || inputs.verbose_logs == 'false') && '' || '1' }}
 
 jobs:
   linux:
@@ -96,15 +76,7 @@ jobs:
           --health-interval=5s --health-timeout=5s --health-retries=10
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - { python: "3.8",  python_spec: "3.8",      prerelease: false }
-          - { python: "3.9",  python_spec: "3.9",      prerelease: false }
-          - { python: "3.10", python_spec: "3.10",     prerelease: false }
-          - { python: "3.11", python_spec: "3.11",     prerelease: false }
-          - { python: "3.12", python_spec: "3.12",     prerelease: false }
-          - { python: "3.13", python_spec: "3.13",     prerelease: false }
-          - { python: "3.14", python_spec: "3.14-dev", prerelease: true }
+      matrix: ${{ fromJson(inputs.full_matrix && '{"include":[{"python":"3.8","python_spec":"3.8","prerelease":false},{"python":"3.9","python_spec":"3.9","prerelease":false},{"python":"3.10","python_spec":"3.10","prerelease":false},{"python":"3.11","python_spec":"3.11","prerelease":false},{"python":"3.12","python_spec":"3.12","prerelease":false},{"python":"3.13","python_spec":"3.13","prerelease":false},{"python":"3.14","python_spec":"3.14-dev","prerelease":true}]}' || '{"include":[{"python":"3.13","python_spec":"3.13","prerelease":false}]}') }}
 
     env:
       PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/devops
@@ -154,26 +126,14 @@ jobs:
           submodules: false
           fetch-depth: 0
 
-      - name: Gate prerelease (3.14) by input/vars
+      - name: Gate prerelease (3.14) by input
         id: gate
         run: |
           set -euo pipefail
           enable="true"
 
-          if [ "${{ matrix.prerelease }}" = "true" ]; then
-            if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-              if [ "${{ github.event.inputs.enable_python_314 }}" = "false" ]; then
-                enable="false"
-              fi
-            elif [ "${{ github.event_name }}" = "workflow_call" ]; then
-              if [ "${{ inputs.enable_python_314 }}" = "false" ]; then
-                enable="false"
-              fi
-            else
-              if [ "${{ vars.CI_ENABLE_PYTHON_314 }}" = "false" ]; then
-                enable="false"
-              fi
-            fi
+          if [ "${{ matrix.prerelease }}" = "true" ] && [ "${{ inputs.enable_python_314 }}" = "false" ]; then
+            enable="false"
           fi
 
           echo "enable=${enable}" >> "$GITHUB_OUTPUT"
@@ -339,6 +299,7 @@ jobs:
           fi
 
   macos:
+    if: ${{ inputs.full_matrix }}
     name: macOS / Python ${{ matrix.python }}
     runs-on: macos-latest
     strategy:
@@ -368,26 +329,14 @@ jobs:
           submodules: false
           fetch-depth: 0
 
-      - name: Gate prerelease (3.14) by input/vars
+      - name: Gate prerelease (3.14) by input
         id: gate
         run: |
           set -euo pipefail
           enable="true"
 
-          if [ "${{ matrix.prerelease }}" = "true" ]; then
-            if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-              if [ "${{ github.event.inputs.enable_python_314 }}" = "false" ]; then
-                enable="false"
-              fi
-            elif [ "${{ github.event_name }}" = "workflow_call" ]; then
-              if [ "${{ inputs.enable_python_314 }}" = "false" ]; then
-                enable="false"
-              fi
-            else
-              if [ "${{ vars.CI_ENABLE_PYTHON_314 }}" = "false" ]; then
-                enable="false"
-              fi
-            fi
+          if [ "${{ matrix.prerelease }}" = "true" ] && [ "${{ inputs.enable_python_314 }}" = "false" ]; then
+            enable="false"
           fi
 
           echo "enable=${enable}" >> "$GITHUB_OUTPUT"
@@ -492,6 +441,7 @@ jobs:
           fi
 
   windows:
+    if: ${{ inputs.full_matrix }}
     name: Windows / Python ${{ matrix.python }}
     runs-on: windows-latest
     strategy:
@@ -524,18 +474,12 @@ jobs:
           submodules: false
           fetch-depth: 0
 
-      - name: Gate prerelease (3.14) by input/vars
+      - name: Gate prerelease (3.14) by input
         id: gate
         run: |
           $enable = "true"
-          if ("${{ matrix.prerelease }}" -eq "true") {
-            if ("${{ github.event_name }}" -eq "workflow_dispatch") {
-              if ("${{ github.event.inputs.enable_python_314 }}" -eq "false") { $enable = "false" }
-            } elseif ("${{ github.event_name }}" -eq "workflow_call") {
-              if ("${{ inputs.enable_python_314 }}" -eq "false") { $enable = "false" }
-            } else {
-              if ("${{ vars.CI_ENABLE_PYTHON_314 }}" -eq "false") { $enable = "false" }
-            }
+          if (("${{ matrix.prerelease }}" -eq "true") -and ("${{ inputs.enable_python_314 }}" -eq "false")) {
+            $enable = "false"
           }
           "enable=$enable" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
 

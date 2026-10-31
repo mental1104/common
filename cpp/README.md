@@ -2,6 +2,8 @@
 
 公共 C++ 头文件位于 `cpp/include/mental1104`。下面的包含示例假设已经通过仓库 CMake 安装，或包含路径中已有 `cpp/include`。
 
+运行 `./dev setup-cpp` 时会先检查 CMake、C++ 编译器、GMP/MPFR 开发库，以及启用覆盖率时的 `lcov` 和 `genhtml`。缺失时命令会列出对应项及当前平台的安装命令，安装后重新运行即可。
+
 ## 维护规则
 
 新增公共函数、类、结构体、枚举、别名、宏、可复用方法或公共头文件时，必须更新此 README，写明类别、包含路径、用途、最小调用示例和备注。如果 API 已公开但稳定性尚不明确，请标记为 `待复核`。
@@ -28,7 +30,7 @@
 |---|---|---|---|---|
 | 容器与字符串 | `contains` | 函数模板 | `mental1104/util.h` | 检查 STL 容器成员关系和 map 键是否存在。 |
 | 容器与字符串 | `to_lower_copy` | 函数 | `mental1104/util.h` | 返回小写化后的 `std::string` 副本。 |
-| 容器与字符串 | `ExponentialBackoff` | 类 | `mental1104/util.h` | 按上限推进重试延迟。 |
+| 容器与字符串 | `ExponentialBackoff` | 类 | `mental1104/util.h` | 按上限推进重试延迟，可显式加入对称随机抖动。 |
 | 缓存包装器 | `LRUCache`, `make_lru_cache`, `make_cache` | 类 / 函数 | `mental1104/core/cache.h` | 用 tuple 键 LRU 或无界缓存包装可调用对象。 |
 | 缓存包装器 | `LFUCache`, `make_lfu_cache` | 类 / 函数 | `mental1104/core/cache.h` | 用 tuple 键 LFU 缓存包装可调用对象。 |
 | JSON | `JsonParser`, `parse_json`, `ParseResult`, `JsonDoc`, `JsonValueView` | 枚举 / 函数 / 类 | `mental1104/json.h` | 通过 cJSON 或 RapidJSON 解析 JSON，并通过后端无关视图读取值。 |
@@ -42,6 +44,7 @@
 | 计时 | `Timed`, `make_timed` | 类模板 / 函数 | `mental1104/timed.h` | 包装函数指针，并在调用前后输出简单计时信息。 |
 | 并发 | `IExecutor` | 接口类 | `mental1104/concurrency/executor.h` | 通用 fire-and-forget 执行器接口。 |
 | 并发 | `sleep_for`, `sleep_for_ms`, `ThreadPool` | 函数 / 类 | `mental1104/concurrency/thread/thread_util.h` | 睡眠辅助函数和返回 future 的线程池。 |
+| 并发 | `ConcurrentQueue<T>` | 类模板 | `mental1104/concurrency/concurrent_queue.h` | 提供阻塞式 MPMC FIFO 队列；容量为 0 时无界，关闭后排空已有元素。 |
 | 并发 | `ThreadPoolExecutor`, `BoostAsioExecutor` | 类 | `mental1104/concurrency/thread/*.h` | 基于本地线程池或 Boost.Asio 线程池的 `IExecutor` 适配器。 |
 | 并发 | `barrier` | 类模板 | `mental1104/concurrency/barrier.h` | C++11 起提供可复用阶段屏障；C++20 标准库可用时直接映射 `std::barrier`。 |
 | 并发 | `Task`, `ICoroutineScheduler`, `BasicCoroutineScheduler`, `MnCoroutinePoolT`, `MnCoroutinePool`, `BoostMnCoroutinePool` | 类 / 别名 | `mental1104/concurrency/coroutine/*.h`, `mental1104/concurrency/mn/*.h` | 在执行器适配器上调度 C++20 coroutine。 |
@@ -67,6 +70,7 @@
 #include "mental1104/util.h"
 #include <chrono>
 #include <iostream>
+#include <random>
 #include <vector>
 
 int main() {
@@ -78,21 +82,26 @@ int main() {
       std::chrono::milliseconds(10),
       std::chrono::milliseconds(100));
   auto wait = backoff.next();
+  std::mt19937 rng(123);
+  auto jittered_wait = backoff.next(0.2, rng);
   backoff.reset();
 
-  std::cout << has_two << " " << lower << " " << wait.count() << "\n";
+  std::cout << has_two << " " << lower << " " << wait.count() << " "
+            << jittered_wait.count() << "\n";
 }
 ```
 
 **示例输出：**
 
 ```text
-1 hello 10
+1 hello 10 24
 ```
 
 **备注：**
 
 - 对 map 使用时，`contains` 检查键是否存在。
+- `ExponentialBackoff::next()` 保持确定性指数退避；`next(jitter_ratio, rng)` 先按原序列推进，再把本次等待均匀采样到 `[(1-ratio)d, (1+ratio)d]`。
+- 调用方显式传入随机引擎，便于测试复现，也避免工具类隐藏全局随机状态。
 
 ### `LRUCache`、`LFUCache` 和缓存工厂
 
@@ -413,6 +422,49 @@ int main() {
 
 - `BoostAsioExecutor` 需要 Boost.Asio。
 
+### `ConcurrentQueue<T>` 阻塞队列
+
+- **类别：** 并发
+- **类型：** 类模板
+- **定义位置：** `cpp/include/mental1104/concurrency/concurrent_queue.h`
+- **包含：** `#include "mental1104/concurrency/concurrent_queue.h"`
+- **用途：** 为多个生产者和多个消费者提供线程安全的 FIFO 队列。
+
+**基础用法：**
+
+```cpp
+#include "mental1104/concurrency/concurrent_queue.h"
+#include <iostream>
+
+int main() {
+  mental1104::ConcurrentQueue<int> queue(2);
+  if (!queue.push(1) || !queue.push(2)) {
+    return 1;
+  }
+
+  queue.close();
+  while (const auto item = queue.pop()) {
+    std::cout << *item << "\n";
+  }
+  return 0;
+}
+```
+
+**示例输出：**
+
+```text
+1
+2
+```
+
+**备注：**
+
+- 需要 C++17 或更新标准，因为 `pop()` 使用 `std::optional<T>` 表示队列结束。
+- 构造参数 `capacity` 为 `0` 时队列无界；正数表示最大排队元素数，队列满时 `push()` / `emplace()` 会阻塞。
+- 队列为空时 `pop()` 会阻塞；只有队列已关闭且现有元素全部取完后，才返回 `std::nullopt`。
+- `close()` 幂等，拒绝后续入队并唤醒所有等待线程，但不会丢弃已有元素。
+- 队列不可复制或移动；销毁前必须停止并 `join` 所有调用线程。元素的构造、复制、移动和析构不得重入此队列。
+
 ### 可复用阶段屏障 `barrier`
 
 - **类别：** 并发
@@ -446,7 +498,7 @@ int main() {
   sync.arrive_and_wait();
   worker.join();
 
-  std::cout << completed.load() << "\n";
+  std::cout << completed.load() << "\\n";
 }
 ```
 
