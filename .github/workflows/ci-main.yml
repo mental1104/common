@@ -132,6 +132,7 @@ jobs:
     uses: ./.github/workflows/dotnet.yml
     with:
       full_matrix: ${{ github.event_name == 'workflow_dispatch' }}
+      run_fast_lane: true
     secrets: inherit
 
   java:
