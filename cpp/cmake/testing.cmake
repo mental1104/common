@@ -29,6 +29,8 @@ endif()
 
 set(TEST_DEPS_test_redis_lock "HIREDIS;REDISPP")
 set(TEST_REQUIRE_LIBS_test_redis_lock "HIREDIS;REDISPP")
+set(TEST_DEPS_test_redis_singleflight "HIREDIS;REDISPP")
+set(TEST_REQUIRE_LIBS_test_redis_singleflight "HIREDIS;REDISPP")
 set(TEST_DEPS_test_json         "CJSON")
 set(TEST_REQUIRE_LIBS_test_json "CJSON")
 
