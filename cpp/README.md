@@ -49,6 +49,7 @@
 | 并发 | `ConcurrentQueue<T>` | 类模板 | `mental1104/concurrency/concurrent_queue.h` | 提供阻塞式 MPMC FIFO 队列；容量为 0 时无界，关闭后排空已有元素。 |
 | 并发 | `ThreadPoolExecutor`, `BoostAsioExecutor` | 类 | `mental1104/concurrency/thread/*.h` | 基于本地线程池或 Boost.Asio 线程池的 `IExecutor` 适配器。 |
 | 并发 | `barrier` | 类模板 | `mental1104/concurrency/barrier.h` | C++11 起提供可复用阶段屏障；C++20 标准库可用时直接映射 `std::barrier`。 |
+| 并发与韧性 | `CircuitBreaker`, `CircuitBreakerConfig`, `CircuitPermit`, `CircuitOpenError`, `execute` | 枚举 / 类 / 异常 / 函数模板 | `mental1104/concurrency/circuit_breaker.h` | 基于失败率和慢调用率保护本地的下游接口调用。 |
 | 并发 | `Task`, `ICoroutineScheduler`, `BasicCoroutineScheduler`, `MnCoroutinePoolT`, `MnCoroutinePool`, `BoostMnCoroutinePool` | 类 / 别名 | `mental1104/concurrency/coroutine/*.h`, `mental1104/concurrency/mn/*.h` | 在执行器适配器上调度 C++20 coroutine。 |
 | 缓存协调 | `SingleFlightGroup`, `SingleFlightResult` | 类模板 / 结构体 | `mental1104/concurrency/singleflight.h` | 合并同一进程内同 Key 的并发调用。 |
 | 缓存协调 | `RedisSingleFlight`, `RedisSingleFlightOptions`, `CacheLookup`, `RedisSingleFlightResult`, `RebuildTimeoutError` | 类模板 / 结构体 / 异常 | `mental1104/redis_singleflight.h` | 组合本地 singleflight、Redis 缓存、分布式锁、轮询等待与旧值兜底。 |
@@ -823,6 +824,45 @@ int main() {
 - 需要带 MPFR/GMP 支持的 Boost.Multiprecision。
 - 待复核：这些类目前位于全局命名空间，不同于本仓库多数 C++ API。
 
+
+### `CircuitBreaker`
+
+- **类别：** 并发与韧性
+- **类型：** 枚举、配置、类、许可、快照、异常和函数模板
+- **定义位置：** `cpp/include/mental1104/concurrency/circuit_breaker.h`
+- **包含：** `#include "mental1104/concurrency/circuit_breaker.h"`
+- **用途：** 在调用方进程内按下游服务与接口维护 Closed / Open / Half-Open 状态，基于精确时间滑窗统计系统失败和慢调用。
+
+**基础用法：**
+
+```cpp
+#include "mental1104/concurrency/circuit_breaker.h"
+
+mental1104::CircuitBreaker breaker;
+auto result = mental1104::execute_or_fallback(
+    breaker, reserve_stock,
+    [](const mental1104::CircuitOpenError &) {
+      return cached_unavailable_result();
+    },
+    [](const std::exception_ptr &error) {
+      try {
+        std::rethrow_exception(error);
+      } catch (const InventoryShortage &) {
+        return false;
+      } catch (...) {
+        return true;
+      }
+    });
+```
+
+**备注：**
+
+- `record_ignored` 用于库存不足、参数错误等正常业务结果；它不进入 Closed 统计窗口，在 Half-Open 中只要不超慢阈值就视为健康探针。
+- `ExceptionClassifier` 返回 `true` 表示系统失败；默认所有异常都计为失败。fallback 只在本地 `CircuitOpenError` 拒绝时执行。
+- Half-Open 每轮最多发放配置数量的探针；任一失败或慢探针立即重新 Open，达到成功条件且没有在途探针后 Closed。
+- 头文件仅依赖 C++ 标准库，使用 `std::chrono::steady_clock`，支持 C++11–C++23，并提供线程安全 `snapshot` 与状态变更回调。
+- 熔断器不负责超时、限并发或重试。Open 状态应禁止重试，并与超时、Bulkhead、有限重试和 jitter 配套使用。
+- 应按“下游服务 + 接口 + 调用类型”创建实例，不要做成 Redis 集中式熔断器，也不要按高基数业务 ID 建实例。
 
 ### MQTT 原语客户端
 
