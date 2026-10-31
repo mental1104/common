@@ -3,17 +3,24 @@ name: Rust
 on:
   workflow_call:
     inputs:
-      full_matrix:
-        description: "Run the complete OS/toolchain compatibility matrix"
+      verbose_logs:
+        description: "Enable verbose test output"
         type: boolean
-        default: false
+        default: true
+  pull_request:
+    paths:
+      - "rust/**"
+      - "devops/**"
+      - ".github/workflows/rust.yml"
+  workflow_dispatch:
+    inputs:
       verbose_logs:
         description: "Enable verbose test output"
         type: boolean
         default: true
 
 env:
-  CARGO_TEST_V: ${{ (vars.CI_VERBOSE_LOGS == 'false' || inputs.verbose_logs == false || inputs.verbose_logs == 'false') && '' || '-- --nocapture' }}
+  CARGO_TEST_V: ${{ (vars.CI_VERBOSE_LOGS == 'false' || (github.event_name == 'workflow_dispatch' && (github.event.inputs.verbose_logs == false || github.event.inputs.verbose_logs == 'false')) || (github.event_name == 'workflow_call' && (inputs.verbose_logs == false || inputs.verbose_logs == 'false'))) && '' || '-- --nocapture' }}
 
 jobs:
   linux:
@@ -21,7 +28,11 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
-      matrix: ${{ fromJson(inputs.full_matrix && '{"include":[{"toolchain":"stable"},{"toolchain":"1.85.0","msrv":true}]}' || '{"include":[{"toolchain":"stable"}]}') }}
+      matrix:
+        include:
+          - toolchain: "stable"
+          - toolchain: "1.85.0"
+            msrv: true
     env:
       PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/devops
     defaults:
@@ -133,7 +144,6 @@ jobs:
           fi
 
   macos:
-    if: ${{ inputs.full_matrix }}
     name: macOS / Rust stable
     runs-on: macos-latest
     env:
@@ -231,7 +241,6 @@ jobs:
           fi
 
   windows:
-    if: ${{ inputs.full_matrix }}
     name: Windows / Rust stable
     runs-on: windows-latest
     env:

@@ -20,7 +20,6 @@ Use this reference after `SKILL.md` triggers. Load only the sections relevant to
 - Put public headers under `cpp/include/mental1104/...`; implementations live under `cpp/src/...`; examples belong under `cpp/examples/...`.
 - Use namespace `mental1104` for public APIs. Keep public names consistent with nearby files.
 - Use `cpp/include/mental1104/meta/compiler_support.h` feature macros: `M1104_CPLUSPLUS`, `M1104_HAS_CXX11/14/17/20/23`, `M1104_HAS_INCLUDE`, and `M1104_HAS_STRING_VIEW`.
-- Linux x86_64 与 Linux ARM64 均为 C++ CI 支持目标；ARM64 使用原生 `ubuntu-24.04-arm` runner 验证 GCC / C++23，保留 x86_64 上现有 GCC/Clang 与 C++11～23 矩阵。修改平台敏感代码时，兼顾这两个架构的构建和测试。
 - C++ common-library code must honor the complete `.github/workflows/cpp.yml` matrix: Linux GCC/Clang, macOS Clang/GCC, Windows MSVC, and C++11, C++14, C++17, C++20, and C++23. Ready PRs run the latest stable Linux fast lane; affected `main` updates and manual `PR Gate` runs exercise the complete matrix. Treat C++11 as the baseline for shared headers and broadly reused source unless the target is explicitly gated out of older standards.
 - Prefer `mental1104::string_view` in public APIs. It maps to `std::string_view` on C++17+ and `std::string` on C++11/14.
 - Do not introduce C++17+ features into shared headers unless guarded with repository macros and a lower-standard fallback.
