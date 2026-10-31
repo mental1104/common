@@ -9,6 +9,7 @@
 ## 分类
 
 - 集合与字符串包含判断
+- HTTP 调用结果分类
 - CLI 与实验
 - 重试与退避
 
@@ -23,6 +24,7 @@
 | 集合与字符串包含判断 | `InString` | 函数 | `github.com/mental1104/common/golang` | 检查字符串是否包含子串。 |
 | 集合与字符串包含判断 | `InRune` | 函数 | `github.com/mental1104/common/golang` | 检查字符串是否包含指定 rune。 |
 | 并发与限流 | `TokenBucket`, `ErrNilContext` | 结构体 / 错误值 | `github.com/mental1104/common/golang` | 单进程内阻塞获取令牌，并支持 Context 取消。 |
+| HTTP 调用结果分类 | `ClassifyHTTPOutcome`, `WrapHTTPTransport`, `HTTPOutcome` | 函数 / 类型 | `github.com/mental1104/common/golang/mental1104` | 区分 HTTP 状态失败与网络失败，并包装现有 `http.RoundTripper` 上报结果。 |
 | CLI 与实验 | `labctl`, `labs/*` | 命令 | `./golang/cmd/labctl`, `./golang/labs/*` | 可运行的实验 / 演示入口。 |
 | 重试与退避 | `retry.Do` | 函数 | `github.com/mental1104/common/golang/mental1104/retry` | 以最大尝试次数、指数退避、抖动、错误分类和 context deadline 控制重试。 |
 
@@ -258,13 +260,81 @@ func main() {
 - `nil` Context 返回 `ErrNilContext`；取消返回 `context.Canceled` 或 `context.DeadlineExceeded`，且不消费令牌。
 - 状态仅在单进程内有效；每个等待者拥有独立 Timer，不保证严格公平，也不提供 `TryAcquire`、批量获取或指标。
 
+### HTTP 调用结果分类
+
+- **类别：** HTTP 调用结果分类
+- **名称：** `HTTPOutcomeKind`, `HTTPOutcome`, `ClassifyHTTPOutcome`, `WrapHTTPTransport`
+- **类型：** 枚举类型、结构体、函数、`http.RoundTripper` 中间件
+- **定义位置：** `golang/mental1104/http_failure.go`
+- **导入：** `mental1104 "github.com/mental1104/common/golang/mental1104"`
+- **用途：** 在网关或其他出站 HTTP 调用中区分“已经收到失败状态码”和“尚未获得有效 HTTP 响应的网络错误”。
+
+**基础用法：**
+
+```go
+package main
+
+import (
+	"fmt"
+	"net/http"
+
+	mental1104 "github.com/mental1104/common/golang/mental1104"
+)
+
+func main() {
+	client := &http.Client{
+		Transport: mental1104.WrapHTTPTransport(
+			http.DefaultTransport,
+			func(request *http.Request, outcome mental1104.HTTPOutcome) {
+				fmt.Println(request.URL.Host, outcome.Kind.String(), outcome.StatusCode)
+			},
+		),
+	}
+
+	response, err := client.Get("https://example.com")
+	if response != nil {
+		defer response.Body.Close()
+	}
+	_ = err
+}
+```
+
+**示例结果：**
+
+```text
+example.com success 200
+```
+
+**429/503 vs EOF 实验：**
+
+```bash
+cd golang
+go run ./labs/http_failure
+```
+
+**实验输出：**
+
+```text
+scenario=429 do_error=false status_readable=true status_code=429 kind=http_status_failure
+scenario=503 do_error=false status_readable=true status_code=503 kind=http_status_failure
+scenario=eof do_error=true status_readable=false status_code=0 kind=network_failure
+```
+
+**备注：**
+
+- `429` 和 `503` 已经形成合法 HTTP 响应，因此 `client.Do` 不返回网络 error，`resp.StatusCode` 可读。
+- 直接断连发生在服务端写出 HTTP 状态行之前，因此 `client.Do` 返回 error，通常没有可读取的 response。
+- 包装器不消费响应体、不关闭连接，也不把 `4xx/5xx` 转换成 Go error。
+- 本能力不实现自动重试；是否重试仍需结合请求幂等性、请求体可重放性和业务语义决定。
+- observer 可能被并发调用，并且其 panic 不会被包装器恢复。
+
 ### 实验命令
 
 - **类别：** CLI 与实验
 - **类型：** 命令包
 - **定义位置：** `golang/cmd/labctl`, `golang/labs/*`
 - **导入 / 路径：** 在 `golang/` 下通过 `go run ./cmd/labctl` 或具体实验目录运行
-- **用途：** 运行本地调度器、网络、内存和 GC 实验演示。
+- **用途：** 运行本地调度器、网络、内存、GC 和 HTTP 失败语义实验演示。
 
 **基础用法：**
 
@@ -272,6 +342,7 @@ func main() {
 cd golang
 go run ./cmd/labctl
 go run ./labs/gc/minimal
+go run ./labs/http_failure
 ```
 
 **示例输出：**
@@ -279,6 +350,7 @@ go run ./labs/gc/minimal
 ```text
 labctl demo run: docs/labs/_verify/<YYYYMMDDTHHMMSSZ>
 gc minimal demo: <YYYYMMDDTHHMMSSZ>
+scenario=429 do_error=false status_readable=true status_code=429 kind=http_status_failure
 ```
 
 **备注：**
