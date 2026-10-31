@@ -3,18 +3,20 @@ name: Java
 on:
   workflow_call:
     inputs:
+      full_matrix:
+        description: "Run the complete platform matrix"
+        type: boolean
+        default: false
       verbose_logs:
         description: "Enable verbose test output"
         type: boolean
         default: true
-  pull_request:
-    paths:
-      - "java/**"
-      - "devops/**"
-      - "tools/ci/**"
-      - ".github/workflows/java.yml"
   workflow_dispatch:
     inputs:
+      full_matrix:
+        description: "Run the complete platform matrix"
+        type: boolean
+        default: true
       verbose_logs:
         description: "Enable verbose test output"
         type: boolean
@@ -59,13 +61,10 @@ jobs:
           java-version: ${{ matrix.java }}
           cache: "maven"
       - name: Setup Java
-        continue-on-error: true
         run: ./dev setup-java
       - name: Build Java
-        continue-on-error: true
         run: ./dev build-java
       - name: Coverage Java
-        continue-on-error: true
         run: ./dev coverage-java
       - name: Extract cov.json (never fail)
         if: always()
@@ -119,6 +118,7 @@ jobs:
           fi
 
   macos:
+    if: ${{ inputs.full_matrix }}
     name: macOS / JDK ${{ matrix.java }}
     runs-on: macos-latest
     strategy:
@@ -153,13 +153,10 @@ jobs:
           java-version: ${{ matrix.java }}
           cache: "maven"
       - name: Setup Java
-        continue-on-error: true
         run: ./dev setup-java
       - name: Build Java
-        continue-on-error: true
         run: ./dev build-java
       - name: Coverage Java
-        continue-on-error: true
         run: ./dev coverage-java
       - name: Extract cov.json (never fail)
         if: always()
@@ -213,6 +210,7 @@ jobs:
           fi
 
   windows:
+    if: ${{ inputs.full_matrix }}
     name: Windows / JDK ${{ matrix.java }}
     runs-on: windows-latest
     strategy:
@@ -244,13 +242,10 @@ jobs:
       - name: Install Maven
         run: choco install maven -y
       - name: Setup Java
-        continue-on-error: true
         run: python -m devtool.cli setup-java
       - name: Build Java
-        continue-on-error: true
         run: python -m devtool.cli build-java
       - name: Coverage Java
-        continue-on-error: true
         run: python -m devtool.cli coverage-java
       - name: Extract cov.json (never fail)
         if: always()

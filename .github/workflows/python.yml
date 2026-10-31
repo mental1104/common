@@ -3,6 +3,10 @@ name: Python
 on:
   workflow_call:
     inputs:
+      full_matrix:
+        description: "Run the complete platform matrix"
+        type: boolean
+        default: false
       enable_python_314:
         description: "Run Python 3.14 jobs (pre-release)"
         type: boolean
@@ -11,14 +15,12 @@ on:
         description: "Enable verbose test output"
         type: boolean
         default: true
-  pull_request:
-    paths:
-      - "python/**"
-      - "devops/**"
-      - "tools/ci/**"
-      - ".github/workflows/python.yml"
   workflow_dispatch:
     inputs:
+      full_matrix:
+        description: "Run the complete platform matrix"
+        type: boolean
+        default: true
       enable_python_314:
         description: "Run Python 3.14 jobs (pre-release)"
         type: boolean
@@ -181,7 +183,6 @@ jobs:
         run: python3 -c "import sys;from devtool.commands.common import base_env;from devtool.commands.ops import cpp as cpp_ops;sys.exit(cpp_ops.git_submodules(base_env()) or 0)"
 
       - name: Start Pulsar (standalone -nss)
-        continue-on-error: true
         run: |
           docker rm -f pulsar || true
           docker run -d --name pulsar \
@@ -190,7 +191,6 @@ jobs:
             bin/pulsar standalone -nss
 
       - name: Start Kafka (KRaft)
-        continue-on-error: true
         run: |
           docker rm -f kafka || true
           docker run -d --name kafka \
@@ -207,7 +207,6 @@ jobs:
             bitnamilegacy/kafka:4.0.0-debian-12-r10
 
       - name: Wait for postgres/redis/mysql/mongo/clickhouse/pulsar/kafka
-        continue-on-error: true
         run: |
           ports=(
             "${PGPORT}"
@@ -331,6 +330,7 @@ jobs:
           fi
 
   macos:
+    if: ${{ inputs.full_matrix }}
     name: macOS / Python ${{ matrix.python }}
     runs-on: macos-latest
     strategy:
@@ -484,6 +484,7 @@ jobs:
           fi
 
   windows:
+    if: ${{ inputs.full_matrix }}
     name: Windows / Python ${{ matrix.python }}
     runs-on: windows-latest
     strategy:

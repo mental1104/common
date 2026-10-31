@@ -3,21 +3,24 @@ name: Go
 on:
   workflow_call:
     inputs:
+      full_matrix:
+        description: "Run the complete platform matrix"
+        type: boolean
+        default: false
       enable_go_prerelease:
         description: "Run Go 1.24/1.25 jobs (pre-release)"
         type: boolean
-        default: true
+        default: false
       verbose_logs:
         description: "Enable verbose test output"
         type: boolean
         default: true
-  pull_request:
-    paths:
-      - "golang/**"
-      - "devops/**"
-      - ".github/workflows/golang.yml"
   workflow_dispatch:
     inputs:
+      full_matrix:
+        description: "Run the complete platform matrix"
+        type: boolean
+        default: true
       enable_go_prerelease:
         description: "Run Go 1.24/1.25 jobs (pre-release)"
         type: boolean
@@ -64,14 +67,12 @@ jobs:
           go-version: ${{ matrix.go }}
           check-latest: true
       - name: Setup Go deps
-        continue-on-error: true
         run: ./dev setup-go
       - name: Format Go
         if: ${{ matrix.go == '1.22.x' }}
         continue-on-error: true
         run: ./dev fmt-go
       - name: Build Go
-        continue-on-error: true
         run: ./dev build-go
       - name: Coverage Go
         env:
@@ -139,6 +140,7 @@ jobs:
           fi
 
   macos:
+    if: ${{ inputs.full_matrix }}
     name: macOS / Go ${{ matrix.go }}
     runs-on: macos-latest
     strategy:
@@ -171,13 +173,10 @@ jobs:
           go-version: ${{ matrix.go }}
           check-latest: true
       - name: Setup Go deps
-        continue-on-error: true
         run: ./dev setup-go
       - name: Build Go
-        continue-on-error: true
         run: ./dev build-go
       - name: Coverage Go
-        continue-on-error: true
         run: ./dev coverage-go
       - name: Extract cov.json (never fail)
         if: always()
@@ -232,6 +231,7 @@ jobs:
           fi
 
   windows:
+    if: ${{ inputs.full_matrix }}
     name: Windows / Go ${{ matrix.go }}
     runs-on: windows-latest
     strategy:
@@ -259,13 +259,10 @@ jobs:
           go-version: ${{ matrix.go }}
           check-latest: true
       - name: Setup Go deps
-        continue-on-error: true
         run: python -m devtool.cli setup-go
       - name: Build Go
-        continue-on-error: true
         run: python -m devtool.cli build-go
       - name: Coverage Go
-        continue-on-error: true
         run: python -m devtool.cli coverage-go
       - name: Extract cov.json (never fail)
         if: always()

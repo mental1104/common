@@ -3,6 +3,14 @@ name: .NET
 on:
   workflow_call:
     inputs:
+      run_fast_lane:
+        description: "Run the Linux pull-request fast lane"
+        type: boolean
+        default: false
+      full_matrix:
+        description: "Run the complete platform matrix"
+        type: boolean
+        default: false
       verbose_logs:
         description: "Enable verbose test output"
         type: boolean
@@ -14,6 +22,10 @@ on:
       - ".github/workflows/dotnet.yml"
   workflow_dispatch:
     inputs:
+      full_matrix:
+        description: "Run the complete platform matrix"
+        type: boolean
+        default: true
       verbose_logs:
         description: "Enable verbose test output"
         type: boolean
@@ -24,6 +36,7 @@ env:
 
 jobs:
   linux:
+    if: ${{ inputs.run_fast_lane || inputs.full_matrix }}
     name: Linux / .NET ${{ matrix.dotnet }}
     runs-on: ubuntu-latest
     strategy:
@@ -47,13 +60,10 @@ jobs:
         with:
           dotnet-version: ${{ matrix.dotnet }}
       - name: Setup .NET
-        continue-on-error: true
         run: ./dev setup-dotnet
       - name: Build .NET
-        continue-on-error: true
         run: ./dev build-dotnet
       - name: Coverage .NET
-        continue-on-error: true
         env:
           DOTNET_TEST_NO_BUILD: "1"
         run: ./dev coverage-dotnet
@@ -110,6 +120,7 @@ jobs:
           fi
 
   macos:
+    if: ${{ inputs.full_matrix }}
     name: macOS / .NET ${{ matrix.dotnet }}
     runs-on: macos-latest
     strategy:
@@ -133,13 +144,10 @@ jobs:
         with:
           dotnet-version: ${{ matrix.dotnet }}
       - name: Setup .NET
-        continue-on-error: true
         run: ./dev setup-dotnet
       - name: Build .NET
-        continue-on-error: true
         run: ./dev build-dotnet
       - name: Coverage .NET
-        continue-on-error: true
         env:
           DOTNET_TEST_NO_BUILD: "1"
         run: ./dev coverage-dotnet
@@ -196,6 +204,7 @@ jobs:
           fi
 
   windows:
+    if: ${{ inputs.full_matrix }}
     name: Windows / .NET ${{ matrix.dotnet }}
     runs-on: windows-latest
     strategy:
@@ -219,13 +228,10 @@ jobs:
         with:
           dotnet-version: ${{ matrix.dotnet }}
       - name: Setup .NET
-        continue-on-error: true
         run: python -m devtool.cli setup-dotnet
       - name: Build .NET
-        continue-on-error: true
         run: python -m devtool.cli build-dotnet
       - name: Coverage .NET
-        continue-on-error: true
         env:
           DOTNET_TEST_NO_BUILD: "1"
         run: python -m devtool.cli coverage-dotnet

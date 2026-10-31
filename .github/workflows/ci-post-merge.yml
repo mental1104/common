@@ -92,6 +92,7 @@ jobs:
     uses: ./.github/workflows/python.yml
     with:
       full_matrix: true
+      enable_python_314: true
     secrets: inherit
 
   golang:
@@ -100,6 +101,7 @@ jobs:
     uses: ./.github/workflows/golang.yml
     with:
       full_matrix: true
+      enable_go_prerelease: true
     secrets: inherit
 
   rust:

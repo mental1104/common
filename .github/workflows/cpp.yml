@@ -3,17 +3,20 @@ name: cpp
 on:
   workflow_call:
     inputs:
+      full_matrix:
+        description: "Run the complete platform matrix"
+        type: boolean
+        default: false
       verbose_logs:
         description: "Enable verbose test output"
         type: boolean
         default: true
-  pull_request:
-    paths:
-      - "cpp/**"
-      - "devops/**"
-      - ".github/workflows/cpp.yml"
   workflow_dispatch:
     inputs:
+      full_matrix:
+        description: "Run the complete platform matrix"
+        type: boolean
+        default: true
       verbose_logs:
         description: "Enable verbose test output"
         type: boolean
@@ -188,6 +191,7 @@ jobs:
           fi
 
   macos:
+    if: ${{ inputs.full_matrix }}
     name: macOS / ${{ matrix.compiler == 'clang' && 'clang++' || 'g++' }} / C++${{ matrix.cxx_std }}
     runs-on: macos-latest
     strategy:
@@ -301,6 +305,7 @@ jobs:
           fi
 
   windows:
+    if: ${{ inputs.full_matrix }}
     name: Windows / MSVC / C++${{ matrix.cxx_std }}
     runs-on: windows-latest
     strategy:

@@ -3,17 +3,20 @@ name: Rust
 on:
   workflow_call:
     inputs:
+      full_matrix:
+        description: "Run the complete platform matrix"
+        type: boolean
+        default: false
       verbose_logs:
         description: "Enable verbose test output"
         type: boolean
         default: true
-  pull_request:
-    paths:
-      - "rust/**"
-      - "devops/**"
-      - ".github/workflows/rust.yml"
   workflow_dispatch:
     inputs:
+      full_matrix:
+        description: "Run the complete platform matrix"
+        type: boolean
+        default: true
       verbose_logs:
         description: "Enable verbose test output"
         type: boolean
@@ -28,11 +31,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - toolchain: "stable"
-          - toolchain: "1.85.0"
-            msrv: true
+      matrix: ${{ fromJson(inputs.full_matrix && '{"include":[{"toolchain":"stable"},{"toolchain":"1.85.0","msrv":true}]}' || '{"include":[{"toolchain":"stable"}]}') }}
     env:
       PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/devops
     defaults:
@@ -55,7 +54,6 @@ jobs:
           sys.exit(cpp_ops.git_submodules(base_env()) or 0)
           PY
       - name: Install Rust toolchain
-        continue-on-error: true
         run: |
           rustup toolchain install ${{ matrix.toolchain }} --profile minimal
           rustup default ${{ matrix.toolchain }}
@@ -64,17 +62,14 @@ jobs:
         continue-on-error: true
         run: rustup component add rustfmt clippy
       - name: Setup Rust
-        continue-on-error: true
         run: ./dev setup-rust
       - name: Format Rust
         if: ${{ matrix.toolchain == 'stable' }}
         continue-on-error: true
         run: ./dev fmt-rust
       - name: Build Rust
-        continue-on-error: true
         run: ./dev build-rust
       - name: Coverage Rust
-        continue-on-error: true
         run: ./dev coverage-rust
       - name: Vet Rust
         if: ${{ matrix.toolchain == 'stable' }}
@@ -144,6 +139,7 @@ jobs:
           fi
 
   macos:
+    if: ${{ inputs.full_matrix }}
     name: macOS / Rust stable
     runs-on: macos-latest
     env:
@@ -168,19 +164,15 @@ jobs:
           sys.exit(cpp_ops.git_submodules(base_env()) or 0)
           PY
       - name: Install Rust toolchain
-        continue-on-error: true
         run: |
           rustup toolchain install stable --profile minimal
           rustup default stable
           rustup component add rustfmt clippy
       - name: Setup Rust
-        continue-on-error: true
         run: ./dev setup-rust
       - name: Build Rust
-        continue-on-error: true
         run: ./dev build-rust
       - name: Coverage Rust
-        continue-on-error: true
         run: ./dev coverage-rust
       - name: Export coverage.xml (never fail)
         if: always()
@@ -241,6 +233,7 @@ jobs:
           fi
 
   windows:
+    if: ${{ inputs.full_matrix }}
     name: Windows / Rust stable
     runs-on: windows-latest
     env:
@@ -260,19 +253,15 @@ jobs:
         continue-on-error: true
         run: python -c "import sys;from devtool.commands.common import base_env;from devtool.commands.ops import cpp as cpp_ops;sys.exit(cpp_ops.git_submodules(base_env()) or 0)"
       - name: Install Rust toolchain
-        continue-on-error: true
         run: |
           rustup toolchain install stable --profile minimal
           rustup default stable
           rustup component add rustfmt clippy
       - name: Setup Rust
-        continue-on-error: true
         run: python -m devtool.cli setup-rust
       - name: Build Rust
-        continue-on-error: true
         run: python -m devtool.cli build-rust
       - name: Coverage Rust
-        continue-on-error: true
         run: python -m devtool.cli coverage-rust
       - name: Export coverage.xml (never fail)
         if: always()
