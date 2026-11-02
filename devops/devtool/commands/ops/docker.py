@@ -11,7 +11,16 @@ from devtool.commands.common import ROOT, run
 
 
 def visitor_root(env: Mapping[str, str]) -> Path:
-    root = Path(env.get("VISITOR_ROOT") or ROOT.parent / "visitor").expanduser().resolve()
+    explicit = env.get("VISITOR_ROOT")
+    if explicit:
+        root = Path(explicit).expanduser().resolve()
+    elif (ROOT.parent / "tools" / "development" / "cli.py").is_file():
+        # visitor/common is the normal submodule layout.
+        root = ROOT.parent
+    else:
+        # Also support independently checked-out sibling repositories.
+        root = ROOT.parent / "visitor"
+    root = root.resolve()
     if not (root / "tools" / "development" / "cli.py").is_file():
         raise SystemExit(
             f"[err] 开发镜像已迁往 mental1104/visitor。请检出 visitor 并设置 VISITOR_ROOT：{root}"

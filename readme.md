@@ -190,7 +190,7 @@ PREFIX="$HOME/.local" SUDO= ./dev install cpp
 镜像、预装插件、系统配置和开发依赖 Compose 统一由 [visitor](https://github.com/mental1104/visitor/tree/main/images/development) 维护。common 的库构建、测试和安装命令仍可独立使用。
 
 ```bash
-# 默认使用平级 visitor，也可以指定其他绝对路径。
+# 子模块布局自动识别父级 visitor；独立检出也支持平级 visitor。
 export VISITOR_ROOT=/path/to/visitor
 ./dev build-docker      # 从 visitor 构建，自动将当前 common 作为源码上下文
 ./dev push-docker       # 单独推送镜像

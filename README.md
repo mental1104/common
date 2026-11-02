@@ -21,7 +21,7 @@
 
 Dockerfile、预装插件和系统配置、开发依赖 Compose 已迁往 [mental1104/visitor](https://github.com/mental1104/visitor/tree/main/images/development)。common 保留公共代码与语言构建、测试和安装命令。
 
-平级检出 visitor 后，原 `./dev build-docker`、`push-docker`、`setup-docker`、`clean-docker` 和 `run-docker` 会转调 visitor；其他路径可设置 `VISITOR_ROOT=/absolute/path/to/visitor`。Flink 的 Docker 命令也使用 visitor 中的集群配置。未检出 visitor 时，普通语言命令仍可独立使用。
+common 可作为 visitor 的 `common/` 子模块，或独立检出。原 `./dev build-docker`、`push-docker`、`setup-docker`、`clean-docker` 和 `run-docker` 会自动识别父级或平级 visitor；其他路径可设置 `VISITOR_ROOT=/absolute/path/to/visitor`。Flink 的 Docker 命令也使用 visitor 中的集群配置。未检出 visitor 时，普通语言命令仍可独立使用。
 
 ## 文档规则
 

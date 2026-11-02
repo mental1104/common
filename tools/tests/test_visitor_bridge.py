@@ -26,6 +26,17 @@ class VisitorBridgeTests(unittest.TestCase):
     def test_explicit_checkout(self):
         self.assertEqual(docker.visitor_root({"VISITOR_ROOT": str(self.visitor)}), self.visitor)
 
+    def test_submodule_finds_parent_visitor(self):
+        with patch.object(docker, "ROOT", self.visitor / "common"):
+            self.assertEqual(docker.visitor_root({}), self.visitor)
+
+    def test_explicit_checkout_overrides_parent_visitor(self):
+        other = self.root / "other visitor"
+        (other / "tools/development").mkdir(parents=True)
+        (other / "tools/development/cli.py").touch()
+        with patch.object(docker, "ROOT", self.visitor / "common"):
+            self.assertEqual(docker.visitor_root({"VISITOR_ROOT": str(other)}), other)
+
     def test_missing_checkout_is_actionable(self):
         with self.assertRaisesRegex(SystemExit, "VISITOR_ROOT"):
             docker.visitor_root({"VISITOR_ROOT": str(self.root / "missing")})
