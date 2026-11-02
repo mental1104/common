@@ -17,6 +17,12 @@
 | .NET | [./dotnet/](./dotnet/) | `Mental1104` 库工具，目前聚焦可执行文件校验。 |
 | Java | [./java/](./java/) | 基于 Maven 的 Flink 演示，以及可复用 Java 包含判断辅助工具。 |
 
+## 开发镜像
+
+Dockerfile、预装插件和系统配置、开发依赖 Compose 已迁往 [mental1104/visitor](https://github.com/mental1104/visitor/tree/main/images/development)。common 保留公共代码与语言构建、测试和安装命令。
+
+common 可作为 visitor 的 `common/` 子模块，或独立检出。原 `./dev build-docker`、`push-docker`、`setup-docker`、`clean-docker` 和 `run-docker` 会自动识别父级或平级 visitor；其他路径可设置 `VISITOR_ROOT=/absolute/path/to/visitor`。Flink 的 Docker 命令也使用 visitor 中的集群配置。未检出 visitor 时，普通语言命令仍可独立使用。
+
 ## 文档规则
 
 新增公共函数、类、结构体、枚举、interface、trait、可复用方法、脚本、CLI 入口或包级工具时，必须在同一次变更中更新对应语言 README。

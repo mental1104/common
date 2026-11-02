@@ -188,12 +188,11 @@ mvn -q -DskipTests compile exec:java
 **Docker/Flink 集群用法：**
 
 ```bash
-cd java/flink-datastream-demo
-mvn -q -DskipTests package
-docker compose -f ../../devops/images/flink/docker-compose.yaml up -d
-docker compose -f ../../devops/images/flink/docker-compose.yaml exec flink-jobmanager \
-  ./bin/flink run -c com.mental1104.flink.examples.SimpleJob \
-  /opt/flink/usrlib/flink-datastream-demo.jar
+# 在 common 仓库根目录执行；默认使用平级 visitor。
+export VISITOR_ROOT=/path/to/visitor
+./dev build-java
+./dev docker-java-up
+./dev run-java-docker --no-build --no-up
 ```
 
 **示例输出：**
