@@ -106,10 +106,10 @@ Use this reference after `SKILL.md` triggers. Load only the sections relevant to
 - Coverage extractors under `tools/ci/extract_coverage_*.py` should parse real reports into normalized `cov.json`; do not replace missing data with fake success.
 - C++ CI uses `.github/actions/cpp-coverage-artifact` to keep `cov.json` extraction, `_cov` staging, and artifact upload behind one workflow step across Linux, macOS, and Windows.
 - Pages generation should tolerate missing coverage by producing N/A badges/tables rather than broken links.
-- Dockerfile changes should preserve layer caching: install stable tools and VSCode extensions before app code, then generate settings or build app artifacts after relevant source copies.
-- Docker/proxy behavior should honor existing build args and env pass-through (`HTTP_PROXY`, `HTTPS_PROXY`, `NO_PROXY`, `ALL_PROXY`, custom feeds/mirrors).
-- Compose changes should preserve the offline-network intent and published localhost ports unless the task is specifically about networking.
-- Typical validation: `./dev run-docker`, `./dev build-docker` when Docker changes are central, plus the touched language's build/test/coverage commands.
+- Development images, INSTALLROOT, and optional local-service Compose files are maintained in `mental1104/visitor`, under `images/development/`. Do not add a new Dockerfile or duplicate image configuration in common.
+- common's Docker devtool commands are compatibility bridges: resolve `VISITOR_ROOT` (default: sibling visitor), pass the current common path as `COMMON_ROOT`, and delegate image/service operations to visitor. Ordinary language commands must remain usable without visitor.
+- Java build/test/JAR submission stays in common; Docker cluster operations resolve visitor's `images/development/services/flink/docker-compose.yaml` and pass an absolute `COMMON_ROOT` for the target JAR mount.
+- Docker command changes need the focused bridge tests (`python3 -m unittest discover -s tools/tests -p 'test_visitor_bridge.py' -v`) and visitor's development tests. Do not run live `run-docker` / `setup-docker` merely for validation: use Compose config and isolated build checks first.
 
 ## Benchmark And Performance Protocol
 

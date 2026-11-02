@@ -12,7 +12,7 @@ if TYPE_CHECKING:
 
 @register("run-docker")
 def configure(subparsers: "ArgumentParser"):
-    parser = subparsers.add_parser("run-docker", help="Restart root docker compose stack")
+    parser = subparsers.add_parser("run-docker", help="Restart development compose stack in visitor")
     parser.set_defaults(_runner=run)
     return run
 

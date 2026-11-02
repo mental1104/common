@@ -13,7 +13,6 @@ from devtool.commands.common import ROOT, run
 from devtool.commands.ops import docker as docker_ops
 
 JAVA_DIR = ROOT / "java" / "flink-datastream-demo"
-COMPOSE_FILE = ROOT / "devops" / "images" / "flink" / "docker-compose.yaml"
 JOB_CLASS = "com.mental1104.flink.examples.SimpleJob"
 POM_FILE = JAVA_DIR / "pom.xml"
 POM_NS = {"m": "http://maven.apache.org/POM/4.0.0"}
@@ -117,9 +116,11 @@ def _docker_bin() -> str:
     return docker_bin
 
 
-def _ensure_compose_file() -> None:
-    if not COMPOSE_FILE.exists():
-        raise SystemExit(f"[err] 未找到 compose 文件：{COMPOSE_FILE}")
+def _compose_file(env: Mapping[str, str]) -> Path:
+    path = docker_ops.visitor_root(env) / "images" / "development" / "services" / "flink" / "docker-compose.yaml"
+    if not path.is_file():
+        raise SystemExit(f"[err] 未找到 visitor Flink compose 文件：{path}")
+    return path
 
 
 def setup(env: Mapping[str, str]) -> None:
@@ -201,15 +202,19 @@ def run_local(env: Mapping[str, str]) -> None:
 
 
 def docker_up(env: Mapping[str, str]) -> None:
-    _ensure_compose_file()
-    cmd = _compose_cmd(env)
-    run([*cmd, "-f", str(COMPOSE_FILE), "up", "-d"], env=env, cwd=ROOT)
+    compose_file = _compose_file(env)
+    compose_env = dict(env)
+    compose_env["COMMON_ROOT"] = str(ROOT)
+    cmd = _compose_cmd(compose_env)
+    run([*cmd, "-f", str(compose_file), "up", "-d"], env=compose_env, cwd=ROOT)
 
 
 def docker_down(env: Mapping[str, str]) -> None:
-    _ensure_compose_file()
-    cmd = _compose_cmd(env)
-    run([*cmd, "-f", str(COMPOSE_FILE), "down"], env=env, cwd=ROOT)
+    compose_file = _compose_file(env)
+    compose_env = dict(env)
+    compose_env["COMMON_ROOT"] = str(ROOT)
+    cmd = _compose_cmd(compose_env)
+    run([*cmd, "-f", str(compose_file), "down"], env=compose_env, cwd=ROOT)
 
 
 def submit_job(env: Mapping[str, str]) -> None:
