@@ -1,10 +1,22 @@
 # AGENTS
 
-This file is no longer the live maintenance surface for repository guidance.
+通用仓库指南、验证流程和历史记录维护在
+`.codex/skills/common-codegen-guidelines`；原 AGENTS 内容归档于该技能的
+`references/agents-archive.md`。以下 C++ 声明与实现边界按用户明确要求直接维护在本文件。
 
-The previous AGENTS content is archived at
-`.codex/skills/common-codegen-guidelines/references/agents-archive.md`.
+## C++ 声明文件与实现文件
 
-For future repository rules, conventions, recent-work notes, portability
-guidance, and validation workflows, update the
-`.codex/skills/common-codegen-guidelines` skill instead of adding content here.
+- 公开声明放在 `cpp/include/mental1104/`，运行时实现放在 `cpp/src/`；保留现有命名空间、公开名称、模板参数、错误语义和对象布局，除非任务明确要求调整。
+- 判断单位是具体定义，不是整个能力。默认让调用方需要的编译期部分留在头文件，让固定签名的运行时逻辑进入 `.cpp`。一个模块可以同时包含模板头与已编译核心。
+- 头文件保留：宏、类型别名、traits、类定义、必要的 `default/delete` 语义、常量表达式定义，以及支持任意调用方类型的模板实现。`.tpp/.ipp` 若被头文件包含，仍属于调用方编译的实现，不是独立链接代码。
+- 开放模板包括调用方 lambda、自定义 Key/Hash、参数/返回类型和执行器/调度器组合。不得为迁移到 `.cpp` 而限制类型集合，或引入不必要的动态类型擦除、虚接口、同义 API。只有接口明确封闭为有限特化时，才考虑显式实例化。
+- 普通类使用 `std::vector`、`std::function`、Boost 等模板实例，不意味着该类自身必须 header-only。固定签名的成员、平台/SDK 调用、锁与队列操作、资源释放、解析/计算、日志状态与输出原则上放在实现文件。
+- 模板入口只负责保留必要的静态类型关系，适当调用已有的非模板核心。例如 `ThreadPool::submit` 保留结果类型与任务包装，入队同步由 `.cpp` 实现。不要为了形式上的拆分强行重构小型泛型算法。
+- 小型访问器与无状态薄包装可以留头文件；`inline` 不是必须 header-only 的理由，也不保证实际内联。移出普通函数定义时同步调整声明，避免留下缺少可见定义的 inline 函数。
+- 协程不自动要求 header-only。调用方必须能看到编译协程所需的 `Task/promise_type` 类型与成员声明；非模板调度循环、等待和帧管理可独立编译。依赖 `auto` 推导返回类型的方法外移时，先明确声明中的返回类型。
+- 迁移函数体与隐藏依赖是两件事。公开返回类型、按值成员、继承关系仍可能要求具体依赖头文件；不要默认增加 PImpl、改布局或改变所有权。调用点信息如 `source_location` 应在调用方取得后传入已编译实现。
+- 头与库必须采用匹配的 ABI 配置，尤其是随标准变化的 `string_view`、variant、锁别名和受宏控制的基类。源码支持多标准不代表同一个库二进制可跨所有标准混用。编译宏及可选接口由目标一致传递，安装消费方也必须匹配。
+- 影响布局的构建配置应生成并安装配置头，公开头自行加载，不能仅依赖 CMake target 传入宏。带 `/` 的头文件路径在自定义可用性探测宏中使用字符串形式，并验证格式化后探测仍生效；独立消费测试须覆盖没有 target 宏的场景。
+- 可选 SDK/数值库不能因函数体迁入共享库而变成无条件依赖。实现文件按依赖、平台、标准和功能开关选择性编译；声明 PUBLIC/PRIVATE 链接关系，不依赖测试目标或开发机的全局链接环境。C++20 实现不得破坏 C++11 构建。
+- 状态从头文件移到实现文件时，核对每翻译单元、每线程及共享库内的实例数量；配置从调用方编译期转到库构建期时，必须明确记录，不能静默改变行为。
+- 分离编译改动须更新 `cpp/README.md` 的链接说明，并验证独立调用方、多翻译单元、模板自定义类型、相关标准/可选功能与安装后消费。复用原有行为测试；不以单个 TU 编译成功替代链接验证，不预先宣称编译或运行性能改善。

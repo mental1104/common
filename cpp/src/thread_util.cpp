@@ -35,3 +35,13 @@ ThreadPool::~ThreadPool() {
     }
   }
 }
+
+/// 将任务入队；队列由 queueMutex 保护，释放锁后再通知工作线程。
+/// @param task 转移到队列的 void() 任务。
+void ThreadPool::enqueue(std::function<void()> task) {
+  {
+    std::lock_guard<std::mutex> lock(this->queueMutex);
+    this->tasks.emplace(std::move(task));
+  }
+  this->condition.notify_one();
+}

@@ -6,6 +6,7 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/cmake")
 # CMAKE_MODULE_PATH 初值通常为空（内建变量），但可能已被工具链文件/上层项目预设
 
 include(cmake/project_settings.cmake)
+include(cmake/bootstrap.cmake)
 include(cmake/deps.cmake)
 include(cmake/core_library.cmake)
 include(cmake/mq.cmake)

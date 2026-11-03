@@ -12,20 +12,36 @@
 #include "mental1104/concurrency/lock/shared_mutex.h"
 #include "mental1104/meta/compiler_support.h"
 
-// 通用模板版布隆过滤器
+namespace mental1104 {
+namespace detail {
+/// 与 Key/Hash 无关的 Bloom filter 参数，具体算法由已编译核心计算。
+struct BloomFilterParameters {
+  std::size_t bit_count;
+  std::size_t hash_count;
+};
+/// 根据预期元素数量和误判率计算存储参数，沿用既有边界行为。
+/// @param expected_count 预期元素数，0 使用一个位和一次哈希。
+/// @param false_positive_rate 调用方提供的目标误判率。
+/// @return 位数和哈希次数。
+BloomFilterParameters bloom_filter_parameters(std::size_t expected_count,
+                                              double false_positive_rate);
+} // namespace detail
+} // namespace mental1104
+
+/// 支持调用方 Key/Hash 的通用 Bloom filter，参数计算由库提供。
 // Hash 默认是 std::hash<Key>，可替换为自定义哈希（要求可调用且返回 size_t）。
 // 要求 Key 可被 Hash 处理（例如 std::hash<Key> 有特化或自定义 Hash 支持）。
 // 最小示例（特化 std::hash 或自定义 Hash）：
 // struct Foo { int x; };
 // namespace std { template<> struct hash<Foo> {
-//   size_t operator()(const Foo &f) const noexcept { return std::hash<int>()(f.x); }
+//   size_t operator()(const Foo &f) const noexcept { return
+//   std::hash<int>()(f.x); }
 // }; }
 // struct FooHash { size_t operator()(const Foo &f) const noexcept {
 //   return std::hash<int>()(f.x);
 // } };
 // BasicBloomFilter<Foo, FooHash> bf(n, p);
-template <typename Key, typename Hash = std::hash<Key>> 
-class BasicBloomFilter {
+template <typename Key, typename Hash = std::hash<Key>> class BasicBloomFilter {
 public:
   using key_type = Key;
   using hash_type = Hash;
@@ -40,39 +56,26 @@ protected:
   std::size_t hash(const key_type &key, std::size_t seed) const {
     std::size_t h = hash_fn(key);
     // 和你原先的写法保持一致：XOR + 一个固定常数
-    // 这是简单的 hash mix：用 seed*常数扰动基础 hash；常数 0x5bd1e995 来自 MurmurHash2 的 mix 思路。
-    // 作用：用一个基础 hash 派生近似独立的 k 个索引，改善分布/降低相关性，避免每次都重新计算昂贵哈希。
-    // 可参考 Kirsch/Mitzenmacher 2006 "Less Hashing, Same Performance"（双重哈希派生 k 个下标）。
+    // 这是简单的 hash mix：用 seed*常数扰动基础 hash；常数 0x5bd1e995 来自
+    // MurmurHash2 的 mix 思路。 作用：用一个基础 hash 派生近似独立的 k
+    // 个索引，改善分布/降低相关性，避免每次都重新计算昂贵哈希。 可参考
+    // Kirsch/Mitzenmacher 2006 "Less Hashing, Same Performance"（双重哈希派生 k
+    // 个下标）。
     return (h ^ (seed * 0x5bd1e995u)) % m;
   }
 
 public:
-  // 构造函数：n 预期元素数，p 允许的误判率
+  /// 按预期数据规模建立位数组，保持调用方提供的哈希类型。
+  /// @param n 预期元素数，0 使用最小位数组。
+  /// @param p 目标误判率，沿用现有参数公式。
+  /// @param hash 只读哈希对象，保存其副本。
   explicit BasicBloomFilter(std::size_t n, double p,
                             const hash_type &hash = hash_type())
       : m(0), k(0), bit_array(), hash_fn(hash) {
-    if (n == 0) {
-      // 极端情况兜底，避免除 0
-      m = 1;
-      k = 1;
-      bit_array.assign(m, false);
-      return;
-    }
-
-    const double ln2 = std::log(2.0);
-    // m = - (n * ln p) / (ln2^2)
-    m = static_cast<std::size_t>(
-        std::ceil(-(static_cast<double>(n) * std::log(p)) / (ln2 * ln2)));
-
-    // k = (m / n) * ln2
-    k = static_cast<std::size_t>(
-        std::ceil((static_cast<double>(m) / static_cast<double>(n)) * ln2));
-
-    if (k == 0) {
-      k = 1; // 保险：至少一个哈希函数
-    }
-
-    bit_array.assign(m, false);
+    const auto parameters = mental1104::detail::bloom_filter_parameters(n, p);
+    this->m = parameters.bit_count;
+    this->k = parameters.hash_count;
+    this->bit_array.assign(this->m, false);
   }
 
   // 插入元素
@@ -180,8 +183,7 @@ public:
   // 如果你确实需要访问底层对象，可以提供一个带锁执行的 helper
   template <typename Fn>
   auto with_lock(Fn &&fn)
-      -> decltype(std::forward<Fn>(fn)(
-          std::declval<underlying_type &>())) {
+      -> decltype(std::forward<Fn>(fn)(std::declval<underlying_type &>())) {
     std::unique_lock<mental1104::detail::shared_mutex_t> lk(mutex_);
     return std::forward<Fn>(fn)(bf_);
   }

@@ -12,13 +12,14 @@
 namespace mental1104 {
 
 #if !defined(_WIN32)
-// Owns a POSIX file descriptor. Invalid state is -1.
+/// 独占 POSIX 文件描述符；无效状态为 -1，系统释放逻辑由库提供。
 class unique_fd {
 public:
   unique_fd() noexcept : fd_(-1) {}
   explicit unique_fd(int fd) noexcept : fd_(fd) {}
 
-  ~unique_fd() noexcept { reset(); }
+  /// 释放仍由本对象持有的文件描述符；析构不抛异常。
+  ~unique_fd() noexcept;
 
   unique_fd(const unique_fd &) = delete;
   unique_fd &operator=(const unique_fd &) = delete;
@@ -42,31 +43,26 @@ public:
     return fd;
   }
 
-  void reset(int fd = -1) noexcept {
-    if (fd_ != fd) {
-      close_current();
-      fd_ = fd;
-    }
-  }
+  /// 释放旧描述符并接管新描述符，相同描述符保持不变。
+  /// @param fd 转移所有权的新描述符，-1 表示清空。
+  void reset(int fd = -1) noexcept;
 
 private:
-  void close_current() noexcept {
-    if (fd_ >= 0) {
-      (void)::close(fd_);
-    }
-  }
+  /// 尽力关闭有效描述符，不传播 close 错误。
+  void close_current() noexcept;
 
   int fd_;
 };
 #endif
 
-// Owns a C FILE*. Invalid state is nullptr.
+/// 独占 C FILE；空指针表示无文件，系统释放逻辑由库提供。
 class unique_file {
 public:
   unique_file() noexcept : file_(NULL) {}
   explicit unique_file(std::FILE *file) noexcept : file_(file) {}
 
-  ~unique_file() noexcept { reset(); }
+  /// 关闭仍由本对象持有的 FILE，析构不抛异常。
+  ~unique_file() noexcept;
 
   unique_file(const unique_file &) = delete;
   unique_file &operator=(const unique_file &) = delete;
@@ -90,34 +86,22 @@ public:
     return file;
   }
 
-  void reset(std::FILE *file = NULL) noexcept {
-    if (file_ != file) {
-      close_current();
-      file_ = file;
-    }
-  }
+  /// 关闭旧文件并接管新文件，相同指针保持不变。
+  /// @param file 转移所有权的 FILE，NULL 表示清空。
+  void reset(std::FILE *file = NULL) noexcept;
 
 private:
-  void close_current() noexcept {
-    if (file_ != NULL) {
-      (void)std::fclose(file_);
-    }
-  }
+  /// 尽力关闭有效文件，不传播 fclose 错误。
+  void close_current() noexcept;
 
   std::FILE *file_;
 };
 
-inline unique_file open_file(const char *path, const char *mode) noexcept {
-#if defined(_MSC_VER)
-  std::FILE *file = NULL;
-  if (fopen_s(&file, path, mode) != 0) {
-    file = NULL;
-  }
-  return unique_file(file);
-#else
-  return unique_file(std::fopen(path, mode));
-#endif
-}
+/// 打开 C 文件并返回独占所有权包装。
+/// @param path 非空文件路径，不保存调用方指针。
+/// @param mode 非空 fopen 模式。
+/// @return 成功时持有文件；失败时为空包装。
+unique_file open_file(const char *path, const char *mode) noexcept;
 
 // Runs a cleanup callback once when leaving scope unless dismissed.
 template <typename Callback> class scope_exit {
@@ -160,8 +144,8 @@ private:
 
 template <typename Callback>
 scope_exit<typename std::decay<Callback>::type>
-make_scope_exit(Callback &&callback) noexcept(noexcept(
-    scope_exit<typename std::decay<Callback>::type>(
+make_scope_exit(Callback &&callback) noexcept(
+    noexcept(scope_exit<typename std::decay<Callback>::type>(
         std::forward<Callback>(callback)))) {
   typedef typename std::decay<Callback>::type callback_type;
   return scope_exit<callback_type>(std::forward<Callback>(callback));

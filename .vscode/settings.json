@@ -12,5 +12,6 @@
   "git.detectSubmodules": false,
   "git.detectSubmodulesLimit": 0,
   "java.compile.nullAnalysis.mode": "automatic",
-  "java.configuration.updateBuildConfiguration": "interactive"
+  "java.configuration.updateBuildConfiguration": "interactive",
+  "cmake.sourceDirectory": "/volume2/workflow/common/cpp"
 }

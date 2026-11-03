@@ -1,5 +1,6 @@
+option(M1104_REGISTER_BENCHMARK_TESTS "Build benchmarks and include them in ordinary CTest runs" OFF)
 if (HAVE_GOOGLE_BENCHMARK)
-  set(BENCH_DIR ${CMAKE_SOURCE_DIR}/bench)
+  set(BENCH_DIR ${PROJECT_SOURCE_DIR}/bench)
   if (EXISTS "${BENCH_DIR}")
     file(GLOB BENCH_SRCS CONFIGURE_DEPENDS "${BENCH_DIR}/*.cpp")
     if (BENCH_SRCS)
@@ -9,15 +10,25 @@ if (HAVE_GOOGLE_BENCHMARK)
       else()
         set(_skip_benches "")
       endif()
+      if(NOT M1104_HAS_JSON)
+        list(APPEND _skip_benches bench_json_gbench)
+      endif()
+      if(NOT M1104_HAS_BOOST_ASIO)
+        list(APPEND _skip_benches bench_mn_coroutine_pool)
+      endif()
       foreach(SRC ${BENCH_SRCS})
         get_filename_component(BNAME "${SRC}" NAME_WE)
         list(FIND _skip_benches "${BNAME}" _skip_idx)
         if (NOT _skip_idx EQUAL -1)
-          message(STATUS "Skip benchmark ${BNAME}: requires C++20")
+          message(STATUS "Skip benchmark ${BNAME}: unsupported standard or disabled runtime dependency")
           continue()
         endif()
         set(TGT "bench_${BNAME}")
-        add_executable(${TGT} EXCLUDE_FROM_ALL "${SRC}")
+        if(M1104_REGISTER_BENCHMARK_TESTS)
+          add_executable(${TGT} "${SRC}")
+        else()
+          add_executable(${TGT} EXCLUDE_FROM_ALL "${SRC}")
+        endif()
         list(APPEND _bench_targets ${TGT})
         target_include_directories(${TGT} PRIVATE
           ${PROJECT_SOURCE_DIR}/include
@@ -32,13 +43,15 @@ if (HAVE_GOOGLE_BENCHMARK)
         set_target_properties(${TGT} PROPERTIES
           RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
         )
-        add_test(
-          NAME ${TGT}
-          COMMAND ${CMAKE_BINARY_DIR}/bin/${TGT}
-                  --benchmark_display_aggregates_only=true
-                  --benchmark_time_unit=ms
-        )
-        set_tests_properties(${TGT} PROPERTIES LABELS "bench")
+        if(M1104_REGISTER_BENCHMARK_TESTS)
+          add_test(
+            NAME ${TGT}
+            COMMAND ${CMAKE_BINARY_DIR}/bin/${TGT}
+                    --benchmark_display_aggregates_only=true
+                    --benchmark_time_unit=ms
+          )
+          set_tests_properties(${TGT} PROPERTIES LABELS "bench")
+        endif()
       endforeach()
       if (_bench_targets)
         add_custom_target(m1104_benchmarks DEPENDS ${_bench_targets})

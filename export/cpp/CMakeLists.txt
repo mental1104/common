@@ -13,6 +13,8 @@ set(THIRDROOT "${REPO_ROOT}/cpp/lib")
 set(EXPORT_JSON_SRCS
     src/json.cpp
     src/json_capi.cpp
+    # 独立导出库与主库复用同一解析实现，不再依赖头文件生成定义。
+    "${REPO_ROOT}/cpp/src/json.cpp"
 )
 
 # Optional cJSON implementation (header is required by mental1104::json)

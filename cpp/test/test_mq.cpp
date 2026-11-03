@@ -100,7 +100,8 @@ protected:
 
   /// 创建只包含真实 Kafka 连接参数的 backend 配置。
   ///
-  /// @param consumer 是否为 Consumer 配置；Consumer 会额外从 earliest 开始读取。
+  /// @param consumer 是否为 Consumer 配置；Consumer 会额外从 earliest
+  /// 开始读取。
   /// @return 可传给 Kafka backend 工厂的配置值。
   KafkaBackendConfig kafka_backend(bool consumer) const {
     KafkaBackendConfig backend;
@@ -206,8 +207,8 @@ TEST_F(KafkaIntegrationTest, AsyncCallbackMayCloseProducer) {
   config.topic.topic = this->topic_;
   Producer producer(create_kafka_producer_backend(config, backend));
 
-  expect_async_callback_can_close(
-      producer, unique_subscription("kafka-async-close"));
+  expect_async_callback_can_close(producer,
+                                  unique_subscription("kafka-async-close"));
 }
 
 /// 使用真实 Pulsar 完成生产、消费和确认闭环。
@@ -254,8 +255,8 @@ TEST_F(PulsarIntegrationTest, AsyncCallbackMayCloseProducer) {
   config.topic.topic = this->topic_;
   Producer producer(create_pulsar_producer_backend(config, backend));
 
-  expect_async_callback_can_close(
-      producer, unique_subscription("pulsar-async-close"));
+  expect_async_callback_can_close(producer,
+                                  unique_subscription("pulsar-async-close"));
 }
 
 /// 未编译可选 SDK 时，工厂应返回统一配置异常而不是链接或空指针错误。
@@ -269,6 +270,45 @@ TEST(MessageQueueAvailability, MissingSdkFailsWithUnifiedError) {
     ProducerConfig config;
     PulsarBackendConfig backend;
     EXPECT_THROW(create_pulsar_producer_backend(config, backend), MQException);
+  }
+}
+
+/// 不需要 broker 的真实 SDK 配置验证：错误必须来自 librdkafka 的配置解析。
+TEST(MessageQueueAvailability, KafkaSdkRejectsUnknownOptionWithoutBroker) {
+  if (!kafka_available())
+    GTEST_SKIP() << "librdkafka is not available in this build";
+  ProducerConfig config;
+  config.topic.topic = "sdk-config-test";
+  KafkaBackendConfig backend;
+  backend.options["common.invalid.sdk.option"] = "invalid";
+  try {
+    auto producer = create_kafka_producer_backend(config, backend);
+    FAIL() << "librdkafka accepted an unknown configuration option";
+  } catch (const MQException &error) {
+    EXPECT_EQ(ErrorCode::InvalidConfig, error.error().code);
+    EXPECT_EQ("kafka_config", error.error().operation);
+    EXPECT_EQ("kafka", error.error().backend);
+  }
+}
+
+/// SDK 在任何连接前拒绝非法 topic，并经新版或旧版创建接口映射为统一错误。
+TEST(MessageQueueAvailability, PulsarSdkRejectsInvalidTopicWithoutBroker) {
+  if (!pulsar_available())
+    GTEST_SKIP() << "pulsar-client-cpp is not available in this build";
+  ProducerConfig config;
+  // SDK 的租户名校验拒绝空格，公共地址拼接层只要求字段非空。
+  config.topic.tenant = "invalid tenant";
+  config.topic.namespace_name = "sdk-test";
+  config.topic.topic = "sdk-config-test";
+  PulsarBackendConfig backend;
+  backend.service_url = "pulsar://127.0.0.1:1";
+  try {
+    auto producer = create_pulsar_producer_backend(config, backend);
+    FAIL() << "Pulsar accepted an invalid topic";
+  } catch (const MQException &error) {
+    EXPECT_EQ(ErrorCode::Backend, error.error().code);
+    EXPECT_EQ("create_producer", error.error().operation);
+    EXPECT_EQ("pulsar", error.error().backend);
   }
 }
 

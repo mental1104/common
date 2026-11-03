@@ -2,7 +2,75 @@
 
 公共 C++ 头文件位于 `cpp/include/mental1104`。下面的包含示例假设已经通过仓库 CMake 安装，或包含路径中已有 `cpp/include`。
 
-运行 `./dev setup-cpp` 时会先检查 CMake、C++ 编译器、GMP/MPFR 开发库，以及启用覆盖率时的 `lcov` 和 `genhtml`。缺失时命令会列出对应项及当前平台的安装命令，安装后重新运行即可。
+## 从源码构建
+
+仓库根目录和 `cpp/` 目录都支持标准 CMake 流程。机器已有 CMake、C/C++ 编译器及构建工具后，在仓库根目录执行：
+
+```sh
+mkdir -p build && cd build
+cmake ..
+cmake --build . --parallel 4
+ctest --output-on-failure
+```
+
+**命令结果：** 配置阶段自动初始化缺失的 Git 子模块，准备 hiredis/redis++ SDK，并探测可用能力；编译生成 `lib/` 与 `bin/`，CTest 成功时退出码为 `0`。`cmake ..` 完成依赖准备与构建系统生成，后两条命令完成编译、测试。默认标准为 C++23，可用 `-DCMAKE_CXX_STANDARD=11` 等选项覆盖。
+
+Debian/Ubuntu 本机独立构建默认用 apt 补齐 Git、Python 3、pkg-config、Boost 及启用功能所需的 GMP/MPFR、lcov、MQ 客户端 SDK；无需手动下载 SDK，也不新增 apt 源。首次准备需要网络，安装系统包需要 root 或可非交互执行 apt 的 `sudo -n`。其他平台需预先提供系统开发包。未配置 Redis/Kafka/Pulsar 服务时，相关真实收发测试按原有约定跳过。
+
+`M1104_AUTO_SETUP` 控制自动源码/SDK 准备，独立本机构建默认开启；被其他工程包含、设置了 `CI` 环境变量或交叉编译时默认关闭。离线构建可用 `-DM1104_AUTO_SETUP=OFF` 复用已经提供的依赖；仅关闭系统包安装可用 `-DM1104_INSTALL_SYSTEM_DEPS=OFF`，源码准备仍然执行。`AUTO_FETCH_SUBMODULES=OFF` 禁止自动拉取缺失源码。SDK 二进制按构建树存于 `_deps/`，避免不同 C++ 标准的 SDK 相互覆盖；`M1104_DEPENDENCY_JOBS` 默认 `4`，可调整准备阶段并发数。
+
+默认 CTest 只注册功能测试。benchmark 仍可通过 `./dev bench-cpp` 单独运行；希望普通构建与 CTest 同时包含 benchmark 时，配置 `-DM1104_REGISTER_BENCHMARK_TESTS=ON`。
+
+## 声明、实现与链接
+
+本库采用模板头文件与已编译运行时核心组合的交付方式。使用运行时能力需要链接 `mental1104`；仅添加 `cpp/include` 不能替代链接。通过仓库 CMake target 使用时，链接 `mental1104` 会携带它公开的依赖和编译定义；安装后的手动消费需要显式配置安装目录中的 include、lib 与运行时库搜索路径。
+
+源码树手动消费时，还须把生成配置头目录加入搜索路径：从 `cpp/` 构建为 `cpp/build/include`，从仓库根目录构建为 `build/cpp/include`。两个执行器适配器头直接要求这个配置文件，避免缺失配置时静默使用不同的基类布局。自包含模板与编译期工具仍可直接包含源码头文件。
+
+| 保留在头文件 | 由库提供的实现 |
+|---|---|
+| 特性宏、类型别名、traits、LRU/LFU 模板、开放类型包装 | 无需为编译期类型声明单独调用运行时入口 |
+| `contains`、`scope_exit` 等自包含模板 | 这些自包含入口仍可仅包含头文件使用 |
+| `ExponentialBackoff` 的泛型重载、随机引擎适配、`Timed`、Bloom filter 的 Key/Hash 适配 | 退避状态推进、随机种子、计时输出、Bloom 参数计算 |
+| 日志参数及容器格式化、`ThreadPool::submit` 的结果类型适配 | 统一日志等级与输出、线程池入队及工作线程管理 |
+| M:N 池组合模板、协程 promise 类型、执行器/调度器声明 | 执行器、调度循环、等待、Task 帧管理；协程实现需要 C++20+ |
+| JSON、Redis 锁、高精度计算器、文件/描述符 RAII 的公开声明 | 对应解析、SDK 协议、算法、资源释放等普通函数与成员 |
+
+头文件中仍可能需要公开返回值或按值成员依赖的 Boost/JSON 等具体类型；分离函数体不意味着这些依赖都被隐藏。库与消费方必须采用匹配的标准、variant/string_view 类型和 async_simple 等接口宏。生成并安装的 `mental1104/build_config.h` 记录可选能力及 async_simple 布局配置，公共兼容头会自动读取它；启用相关能力时同时安装使用到的 JSON、仓库内 Boost 和 async_simple 公开头文件。当前交付不承诺一个库二进制跨所有 C++ 标准混用。
+
+以下 CMake 开关默认开启，并在依赖可用时编译相应实现：`M1104_ENABLE_JSON`、`M1104_ENABLE_REDIS_LOCK`、`M1104_ENABLE_HIGH_PRECISION`、`M1104_ENABLE_BOOST_ASIO`。关闭开关或缺失依赖时，相关实现与测试不参与构建；target 的 `M1104_HAS_JSON`、`M1104_HAS_REDIS_LOCK`、`M1104_HAS_HIGH_PRECISION`、`M1104_HAS_BOOST_ASIO` 编译定义表示最终可用性，值为 0 或 1。JSON 需要 cJSON/RapidJSON，Redis 锁需要 hiredis/redis++，高精度算法需要 MPFR/GMP 与 Boost 头文件，Boost 执行器需要 Boost.Asio 头文件。
+
+日志全局等级及后端输出由库中的一个运行时核心管理。`MENTAL1104_LOG_LEVEL` 环境变量与 `set_log_level` 仍在运行时生效；`M1104_LOG_DEFAULT_LEVEL` 和可选 spdlog 后端按构建库时的配置决定，消费端重新定义宏不能重编译已经链接的日志实现。计时器原有的每翻译单元构造互斥量保留，未改成全局单例。
+
+`test_build_config` 刻意不继承主库 target 的编译宏，仅使用公开头、生成配置头和链接文件，验证条件基类与已编译构造/析构函数的布局一致。
+
+独立 `export/cpp` 构建复用 `cpp/src/json.cpp`，不要求为了 JSON 导出链接整个主库。普通测试之外，`test_linkage` 使用两个翻译单元验证独立调用方、模板包装与已编译核心的组合。消费端对象始终按库配置的标准编译；若新版 GoogleTest 把驱动提升至 C++17，C++11/14 配置的 JSON 契约通过这个独立消费端验证，避免驱动以不同的 variant/string_view 布局直接调用旧标准库。高精度实现也会按实际标准试编译，当前 Boost 不支持该标准时仅排除该能力。
+
+## MQ SDK 依赖准备
+
+Kafka 与 Pulsar 通过真实 SDK 实现：CMake 分别建立 `M1104::KafkaSDK`、`M1104::PulsarSDK` 导入目标，并作为 `mental1104` 的私有链接依赖。公共 MQ 类型不要求调用方包含 SDK 头文件。
+
+Debian/Ubuntu 原生独立构建默认在配置阶段用 apt 准备已启用的后端，无需额外选项。关闭自动准备后，也可以仅显式请求 MQ SDK 安装：
+
+```sh
+# 其余源码依赖已提供时，只显式准备 MQ SDK。
+cmake -S cpp -B cpp/build -DM1104_AUTO_SETUP=OFF -DM1104_INSTALL_MQ_DEPS=ON
+cmake --build cpp/build --parallel 4
+ctest --test-dir cpp/build -R '^test_mq$' --output-on-failure
+```
+
+**命令结果：** SDK 准备成功后，CMake 输出 `Kafka MQ backend enabled` 和 `Pulsar MQ backend enabled`；构建与测试命令成功时退出码为 `0`。未配置 broker 时，实际收发用例会跳过；不依赖 broker 的域模型、缺 SDK 分支、Kafka SDK 配置校验及 Pulsar SDK topic 校验仍会执行适用的用例。
+
+| SDK | apt 准备路径 | 限制 |
+|---|---|---|
+| librdkafka | 发行版仓库中的 `librdkafka-dev`，包含 C/C++ 客户端 | 当前 Ubuntu 24.04 验证版本为 2.3.0；仓库版本由发行版决定 |
+| Pulsar C++ | 优先使用已配置 apt 仓库的 `apache-pulsar-client` / `apache-pulsar-client-dev`；不可用时下载 Apache 官方 4.2.0 DEB 后交给 apt 安装 | 官方 DEB 路径支持 amd64/arm64，下载时校验官方 SHA512；后端要求 C++17+ |
+
+依赖缺失时准备流程会执行 `apt-get update/install`，需要 root 或允许非交互执行 apt 的 `sudo -n`；它不等待密码。已安装的 DEB 包直接复用，下载缓存位于构建目录的 `mq-packages/pulsar-4.2.0`。安装失败时配置失败，不悄悄降级为 SDK 不可用。关闭 `M1104_ENABLE_KAFKA` / `M1104_ENABLE_PULSAR` 时不准备对应 SDK；C++11/14 不准备 Pulsar。交叉编译或非 Debian/Ubuntu 平台请保留 apt 安装选项关闭，并通过系统安装或 CMake SDK 路径提供目标平台依赖。
+
+Pulsar 的 Producer 创建接口通过实际头文件与库进行编译链接探测，新 SDK 使用 `createProducerV2`，较旧 SDK 保留旧接口路径。安装路径依据 [Apache 官方 C++ 客户端安装说明](https://pulsar.apache.org/docs/client-libraries/cpp-setup/)。
+
+真实服务用例需要以下环境变量：Kafka 使用 `KAFKA_ADVERTISED_HOST`、`KAFKA_EXTERNAL_PORT`、`KAFKA_TEST_TOPIC`；Pulsar 使用 `PULSAR_HOST`、`PULSAR_BROKER_PORT`、`PULSAR_TEST_TENANT`、`PULSAR_TEST_NAMESPACE`、`PULSAR_TEST_TOPIC`。SDK 安装与 broker 服务准备是两个独立步骤。
 
 ## 维护规则
 
@@ -152,7 +220,7 @@ int main() {
 
 int main() {
   auto result = mental1104::parse_json(
-      "{\"name\":\"common\",\"ok\":true}",
+      mental1104::string_view("{\"name\":\"common\",\"ok\":true}"),
       mental1104::JsonParser::RapidJSON);
   if (!result) {
     std::cerr << result.error << "\n";

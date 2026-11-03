@@ -66,25 +66,7 @@ endif()
 include_directories(${PROJECT_SOURCE_DIR}/include)
 
 option(AUTO_FETCH_SUBMODULES "Auto init/update git submodules on configure" ON)
-# 如开启（默认 ON），在 configure 阶段自动执行 git submodule update --init --recursive --depth=1
-if (AUTO_FETCH_SUBMODULES)
-  find_package(Git QUIET)
-  if (GIT_FOUND AND EXISTS "${CMAKE_SOURCE_DIR}/.gitmodules") # CMAKE_SOURCE_DIR 为顶层源目录（配置时的 -S），用来定位 .gitmodules
-    # message(STATUS ...) 打印配置阶段的普通信息，默认以 `--` 前缀展示，纯提示不影响流程；
-    # 与 WARNING/ERROR/FATAL_ERROR 不同，它不会中断或标记失败
-    message(STATUS "Auto fetching submodules (git submodule update --init --recursive --depth=1)")
-    execute_process(
-      COMMAND ${GIT_EXECUTABLE} submodule update --init --recursive --depth=1
-      WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}  # 在源码根目录执行命令
-      RESULT_VARIABLE _subm_res              # 捕获返回码到变量 _subm_res
-      OUTPUT_QUIET                           # 忽略标准输出
-      ERROR_QUIET                            # 忽略标准错误
-    )
-    if (NOT _subm_res EQUAL 0) # 逻辑非 + 比较：返回码非 0 视为失败；常见逻辑运算：AND/OR/NOT，比较：EQUAL/LESS/GREATER/STRLESS/STREQUAL/EXISTS 等
-      message(WARNING "git submodule update failed; continue with existing content.")
-    endif()
-  endif()
-endif()
+# 实际源码准备由 bootstrap.cmake 复用 devtool 的稀疏检出流程。
 
 # Homebrew toolchain paths (macOS arm64 runners place libs under /opt/homebrew)
 if(APPLE)

@@ -341,18 +341,37 @@ def build_submodules(
     *,
     strict: bool = False,
     only: set[str] | None = None,
+    build_root: Path | None = None,
+    cmake_options: tuple[str, ...] = (),
 ) -> None:
+    """构建选中的 SDK，供 devtool 或 CMake 自动准备流程复用。
+
+    Args:
+        env: 子进程环境，包含编译配置和并发数量，不修改调用方映射。
+        strict: 为真时传播首个失败；否则保持原来的尽力构建行为。
+        only: 指定需要构建的源码路径集合；为空时沿用仓库默认选择。
+        build_root: 可选的独立构建根目录；CMake 用它隔离不同构建树的 SDK ABI。
+            未提供时保持原有源码目录下 build 的布局。
+        cmake_options: 主工程明确传入的 SDK 编译器与 ABI 配置参数。
+    """
     skip = _skip_list(env)
     paths = _gitmodule_paths()
     wanted = _wanted_list(env, paths)
-    hiredis_install = _hiredis_install_dir()
+    hiredis_build = (
+        build_root / "hiredis" if build_root is not None else ROOT / "cpp/lib/hiredis/build"
+    )
+    hiredis_install = (
+        hiredis_build / "install" if build_root is not None else _hiredis_install_dir()
+    )
     extra_cmake_args = {
         "cpp/lib/cJSON": ["-DENABLE_CUSTOM_COMPILER_FLAGS=OFF", "-DCMAKE_POLICY_VERSION_MINIMUM=3.5"],
         "cpp/lib/hiredis": [
             "-DDISABLE_TESTS=ON",
             f"-DCMAKE_INSTALL_PREFIX={hiredis_install}",
         ],
-        "cpp/lib/redis-plus-plus": ["-DREDIS_PLUS_PLUS_BUILD_TEST=ON"],
+        "cpp/lib/redis-plus-plus": [
+            f"-DREDIS_PLUS_PLUS_BUILD_TEST={'OFF' if build_root is not None else 'ON'}"
+        ],
     }
     build_env = cmake_build_env(env)
     is_windows = platform.system().lower() == "windows"
@@ -369,7 +388,7 @@ def build_submodules(
         path = ROOT / rel
         if not path.exists() or not (path / "CMakeLists.txt").exists():
             continue
-        build_dir = path / "build"
+        build_dir = build_root / path.name if build_root is not None else path / "build"
         ensure_dir(build_dir)
         try:
             cmake_args = [
@@ -380,10 +399,9 @@ def build_submodules(
                 str(build_dir),
                 f'-DCMAKE_BUILD_TYPE={env["CPP_BUILD_TYPE"]}',
             ]
+            cmake_args.extend(cmake_options)
             cmake_args += extra_cmake_args.get(rel, [])
             if rel == "cpp/lib/redis-plus-plus":
-                hiredis_root = ROOT / "cpp" / "lib" / "hiredis"
-                hiredis_build = hiredis_root / "build"
                 hiredis_install_lib = hiredis_install / "lib"
                 hiredis_lib = None
                 hiredis_include = hiredis_install / "include"

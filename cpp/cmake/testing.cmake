@@ -6,6 +6,26 @@ list(LENGTH TEST_FILES _TEST_COUNT)
 message(STATUS "Collected ${_TEST_COUNT} test files under ${TEST_DIR} (recursive)")
 
 set(M1104_SKIP_TESTS "")
+# 新版 GoogleTest 会将测试驱动提升至 C++17。按实际库标准独立编译消费端，
+# 避免 std::variant/string_view 与 C++11/14 库的公开表示不一致。
+get_target_property(_m1104_gtest_features gtest INTERFACE_COMPILE_FEATURES)
+if(CMAKE_CXX_STANDARD LESS 17 AND "cxx_std_17" IN_LIST _m1104_gtest_features)
+  list(APPEND M1104_SKIP_TESTS test_json)
+  message(STATUS "GoogleTest requires C++17; JSON coverage uses the separate standard-matched linkage consumer")
+endif()
+if(NOT M1104_HAS_JSON)
+  list(APPEND M1104_SKIP_TESTS test_json test_linkage)
+endif()
+if(NOT M1104_HAS_REDIS_LOCK)
+  list(APPEND M1104_SKIP_TESTS test_redis_lock)
+endif()
+if(NOT M1104_HAS_HIGH_PRECISION)
+  list(APPEND M1104_SKIP_TESTS test_high_precision_decimal)
+endif()
+if(NOT M1104_HAS_BOOST_ASIO)
+  list(APPEND M1104_SKIP_TESTS test_boost_mn_coroutine_pool
+    test_mn_coroutine_pool test_mn_coroutine_pool_async_simple)
+endif()
 if (WIN32)
   # Windows runners lack mpfr/gmp/pthread; skip unsupported tests
   list(APPEND M1104_SKIP_TESTS
@@ -16,7 +36,8 @@ if (WIN32)
   )
   set(M1104_PLATFORM_LIBS "")
 else()
-  set(M1104_PLATFORM_LIBS mpfr gmp pthread)
+  # 数值库由启用的高精度核心传播，不再强制所有测试链接可选 MPFR/GMP。
+  set(M1104_PLATFORM_LIBS Threads::Threads)
 endif()
 if (DEFINED CMAKE_CXX_STANDARD AND CMAKE_CXX_STANDARD LESS 20)
   list(APPEND M1104_SKIP_TESTS
@@ -81,8 +102,20 @@ function(add_optional_test SRC)
   if (TEST_NAME STREQUAL "test_c_api_compat")
     list(APPEND _extra_sources "${TEST_DIR}/c_api_compat_c_smoke.c")
   endif()
+  if (TEST_NAME STREQUAL "test_linkage")
+    # 第二翻译单元模拟独立调用方，检验模板与已编译核心之间的链接边界。
+    add_library(m1104_linkage_consumer OBJECT "${TEST_DIR}/linkage_consumer.cc")
+    target_link_libraries(m1104_linkage_consumer PRIVATE mental1104)
+    set_target_properties(m1104_linkage_consumer PROPERTIES
+      CXX_STANDARD ${CMAKE_CXX_STANDARD} CXX_STANDARD_REQUIRED ON)
+    list(APPEND _extra_sources $<TARGET_OBJECTS:m1104_linkage_consumer>)
+  endif()
 
   add_executable(${TEST_NAME} "${SRC}" ${_extra_sources})
+  if(TEST_NAME STREQUAL "test_linkage")
+    target_compile_definitions(test_linkage PRIVATE
+      M1104_EXPECTED_CXX_STANDARD=${CMAKE_CXX_STANDARD})
+  endif()
   if (AGG_INC)
     target_include_directories(${TEST_NAME} BEFORE PRIVATE
       ${AGG_INC}
@@ -108,10 +141,17 @@ function(add_optional_test SRC)
   endforeach()
 
   if (TARGET mental1104)
-    target_link_libraries(${TEST_NAME} PRIVATE mental1104)
+    if(TEST_NAME STREQUAL "test_build_config")
+      # 模拟只拿到头文件与库路径的消费方，不能由 target 宏掩盖配置头加载失败。
+      target_include_directories(test_build_config BEFORE PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/include")
+      target_link_libraries(test_build_config PRIVATE "$<TARGET_LINKER_FILE:mental1104>")
+      add_dependencies(test_build_config mental1104)
+    else()
+      target_link_libraries(${TEST_NAME} PRIVATE mental1104)
+    endif()
   endif()
 
-  if (HAVE_ASYNC_SIMPLE AND TARGET ASYNC_SIMPLE::headers)
+  if (HAVE_ASYNC_SIMPLE AND TARGET ASYNC_SIMPLE::headers AND NOT TEST_NAME STREQUAL "test_build_config")
     target_link_libraries(${TEST_NAME} PRIVATE ASYNC_SIMPLE::headers)
     target_compile_definitions(${TEST_NAME} PRIVATE M1104_HAS_ASYNC_SIMPLE=1)
   endif()
@@ -133,11 +173,11 @@ endforeach()
 
 option(BUILD_THIRD_LIBS_FROM_SOURCE "Add lib/* that contain CMakeLists.txt via add_subdirectory" OFF)
 if (BUILD_THIRD_LIBS_FROM_SOURCE)
-  file(GLOB _LIB_SUBS RELATIVE "${CMAKE_SOURCE_DIR}" "${CMAKE_SOURCE_DIR}/lib/*")
+  file(GLOB _LIB_SUBS RELATIVE "${PROJECT_SOURCE_DIR}" "${PROJECT_SOURCE_DIR}/lib/*")
   foreach(_rel ${_LIB_SUBS})
-    if (EXISTS "${CMAKE_SOURCE_DIR}/${_rel}/CMakeLists.txt")
+    if (EXISTS "${PROJECT_SOURCE_DIR}/${_rel}/CMakeLists.txt")
       message(STATUS "add_subdirectory(${_rel})")
-      add_subdirectory("${CMAKE_SOURCE_DIR}/${_rel}" "${CMAKE_BINARY_DIR}/${_rel}_build" EXCLUDE_FROM_ALL)
+      add_subdirectory("${PROJECT_SOURCE_DIR}/${_rel}" "${CMAKE_BINARY_DIR}/${_rel}_build" EXCLUDE_FROM_ALL)
     else()
       message(STATUS "Skip lib (${_rel}): no CMakeLists.txt")
     endif()

@@ -7,10 +7,12 @@ Use this reference after `SKILL.md` triggers. Load only the sections relevant to
 - Treat `/home/mental1104/code/common` as a multi-language common-library monorepo, not a single application.
 - Main source roots are `cpp/`, `python/`, `golang/`, `rust/mental1104/`, `dotnet/`, `java/flink-datastream-demo/`, `export/`, `devops/`, `tools/ci/`, and `.github/workflows/`.
 - Use `./dev` as the preferred entrypoint. It wraps setup, build, test, coverage, fmt, bench, install, uninstall, vet, guard, Docker, Java/Flink run, and verify-install commands.
+- NAS 工作区的本地开发与验证统一在既有 `code-server` 容器挂载的仓库根目录运行 `./dev`，不要改在 NAS 宿主机或其他开发容器中执行。开发服务的镜像与部署配置在仓库外维护，不在本仓库恢复专用开发容器。其他平台与 CI 继续使用各自的原生工具链。
+- 切换容器或仓库挂载路径时，Python 虚拟环境和 CMake 构建树不能直接视为可复用环境；先核对解释器、ABI 与缓存中的绝对路径，必要时备份旧目录后在当前环境重新生成。
 - Keep CI and Pages conventions aligned: language workflows are reusable execution units, `ci-main.yml` routes `main` updates to the affected language workflows, and coverage extraction scripts under `tools/ci/` produce normalized `cov.json`.
 - GitHub Actions 只由 `main` 分支 push 或仓库级手动 `Main Gate` 启动。`main` push 按提交前后差异选择受影响语言，并为选中的语言传入 `full_matrix: true`；手动 `Main Gate` 在 `main` 上展开六个语言的完整平台、编译器和运行时矩阵。PR、Draft PR 及普通功能分支不得分配 runner，也不得把 Actions 当作远程调试循环。
 - Treat the complete `main`/manual GitHub Actions matrix as the repository compatibility contract. Local and branch-level validation should use `./dev`; it must not be used to raise the minimum compiler, language standard, runtime, or platform requirement.
-- `AGENTS.md` is a pointer-only compatibility file. Do not add new maintenance content there.
+- `AGENTS.md` holds the C++ declaration/implementation boundary rules at the user's explicit request; maintain those rules there. Other repository guidance remains in this skill.
 - When a change creates reusable rules or public workflow knowledge, update `.codex/skills/common-codegen-guidelines/SKILL.md` or the relevant file under `references/` in the same change.
 - 语言 README 中的可调用 API 文档默认用中文维护。API 名称、路径、导入、命令和代码示例保持原文，但说明文字、表格标签、维护规则、备注和复核标记使用中文；用 `待复核` 代替 `Needs review`。
 - Preserve dirty worktree changes that are not yours. Read before editing files that already changed.
@@ -18,6 +20,7 @@ Use this reference after `SKILL.md` triggers. Load only the sections relevant to
 ## C++
 
 - Put public headers under `cpp/include/mental1104/...`; implementations live under `cpp/src/...`; examples belong under `cpp/examples/...`.
+- Follow the declaration/implementation rules in the repository-root `AGENTS.md`. Open templates remain visible to callers; ordinary runtime implementations belong in compiled sources, with optional dependencies and ABI configuration modeled explicitly.
 - Use namespace `mental1104` for public APIs. Keep public names consistent with nearby files.
 - Use `cpp/include/mental1104/meta/compiler_support.h` feature macros: `M1104_CPLUSPLUS`, `M1104_HAS_CXX11/14/17/20/23`, `M1104_HAS_INCLUDE`, and `M1104_HAS_STRING_VIEW`.
 - C++ common-library code must honor the complete `.github/workflows/cpp.yml` matrix: Linux GCC/Clang, macOS Clang/GCC, Windows MSVC, and C++11, C++14, C++17, C++20, and C++23. Affected `main` updates and manual `Main Gate` runs exercise this complete matrix; treat C++11 as the baseline for shared headers and broadly reused source unless the target is explicitly gated out of older standards.
@@ -30,6 +33,9 @@ Use this reference after `SKILL.md` triggers. Load only the sections relevant to
 - For C ABI or Python-exported surfaces under `export/cpp`, keep `extern "C"` APIs POD-only, stable, and exception-free. Return explicit status/result structs instead of throwing across ABI boundaries.
 - Use existing concurrency helpers first: `IExecutor`, `ThreadPoolExecutor`, `BoostAsioExecutor`, coroutine schedulers, `MnCoroutinePool*`, and `detail::shared_mutex_t`.
 - Use existing logging first: `mental1104/log.h`, `M1104_LOG_*`, and `M1104_LOG_*F`. Do not add another logging dependency.
+- Both the repository root and `cpp/` support ordinary CMake configure/build/CTest. At the user's explicit request, standalone native local configuration defaults `M1104_AUTO_SETUP=ON`: reuse devtool submodule/sparse-Boost preparation, build Redis SDKs under the current binary tree's `_deps`, and on Debian/Ubuntu prepare missing system packages with apt. CMake and a working C/C++ toolchain are startup prerequisites. Embedded builds, CI and cross compilation default automatic preparation off. Preserve `M1104_AUTO_SETUP`, `M1104_INSTALL_SYSTEM_DEPS`, and `AUTO_FETCH_SUBMODULES` opt-outs; do not overwrite populated source checkouts or share mutable SDK binaries across standard configurations. Use `PROJECT_SOURCE_DIR` for C++ source paths so the root wrapper works. See `cpp/cmake/bootstrap.cmake` and `devops/devtool/bootstrap_cpp.py`.
+- MQ SDKs are private imported targets in `cpp/cmake/mq.cmake`. Debian/Ubuntu automatic system preparation or explicit `M1104_INSTALL_MQ_DEPS=ON` installs distro `librdkafka-dev` first, then Pulsar repository packages when available or Apache 4.2.0 DEBs with official SHA512 checks. No extra apt source is required. Missing packages require root or noninteractive `sudo -n`; failures stop configuration. Unsupported hosts and cross builds provide SDK paths. Pulsar needs C++17+ and probes the linked SDK for `createProducerV2`; preserve the older API path. Document broker environment separately in `cpp/README.md`.
+- Ordinary CTest includes functional tests; benchmark registration/build participation is opt-in via `M1104_REGISTER_BENCHMARK_TESTS=ON`. Keep `m1104_benchmarks` available to the existing `./dev bench-cpp` workflow when the option is off.
 - In C++ implementation files, prefer `M1104_LOG_*` over direct `std::cout` / `std::cerr` for diagnostics unless the file is specifically testing stream behavior or intentionally writing a user-facing CLI stream.
 - For C++ class implementations, qualify member field and helper-method access with `this->` when touching state such as `entries_` or `epoll_fd_`; constructor initializer lists and out-of-class function definitions remain unqualified by necessity.
 - Preserve the file-local comment style. Chinese `用法` / `说明` comments are welcome when they explain non-obvious compatibility, ABI, concurrency, or algorithm decisions; avoid noisy comments.

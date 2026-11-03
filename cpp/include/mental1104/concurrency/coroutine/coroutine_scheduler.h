@@ -4,7 +4,9 @@
 
 #pragma once
 
-#if __cplusplus >= 202002L
+#include "mental1104/meta/compiler_support.h"
+
+#if M1104_HAS_CXX20
 
 #include <atomic>
 #include <chrono>
@@ -34,76 +36,35 @@ public:
 };
 
 // 基于 IExecutor 的默认 m→n 协程调度器实现
+/// 维护就绪任务队列和完成计数的基础调度器，借用 IExecutor。
 class BasicCoroutineScheduler : public ICoroutineScheduler {
 public:
+  /// 借用执行器并提交长期运行的调度循环。
+  /// @param executor 必须活到调度工作退出，调用方负责其生命周期。
+  /// @param scheduler_workers 调度循环数量，0 按 1 处理。
   explicit BasicCoroutineScheduler(IExecutor &executor,
-                                   std::size_t scheduler_workers = 1)
-      : executor_(executor), stopping_(false), pending_(0) {
-    start(scheduler_workers);
-  }
+                                   std::size_t scheduler_workers = 1);
 
-  ~BasicCoroutineScheduler() override { stop(); }
+  /// 请求调度循环停止；沿用执行器负责工作线程回收的现有约定。
+  ~BasicCoroutineScheduler() override;
 
-  void spawn_task(Task t) override {
-    {
-      std::lock_guard<std::mutex> lock(mutex_);
-      ready_.push(std::move(t));
-      ++pending_;
-    }
-  }
+  /// 接管任务帧并加入受锁保护的就绪队列。
+  /// @param t 转移所有权的协程任务。
+  void spawn_task(Task t) override;
 
-  void wait_all() override {
-    using namespace std::chrono_literals;
-    while (pending_.load(std::memory_order_acquire) > 0) {
-      std::this_thread::sleep_for(1ms);
-    }
-  }
+  /// 阻塞到 pending 归零；不主动停止调度循环。
+  void wait_all() override;
 
-  void stop() {
-    bool expected = false;
-    if (!stopping_.compare_exchange_strong(expected, true)) {
-      return; // 已经停过
-    }
-  }
+  /// 幂等设置停止状态，供调度循环观察。
+  void stop();
 
 private:
-  void start(std::size_t workers) {
-    if (workers == 0)
-      workers = 1;
-    for (std::size_t i = 0; i < workers; ++i) {
-      executor_.execute([this] { scheduler_loop(); });
-    }
-  }
+  /// 向借用的执行器提交调度循环。
+  /// @param workers 循环数量，0 按 1 处理。
+  void start(std::size_t workers);
 
-  void scheduler_loop() {
-    using namespace std::chrono_literals;
-
-    while (!stopping_.load(std::memory_order_acquire)) {
-      Task t;
-
-      {
-        std::lock_guard<std::mutex> lock(mutex_);
-        if (!ready_.empty()) {
-          t = std::move(ready_.front());
-          ready_.pop();
-        }
-      }
-
-      if (!t) {
-        std::this_thread::sleep_for(1ms);
-        continue;
-      }
-
-      t.resume();
-
-      if (t.done()) {
-        pending_.fetch_sub(1, std::memory_order_acq_rel);
-      } else {
-        std::lock_guard<std::mutex> lock(mutex_);
-        ready_.push(std::move(t));
-      }
-    }
-  }
+  /// 在执行器线程中推进任务，完成时减少 pending，挂起时重新入队。
+  void scheduler_loop();
 
 private:
   IExecutor &executor_;
