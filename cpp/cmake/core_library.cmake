@@ -12,8 +12,6 @@ option(M1104_ENABLE_JSON "Build the JSON runtime when dependencies are available
 option(M1104_ENABLE_REDIS_LOCK "Build Redis lock runtime when client libraries are available" ON)
 option(M1104_ENABLE_HIGH_PRECISION "Build MPFR calculators when dependencies are available" ON)
 option(M1104_ENABLE_BOOST_ASIO "Build the Boost.Asio executor when headers are available" ON)
-find_path(M1104_RAPIDJSON_INCLUDE_DIR rapidjson/document.h
-  PATHS "${PROJECT_SOURCE_DIR}/lib/rapidjson/include")
 find_path(M1104_BOOST_INCLUDE_DIR boost/asio/thread_pool.hpp
   PATHS "${PROJECT_SOURCE_DIR}/lib/boost" "${PROJECT_SOURCE_DIR}/lib/boost/include"
     "${PROJECT_SOURCE_DIR}/lib/boost/libs/asio/include")
@@ -40,12 +38,7 @@ int main() { boost::multiprecision::mpfr_float value(1); return value == 1 ? 0 :
   cmake_pop_check_state()
 endif()
 
-set(M1104_HAS_JSON FALSE)
-if(M1104_ENABLE_JSON AND TARGET CJSON::lib AND M1104_RAPIDJSON_INCLUDE_DIR)
-  set(M1104_HAS_JSON TRUE)
-else()
-  list(FILTER M1104_CORE_SOURCES EXCLUDE REGEX "/src/json\\.cpp$")
-endif()
+include("${CMAKE_CURRENT_LIST_DIR}/json.cmake")
 set(M1104_HAS_REDIS_LOCK FALSE)
 if(M1104_ENABLE_REDIS_LOCK AND TARGET HIREDIS::lib AND TARGET REDISPP::lib)
   set(M1104_HAS_REDIS_LOCK TRUE)
@@ -79,12 +72,11 @@ target_include_directories(mental1104 PUBLIC
 )
 find_package(Threads REQUIRED)
 target_link_libraries(mental1104 PUBLIC Threads::Threads)
-if(M1104_HAS_JSON)
-  target_include_directories(mental1104 PUBLIC "${M1104_RAPIDJSON_INCLUDE_DIR}")
-  target_link_libraries(mental1104 PUBLIC CJSON::headers PRIVATE CJSON::lib)
-  # 公开布局仍引用后端类型，独立消费端需要同版本的 JSON 头文件。
-  install(DIRECTORY "${M1104_RAPIDJSON_INCLUDE_DIR}/rapidjson" DESTINATION include)
-  install(FILES "${PROJECT_SOURCE_DIR}/lib/cJSON/cJSON.h" DESTINATION include)
+if(M1104_HAS_JSON_RAPIDJSON)
+  target_include_directories(mental1104 SYSTEM PRIVATE "${M1104_RAPIDJSON_INCLUDE_DIR}")
+endif()
+if(M1104_HAS_JSON_CJSON)
+  target_link_libraries(mental1104 PRIVATE CJSON::headers CJSON::lib)
 endif()
 if(M1104_HAS_REDIS_LOCK)
   # 公开头与实现必须采用相同 redis++ 标准配置，链接库则属于运行时实现依赖。
@@ -109,7 +101,7 @@ if(M1104_HAS_BOOST_ASIO OR M1104_HAS_HIGH_PRECISION OR M1104_HAS_JSON)
     install(DIRECTORY "${_header_root}/" DESTINATION include/boost)
   endforeach()
 endif()
-foreach(_capability JSON REDIS_LOCK HIGH_PRECISION BOOST_ASIO)
+foreach(_capability JSON JSON_CJSON JSON_RAPIDJSON REDIS_LOCK HIGH_PRECISION BOOST_ASIO)
   target_compile_definitions(mental1104 PUBLIC
     M1104_HAS_${_capability}=$<BOOL:${M1104_HAS_${_capability}}>)
   message(STATUS "Compiled ${_capability} runtime: ${M1104_HAS_${_capability}}")

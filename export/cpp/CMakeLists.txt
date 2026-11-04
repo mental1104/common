@@ -10,21 +10,42 @@ option(EXPORT_BUILD_PYBIND11 "Build pybind11 Python extension" ON)
 set(REPO_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../..")
 set(THIRDROOT "${REPO_ROOT}/cpp/lib")
 
+file(GLOB EXPORT_JSON_CORE_SRCS CONFIGURE_DEPENDS
+    "${REPO_ROOT}/cpp/src/json/*.cpp")
 set(EXPORT_JSON_SRCS
     src/json.cpp
     src/json_capi.cpp
     # 独立导出库与主库复用同一解析实现，不再依赖头文件生成定义。
-    "${REPO_ROOT}/cpp/src/json.cpp"
+    ${EXPORT_JSON_CORE_SRCS}
 )
 
-# Optional cJSON implementation (header is required by mental1104::json)
+# 独立导出工程生成自己的能力配置，不读取开发机安装的另一份库配置。
+set(M1104_BUILD_HAS_ASYNC_SIMPLE FALSE)
+set(M1104_HAS_JSON TRUE)
+set(M1104_HAS_JSON_CJSON FALSE)
+set(M1104_HAS_JSON_RAPIDJSON FALSE)
+find_path(EXPORT_RAPIDJSON_INCLUDE_DIR rapidjson/document.h
+    PATHS "${THIRDROOT}/rapidjson/include")
+if(EXPORT_RAPIDJSON_INCLUDE_DIR)
+    set(M1104_HAS_JSON_RAPIDJSON TRUE)
+endif()
+
+# cJSON 为导出库的私有原生实现，缺失时保留明确的后端错误。
 set(_cjson_src "${THIRDROOT}/cJSON/cJSON.c")
 if(EXISTS "${_cjson_src}")
+    set(M1104_HAS_JSON_CJSON TRUE)
     list(APPEND EXPORT_JSON_SRCS "${_cjson_src}")
     set_source_files_properties("${_cjson_src}" PROPERTIES LANGUAGE C)
 endif()
 
 add_library(export_json SHARED ${EXPORT_JSON_SRCS})
+configure_file("${REPO_ROOT}/cpp/cmake/build_config.h.in"
+    "${CMAKE_CURRENT_BINARY_DIR}/include/mental1104/build_config.h" @ONLY)
+target_include_directories(export_json BEFORE PUBLIC
+    "${CMAKE_CURRENT_BINARY_DIR}/include")
+if(EXPORT_RAPIDJSON_INCLUDE_DIR)
+    target_include_directories(export_json PRIVATE "${EXPORT_RAPIDJSON_INCLUDE_DIR}")
+endif()
 
 set(THIRD_INCLUDE_DIRS
     "${CMAKE_CURRENT_SOURCE_DIR}/include"   # our own headers

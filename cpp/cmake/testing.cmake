@@ -7,7 +7,7 @@ message(STATUS "Collected ${_TEST_COUNT} test files under ${TEST_DIR} (recursive
 
 set(M1104_SKIP_TESTS "")
 # 新版 GoogleTest 会将测试驱动提升至 C++17。按实际库标准独立编译消费端，
-# 避免 std::variant/string_view 与 C++11/14 库的公开表示不一致。
+# 避免 optional/string_view 与 C++11/14 库的公开表示不一致。
 get_target_property(_m1104_gtest_features gtest INTERFACE_COMPILE_FEATURES)
 if(CMAKE_CXX_STANDARD LESS 17 AND "cxx_std_17" IN_LIST _m1104_gtest_features)
   list(APPEND M1104_SKIP_TESTS test_json)
@@ -50,8 +50,6 @@ endif()
 
 set(TEST_DEPS_test_redis_lock "HIREDIS;REDISPP")
 set(TEST_REQUIRE_LIBS_test_redis_lock "HIREDIS;REDISPP")
-set(TEST_DEPS_test_json         "CJSON")
-set(TEST_REQUIRE_LIBS_test_json "CJSON")
 
 function(add_optional_test SRC)
   get_filename_component(TEST_NAME "${SRC}" NAME_WE)
@@ -99,6 +97,9 @@ function(add_optional_test SRC)
   message(STATUS "  -> include dirs (priority): ${AGG_INC}")
 
   set(_extra_sources "")
+  if(TEST_NAME STREQUAL "test_json")
+    list(APPEND _extra_sources "${TEST_DIR}/json/consumer.cc")
+  endif()
   if (TEST_NAME STREQUAL "test_c_api_compat")
     list(APPEND _extra_sources "${TEST_DIR}/c_api_compat_c_smoke.c")
   endif()
@@ -170,6 +171,16 @@ endfunction()
 foreach(SRC ${TEST_FILES})
   add_optional_test("${SRC}")
 endforeach()
+
+if(M1104_HAS_JSON)
+  # 不链接 GoogleTest，确保最低标准也实际编译并链接 JSON 公共模板。
+  add_executable(test_json_consumer
+    "${TEST_DIR}/json/consumer.cc" "${TEST_DIR}/json/consumer_main.cc")
+  target_link_libraries(test_json_consumer PRIVATE mental1104)
+  set_target_properties(test_json_consumer PROPERTIES
+    CXX_STANDARD ${CMAKE_CXX_STANDARD} CXX_STANDARD_REQUIRED ON)
+  add_test(NAME test_json_consumer COMMAND test_json_consumer)
+endif()
 
 option(BUILD_THIRD_LIBS_FROM_SOURCE "Add lib/* that contain CMakeLists.txt via add_subdirectory" OFF)
 if (BUILD_THIRD_LIBS_FROM_SOURCE)

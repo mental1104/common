@@ -4,6 +4,8 @@
 // 由库构建生成并随头文件安装；尤其保证条件基类与已编译构造函数使用相同布局。
 #cmakedefine01 M1104_BUILD_HAS_ASYNC_SIMPLE
 #cmakedefine01 M1104_HAS_JSON
+#cmakedefine01 M1104_HAS_JSON_CJSON
+#cmakedefine01 M1104_HAS_JSON_RAPIDJSON
 #cmakedefine01 M1104_HAS_REDIS_LOCK
 #cmakedefine01 M1104_HAS_HIGH_PRECISION
 #cmakedefine01 M1104_HAS_BOOST_ASIO

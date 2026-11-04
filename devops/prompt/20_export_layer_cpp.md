@@ -1,5 +1,5 @@
 Export layer & C++ notes
-- C++ core JSON implementation in cpp/include/mental1104/json.h (cJSON/RapidJSON). export/cpp builds shared lib libexport_json.* and optional pybind11 module mental1104_export_layer_pybind.
+- C++ JSON declarations live in cpp/include/mental1104/json/ (json.h is the umbrella), with polymorphic backends in cpp/src/json/. export/cpp compiles those runtime sources with its own generated backend configuration, producing libexport_json.* and the optional pybind11 module mental1104_export_layer_pybind.
 - Python bindings in export/python/src/mental1104_export_layer/: strategies pybind11 (PyBindStrategy) and ctypes (CTypesStrategy). Default prefers pybind11 then ctypes; env overrides: EXPORT_LAYER_STRATEGY, EXPORT_LAYER_ALLOW_FALLBACK=0 to block fallback.
 - _init_default logs missing backends at warning level. ctypes uses EXPORT_LAYER_CTYPE_LIB or searches export/cpp/build/libexport_json.*.
 - Dev CLI: build-export-cpp auto-passes pybind11_DIR from python/.venv if available. Python test/coverage prepend PYTHONPATH with export/cpp/build to expose mental1104_export_layer.

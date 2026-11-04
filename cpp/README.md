@@ -36,15 +36,15 @@ Debian/Ubuntu 本机独立构建默认用 apt 补齐 Git、Python 3、pkg-config
 | M:N 池组合模板、协程 promise 类型、执行器/调度器声明 | 执行器、调度循环、等待、Task 帧管理；协程实现需要 C++20+ |
 | JSON、Redis 锁、高精度计算器、文件/描述符 RAII 的公开声明 | 对应解析、SDK 协议、算法、资源释放等普通函数与成员 |
 
-头文件中仍可能需要公开返回值或按值成员依赖的 Boost/JSON 等具体类型；分离函数体不意味着这些依赖都被隐藏。库与消费方必须采用匹配的标准、variant/string_view 类型和 async_simple 等接口宏。生成并安装的 `mental1104/build_config.h` 记录可选能力及 async_simple 布局配置，公共兼容头会自动读取它；启用相关能力时同时安装使用到的 JSON、仓库内 Boost 和 async_simple 公开头文件。当前交付不承诺一个库二进制跨所有 C++ 标准混用。
+头文件中仍可能需要公开返回值或按值成员依赖的 Boost 等具体类型；JSON 原生后端类型已隐藏。库与消费方必须采用匹配的标准、optional/string_view 类型和 async_simple 等接口宏。生成并安装的 `mental1104/build_config.h` 记录可选能力及 async_simple 布局配置，公共兼容头会自动读取它；启用相关能力时同时安装使用到的仓库内 Boost 和 async_simple 公开头文件。当前交付不承诺一个库二进制跨所有 C++ 标准混用。
 
-以下 CMake 开关默认开启，并在依赖可用时编译相应实现：`M1104_ENABLE_JSON`、`M1104_ENABLE_REDIS_LOCK`、`M1104_ENABLE_HIGH_PRECISION`、`M1104_ENABLE_BOOST_ASIO`。关闭开关或缺失依赖时，相关实现与测试不参与构建；target 的 `M1104_HAS_JSON`、`M1104_HAS_REDIS_LOCK`、`M1104_HAS_HIGH_PRECISION`、`M1104_HAS_BOOST_ASIO` 编译定义表示最终可用性，值为 0 或 1。JSON 需要 cJSON/RapidJSON，Redis 锁需要 hiredis/redis++，高精度算法需要 MPFR/GMP 与 Boost 头文件，Boost 执行器需要 Boost.Asio 头文件。
+以下 CMake 开关默认开启：`M1104_ENABLE_JSON`、`M1104_ENABLE_REDIS_LOCK`、`M1104_ENABLE_HIGH_PRECISION`、`M1104_ENABLE_BOOST_ASIO`。关闭开关时相应实现与测试不参与构建。JSON 公共核心不依赖原生 SDK；`M1104_ENABLE_JSON_CJSON`、`M1104_ENABLE_JSON_RAPIDJSON` 在依赖可用时独立启用后端。`M1104_HAS_JSON`、`M1104_HAS_JSON_CJSON`、`M1104_HAS_JSON_RAPIDJSON` 记录公共核心与后端可用性。其他能力仍按实际依赖决定 `M1104_HAS_REDIS_LOCK`、`M1104_HAS_HIGH_PRECISION`、`M1104_HAS_BOOST_ASIO`：分别需要 hiredis/redis++、MPFR/GMP 与 Boost、Boost.Asio。
 
 日志全局等级及后端输出由库中的一个运行时核心管理。`MENTAL1104_LOG_LEVEL` 环境变量与 `set_log_level` 仍在运行时生效；`M1104_LOG_DEFAULT_LEVEL` 和可选 spdlog 后端按构建库时的配置决定，消费端重新定义宏不能重编译已经链接的日志实现。计时器原有的每翻译单元构造互斥量保留，未改成全局单例。
 
 `test_build_config` 刻意不继承主库 target 的编译宏，仅使用公开头、生成配置头和链接文件，验证条件基类与已编译构造/析构函数的布局一致。
 
-独立 `export/cpp` 构建复用 `cpp/src/json.cpp`，不要求为了 JSON 导出链接整个主库。普通测试之外，`test_linkage` 使用两个翻译单元验证独立调用方、模板包装与已编译核心的组合。消费端对象始终按库配置的标准编译；若新版 GoogleTest 把驱动提升至 C++17，C++11/14 配置的 JSON 契约通过这个独立消费端验证，避免驱动以不同的 variant/string_view 布局直接调用旧标准库。高精度实现也会按实际标准试编译，当前 Boost 不支持该标准时仅排除该能力。
+独立 `export/cpp` 构建复用 `cpp/src/json/` 的运行时源文件并生成自己的后端配置，不要求链接整个主库。普通测试之外，`test_linkage` 和 `test_json_consumer` 通过多个翻译单元验证调用方模板与已编译核心。消费端按库标准编译；若新版 GoogleTest 把驱动提升至 C++17，C++11/14 通过不依赖 GoogleTest 的 `test_json_consumer` 验证 JSON，避免 optional/string_view 布局不匹配。高精度实现也会按标准试编译，不兼容时仅排除该能力。
 
 ## 独立 HTTP / WebSocket 服务端
 
@@ -319,7 +319,7 @@ Pulsar 的 Producer 创建接口通过实际头文件与库进行编译链接探
 | 容器与字符串 | `ExponentialBackoff` | 类 | `mental1104/util.h` | 按上限推进重试延迟，可显式加入对称随机抖动。 |
 | 缓存包装器 | `LRUCache`, `make_lru_cache`, `make_cache` | 类 / 函数 | `mental1104/core/cache.h` | 用 tuple 键 LRU 或无界缓存包装可调用对象。 |
 | 缓存包装器 | `LFUCache`, `make_lfu_cache` | 类 / 函数 | `mental1104/core/cache.h` | 用 tuple 键 LFU 缓存包装可调用对象。 |
-| JSON | `JsonParser`, `parse_json`, `ParseResult`, `JsonDoc`, `JsonValueView` | 枚举 / 函数 / 类 | `mental1104/json.h` | 通过 cJSON 或 RapidJSON 解析 JSON，并通过后端无关视图读取值。 |
+| JSON | `IJsonParser`, `IJsonDocument`, `CJsonParser`, `RapidJsonParser`, `JsonParser`, `parse_json`, `ParseResult`, `JsonDoc`, `JsonValueView`, `JsonType`, `JsonOptional`, `JsonValueReader` | 接口 / 类 / 枚举 / 函数 / 模板 | `mental1104/json.h` 或 `mental1104/json/*.h` | 可替换后端解析、只读节点访问、类型化可选读取及调用方模型转换。 |
 | 日志 | `LogLevel`, `get_log_level`, `set_log_level`, `log`, `logf`, `M1104_LOG_*` | 枚举 / 函数 / 宏 | `mental1104/log.h` | 通过 stdout/stderr 输出分级日志，可用时使用 spdlog。 |
 | C API 兼容 | `COMMON_EXTERN_C_BEGIN`, `COMMON_EXTERN_C_END`, `COMMON_EXTERN_C` | 宏 | `mental1104/common/c_api_compat.h` | 包装 C 声明，使同一头文件可被 C 和 C++ 包含。 |
 | 资源管理 | `unique_fd` | 类 | `mental1104/c_api_raii.h` | 持有 POSIX 文件描述符。 |
@@ -426,39 +426,71 @@ int main() {
 
 - **类别：** JSON
 - **类型：** 枚举、函数、类
-- **定义位置：** `cpp/include/mental1104/json.h`
-- **包含：** `#include "mental1104/json.h"`
-- **用途：** 解析 JSON 并读取值，同时不暴露后端专有对象。
+- **定义位置：** `cpp/include/mental1104/json/`；运行时实现位于 `cpp/src/json/`
+- **包含：** `mental1104/json.h` 聚合全部接口；可单独包含 `mental1104/json/rapidjson_parser.h`、`cjson_parser.h`、`parser.h`、`document.h` 或 `value.h`
+- **用途：** 通过基类替换后端，用统一视图访问成员、数组和嵌套路径，并读取可选的具体类型。
 
 **基础用法：**
 
 ```cpp
-#include "mental1104/json.h"
+#include "mental1104/json/rapidjson_parser.h"
 #include <iostream>
 
+/// 解析配置并展示可选读取与 null 判断。
+/// @return 成功返回 0，解析失败返回 1。
 int main() {
-  auto result = mental1104::parse_json(
-      mental1104::string_view("{\"name\":\"common\",\"ok\":true}"),
-      mental1104::JsonParser::RapidJSON);
-  if (!result) {
-    std::cerr << result.error << "\n";
-    return 1;
-  }
-
-  auto root = result.doc.root();
-  std::cout << root.get("name").as_string_copy() << "\n";
+    const mental1104::RapidJsonParser parser;
+    auto result = parser.parse(mental1104::string_view(
+        R"({"status":{"settings":{"uuid":"test-id"}},"nil":null})"));
+    if (!result) {
+        std::cerr << result.error << " @" << result.offset << "\n";
+        return 1;
+    }
+    const auto root = result.doc.root();
+    const auto uuid = root.get_optional<std::string>(
+        {"status", "settings", "uuid"});
+    std::cout << uuid.value_or("unknown") << "\n";
+    std::cout << root.get("missing").is_valid() << " "
+              << root.get("nil").is_null() << "\n";
 }
 ```
 
 **示例输出：**
 
 ```text
-common
+test-id
+0 1
 ```
 
 **备注：**
 
-- 需要 C++ 构建中配置的 cJSON 和 RapidJSON 头文件 / 库。
+| 接口 | 结果与失败语义 |
+|---|---|
+| `type()`、`is_valid()`、`is_null()`、`is_object()`、`is_array()`、`is_string()`、`is_bool()`、`is_number()` | 区分 `JsonType::Missing` 与有效的 JSON `null`，缺失成员不触发后端异常或断言。 |
+| `get(key)`、`get({"a", "b"})`、`has(key)` | 区分大小写；非对象、成员缺失或路径中断返回空视图；空路径返回当前节点。 |
+| `size()`、`at(index)` | 数组长度及元素；非数组长度为 0，非数组或越界返回空视图。 |
+| `as_optional<T>()`、`get_optional<T>(key/path)` | 支持布尔、标准整数、浮点、`std::string`，C++17 起支持借用的 `std::string_view`。缺失、null、类型错误或越界返回空；false、0、空字符串仍包含值。 |
+| `as_string()`、`as_string_copy()`、`as_bool()`、`as_i64()`、`as_f64()` | 保留默认值读取；`as_i64()` 仍向零截断小数，越界返回默认值；严格 optional 整数读取拒绝小数。 |
+| `JsonValueReader<T>::read(view)` | 调用方特化可组合统一读取能力，生成自定义模型，无须修改库或显式实例化。 |
+
+**所有权与扩展：**
+
+- `IJsonParser::parse` 每次产生独立文档，完成后可销毁解析器和输入。`ParseResult` 保留 `ok`、`error`、`offset`、`doc` 和布尔判断；成功拥有文档，失败时文档为空。
+- `JsonDoc` 独占 `IJsonDocument`，允许移动、禁止复制；`valid()`、`backend()`、`root()` 保持原用途。移动所有权不改变后端地址，已有视图仍有效；覆盖或销毁文档使其旧视图失效。视图和借用字符串不延长文档生命周期，`std::string` 结果是独立副本。
+- 应用可派生 `IJsonParser` 和 `IJsonDocument`，通过 `JsonDoc(unique_ptr<IJsonDocument>)` 接入。文档实现 protected `do_root/type/get/size/at/string/bool/i64/u64/f64` 钩子；句柄只由所属文档解释，nullptr 表示缺失，非空句柄属于该文档；DOM 只读。公共视图负责路径和模板转换，无须增加枚举分支或全局注册。默认诊断标识为 `JsonParser::Custom`。
+- 原 `parse_json(text, JsonParser::CJSON/RapidJSON)` 及指针/长度入口仍可使用，委托给派生解析器。旧 `JsonValueView::from_cjson/from_rapid` 原生节点注入接口已移除，应通过文档取得视图。
+- 本次调整了公开对象布局及部分函数签名，需要重新编译库与调用方，不兼容旧版二进制 ABI。
+
+**构建、链接与限制：**
+
+- 链接既有 `mental1104` 共享库。公共 JSON 头不依赖 cJSON/RapidJSON SDK，原生 SDK 为私有依赖。头与库仍须匹配 C++ 标准，不能混用 C++11/14 与 C++17+ 的 `string_view`/optional 配置。
+- `M1104_ENABLE_JSON` 控制模块；`M1104_ENABLE_JSON_CJSON`、`M1104_ENABLE_JSON_RAPIDJSON` 独立控制内置后端，能力写入安装的 `mental1104/build_config.h`。缺依赖或禁用的后端返回错误，不自动切换；两内置后端都关闭时仍可接入自定义实现。
+- `JsonOptional<T>` 在 C++17+ 等同 `std::optional<T>`，C++11/14 等同 `boost::optional<T>`；通过布尔判断和 `value_or` 使用。旧标准的 `string_view` 为 `std::string`，可能分配内存，这些路径不承诺 `noexcept`。
+- 输入不要求 NUL 结尾；根后仅允许 JSON 空白。空输入及原始 NUL 返回错误，转义的 `\u0000` 由后端处理。语法诊断和偏移细节可能不同，cJSON 的宽松语法未被完整校验器替代。
+- 严格数值读取不转换字符串或布尔，不截断小数，检查符号、范围及浮点有限性；浮点转换允许舍入。cJSON 数字以 double 保存，不能承诺原始完整 64 位整数精度；RapidJSON 保留原生 64 位整数。cJSON 字符串和键没有独立长度元数据，不能完整读取含内嵌 NUL 的字符串和键，此类输入应选择 RapidJSON。
+- 缺失和类型错误表现为空；分配失败及自定义转换异常仍可抛出。cJSON 使用进程级 hooks/错误状态，不承诺并发解析；需要并发解析时选择 RapidJSON。文档销毁、覆盖或自定义后端的可变操作不能与视图读取并发。
+
+**验证入口：** 构建后运行 `./dev test-cpp --file '^test_json'`。两后端复用相同场景；`test_json_consumer` 不链接 GoogleTest，按实际库标准编译多个翻译单元，验证调用方自定义类型、模板和运行时链接。
 
 ### 日志
 

@@ -57,12 +57,24 @@ Observation observe_consumer() {
   // promise 的借用持续到 future.get 完成，执行器在离开作用域时回收线程。
   executor.execute([&result, &cache] { result.set_value(cache(41)); });
 
+#if M1104_HAS_JSON_CJSON || M1104_HAS_JSON_RAPIDJSON
   const char payload[] = "{\"ok\":true}";
+#endif
+  bool parse_ok = true;
+#if M1104_HAS_JSON_RAPIDJSON
   auto parsed = mental1104::parse_json(payload, sizeof(payload) - 1,
                                        mental1104::JsonParser::RapidJSON);
+  const auto root = parsed.doc.root();
+  auto moved = std::move(parsed.doc);
+  parse_ok = parsed.ok && moved.valid() &&
+      root.get_optional<bool>("ok").value_or(false);
+#endif
+#if M1104_HAS_JSON_CJSON
   auto parsed_cjson = mental1104::parse_json(payload, sizeof(payload) - 1,
                                              mental1104::JsonParser::CJSON);
-  auto moved = std::move(parsed.doc);
+  parse_ok = parse_ok && parsed_cjson.ok &&
+      parsed_cjson.doc.root().get_optional<bool>("ok").value_or(false);
+#endif
   mental1104::unique_file file(std::tmpfile());
   mental1104::ExponentialBackoff backoff(10, 100);
   int steps = 0;
@@ -74,8 +86,7 @@ Observation observe_consumer() {
   return {mental1104::to_lower_copy("MiXeD"),
           future.get(),
           filter.contains(PrivateKey{7}),
-          parsed.ok && moved.root().get("ok").as_bool() && parsed_cjson.ok &&
-              parsed_cjson.doc.root().get("ok").as_bool(),
+          parse_ok,
           static_cast<bool>(file),
           !mental1104::random_hex<std::minstd_rand0>().empty(),
           static_cast<int>(backoff.next().count()),
