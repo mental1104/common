@@ -5,21 +5,21 @@ Use this reference after `SKILL.md` triggers. Load only the sections relevant to
 ## Repository Shape
 
 - Treat `/home/mental1104/code/common` as a multi-language common-library monorepo, not a single application.
-- Main source roots are `cpp/`, `python/`, `golang/`, `rust/mental1104/`, `dotnet/`, `java/flink-datastream-demo/`, `export/`, `devops/`, `tools/ci/`, and `.github/workflows/`.
+- 目录组织、文件放置与新增目录约束以根目录 `AGENTS.md` 为准；优先复用已有职责目录，不在此维护独立规则副本。
 - Use `./dev` as the preferred entrypoint. It wraps setup, build, test, coverage, fmt, bench, install, uninstall, vet, guard, Docker, Java/Flink run, and verify-install commands.
 - NAS 工作区的本地开发与验证统一在既有 `code-server` 容器挂载的仓库根目录运行 `./dev`，不要改在 NAS 宿主机或其他开发容器中执行。开发服务的镜像与部署配置在仓库外维护，不在本仓库恢复专用开发容器。其他平台与 CI 继续使用各自的原生工具链。
 - 切换容器或仓库挂载路径时，Python 虚拟环境和 CMake 构建树不能直接视为可复用环境；先核对解释器、ABI 与缓存中的绝对路径，必要时备份旧目录后在当前环境重新生成。
 - Keep CI and Pages conventions aligned: language workflows are reusable execution units, `ci-main.yml` routes `main` updates to the affected language workflows, and coverage extraction scripts under `tools/ci/` produce normalized `cov.json`.
 - GitHub Actions 只由 `main` 分支 push 或仓库级手动 `Main Gate` 启动。`main` push 按提交前后差异选择受影响语言，并为选中的语言传入 `full_matrix: true`；手动 `Main Gate` 在 `main` 上展开六个语言的完整平台、编译器和运行时矩阵。PR、Draft PR 及普通功能分支不得分配 runner，也不得把 Actions 当作远程调试循环。
 - Treat the complete `main`/manual GitHub Actions matrix as the repository compatibility contract. Local and branch-level validation should use `./dev`; it must not be used to raise the minimum compiler, language standard, runtime, or platform requirement.
-- `AGENTS.md` holds the C++ declaration/implementation boundary rules at the user's explicit request; maintain those rules there. Other repository guidance remains in this skill.
+- `AGENTS.md` holds directory organization and C++ declaration/implementation boundary rules at the user's explicit request; maintain those rules there. Other repository guidance remains in this skill.
 - When a change creates reusable rules or public workflow knowledge, update `.codex/skills/common-codegen-guidelines/SKILL.md` or the relevant file under `references/` in the same change.
 - 语言 README 中的可调用 API 文档默认用中文维护。API 名称、路径、导入、命令和代码示例保持原文，但说明文字、表格标签、维护规则、备注和复核标记使用中文；用 `待复核` 代替 `Needs review`。
 - Preserve dirty worktree changes that are not yours. Read before editing files that already changed.
 
 ## C++
 
-- Put public headers under `cpp/include/mental1104/...`; implementations live under `cpp/src/...`; examples belong under `cpp/examples/...`.
+- C++ 文件放置及不再维护 examples 的规则见根目录 `AGENTS.md`。
 - Follow the declaration/implementation rules in the repository-root `AGENTS.md`. Open templates remain visible to callers; ordinary runtime implementations belong in compiled sources, with optional dependencies and ABI configuration modeled explicitly.
 - Use namespace `mental1104` for public APIs. Keep public names consistent with nearby files.
 - Use `cpp/include/mental1104/meta/compiler_support.h` feature macros: `M1104_CPLUSPLUS`, `M1104_HAS_CXX11/14/17/20/23`, `M1104_HAS_INCLUDE`, and `M1104_HAS_STRING_VIEW`.
@@ -33,12 +33,22 @@ Use this reference after `SKILL.md` triggers. Load only the sections relevant to
 - For C ABI or Python-exported surfaces under `export/cpp`, keep `extern "C"` APIs POD-only, stable, and exception-free. Return explicit status/result structs instead of throwing across ABI boundaries.
 - Use existing concurrency helpers first: `IExecutor`, `ThreadPoolExecutor`, `BoostAsioExecutor`, coroutine schedulers, `MnCoroutinePool*`, and `detail::shared_mutex_t`.
 - Use existing logging first: `mental1104/log.h`, `M1104_LOG_*`, and `M1104_LOG_*F`. Do not add another logging dependency.
+- HTTP/WebSocket 新模块独立于主库：公开类型在 `mental1104/web/server.h`，后端工厂在 `drogon_server.h`；应用不得接收 Drogon/Trantor 类型。构建定义放在 `cpp/cmake/web.cmake`，复用现有 `cpp/CMakeLists.txt` 入口启用 C++17+ 目标，安装包为 `mental1104Web`，目标为 `mental1104::web` / `mental1104::web_drogon`。主库仅在显式 `M1104_ENABLE_WEB=ON` 时引入，`src/web/` 必须从主库递归源码收集中排除。Drogon 为可选的私有共享库依赖，禁止提升原有 C++11/14 的基线或强制主库准备 Web SDK。后端契约测试为 `cpp/test/web/*.cc`；修改后端时复用这些行为测试，不再维护独立安装消费测试工程。第一版为进程内单次启动、非排空停止、字面路由和原始请求体，不提供 schema/multipart 编解码或 WebSocket 背压。
 - Both the repository root and `cpp/` support ordinary CMake configure/build/CTest. At the user's explicit request, standalone native local configuration defaults `M1104_AUTO_SETUP=ON`: reuse devtool submodule/sparse-Boost preparation, build Redis SDKs under the current binary tree's `_deps`, and on Debian/Ubuntu prepare missing system packages with apt. CMake and a working C/C++ toolchain are startup prerequisites. Embedded builds, CI and cross compilation default automatic preparation off. Preserve `M1104_AUTO_SETUP`, `M1104_INSTALL_SYSTEM_DEPS`, and `AUTO_FETCH_SUBMODULES` opt-outs; do not overwrite populated source checkouts or share mutable SDK binaries across standard configurations. Use `PROJECT_SOURCE_DIR` for C++ source paths so the root wrapper works. See `cpp/cmake/bootstrap.cmake` and `devops/devtool/bootstrap_cpp.py`.
+- Web `Server` 采用 NVI：基类固定配置、监听、发布就绪、事件循环与清理的阶段顺序；后端实现 protected `do_configure`、`do_listen`、`do_run_event_loop`、`do_cleanup`、`do_request_stop`、`do_is_io_thread`。监听钩子同步返回实际地址，公共接口不再暴露 Ready 回调。清理在成功或任一阶段异常时执行一次；析构必须先调用 `shutdown()`。Drogon 的合并式 app.run 通过内部 SDK 线程适配，监听阶段等真实就绪、事件循环阶段等 SDK 线程退出，清理阶段统一回收线程。阶段顺序、失败清理与取消语义由 `cpp/test/web/lifecycle_scenarios.cc` 验证。
+- 编辑器的 `.clangd` 读取 `cpp/build/compile_commands.json`；VS Code CMake 配置启用 Web 目标。编辑可选后端前须确保该目录已使用 `M1104_ENABLE_WEB=ON` 配置，否则 clangd 会借用其他文件的命令，缺失 JsonCpp 等 SDK include 路径并产生模板签名恢复错误。命令行 Web 开关仍默认关闭；验证编辑器诊断时使用 clangd --check，不只检查 GCC 构建结果。
+- Web 服务当前只管理一个监听器：使用 `ServerOptions::listener`，`start(Endpoint&)` 成功时输出单个实际地址，`do_listen()` 返回单个 `Endpoint`。默认 HTTP，已有 TLS 配置作用于同一个监听器；不要为假设中的多监听需求恢复 vector 接口。
+- Web 注册在 Impl 中使用拥有路径副本的哈希索引：HTTP 键为方法与路径，WebSocket 键为路径；路由 vector 保留顺序且继续作为后端配置。重复检查、索引插入、列表保存均在公共状态锁内；列表保存失败必须回滚索引。索引仅在 Configuring 状态有效，启动冻结或启动前取消时整体释放，禁止使用借用 vector 元素的 string_view 作为索引键。
+- Web 的公共 HTTP 规则在 `server.h` 声明、`server.cpp` 实现，内部适配辅助函数置于 `detail`：响应头规范化、状态码与下载名称校验、文件大小查询、单段 Range 筛选和解析。异常须由后端提交边界捕获。`drogon_server.cpp` 仅保留 SDK 类型转换、响应构造、回调及运行时适配；字面路径转正则属于 Drogon 路由 API 的适配，上传缓存目录用于 SDK 配置，两者保留。公共网络行为由 `server_scenarios.cc` 通过独立 Beast 客户端验证，不直接测试私有 helper。
+- Web 后端场景通过 `m1104_add_web_backend_scenarios` 复用已编译的公共场景，每个实现只提供 `backend.h` 约定的工厂接入文件。CTest 每场景启动独立进程，筛选使用 `^(test_web_lifecycle|web\.)`；不要重新引入 installed 测试工程或旧 test_api/test_drogon 目标。GET 默认支持 HEAD，回调看到 Get，独立 Head 注册返回 false；不为拒绝隐式 HEAD 给 SDK 打补丁。Linux Drogon 的多 I/O 监听记录需校验地址一致，临时端口通过持续保留 SO_REUSEPORT 绑定统一分配。
+- Drogon 的 BeginningAdvice 先于 startListening，不可直接据此发布启动成功。适配器通过 SDK 本地 TCP 探测确认端口可连接，五秒超时失败；不发送 HTTP/TLS 业务数据。Linux 的 StartWaitsUntilListenerAcceptsConnections 场景人为阻塞监听线程验证时序，客户端不应通过重试掩盖 start 提前返回的错误。
+- Web 公共工厂、路由注册、`start(Endpoint&)`、`wait()` 返回 bool 并捕获内部异常，禁止恢复向业务层抛异常的接口。工厂通过空的 `unique_ptr<Server>&` 输出实例，失败保持输出原值；路由通过 const 引用传入并在捕获边界内复制。启动取消在 `complete_startup` 中与成功提交原子裁决：取消时不进入 Running 或事件循环，清理后 start/wait 返回 false。成功提交后的停止属于正常运行期停止。HTTP 转换异常映射 500，响应提交异常返回 false，会话发送异常返回 SendResult::Failed，SDK 回调不能让业务异常穿透事件线程。
 - MQ SDKs are private imported targets in `cpp/cmake/mq.cmake`. Debian/Ubuntu automatic system preparation or explicit `M1104_INSTALL_MQ_DEPS=ON` installs distro `librdkafka-dev` first, then Pulsar repository packages when available or Apache 4.2.0 DEBs with official SHA512 checks. No extra apt source is required. Missing packages require root or noninteractive `sudo -n`; failures stop configuration. Unsupported hosts and cross builds provide SDK paths. Pulsar needs C++17+ and probes the linked SDK for `createProducerV2`; preserve the older API path. Document broker environment separately in `cpp/README.md`.
 - Ordinary CTest includes functional tests; benchmark registration/build participation is opt-in via `M1104_REGISTER_BENCHMARK_TESTS=ON`. Keep `m1104_benchmarks` available to the existing `./dev bench-cpp` workflow when the option is off.
 - In C++ implementation files, prefer `M1104_LOG_*` over direct `std::cout` / `std::cerr` for diagnostics unless the file is specifically testing stream behavior or intentionally writing a user-facing CLI stream.
 - For C++ class implementations, qualify member field and helper-method access with `this->` when touching state such as `entries_` or `epoll_fd_`; constructor initializer lists and out-of-class function definitions remain unqualified by necessity.
 - Preserve the file-local comment style. Chinese `用法` / `说明` comments are welcome when they explain non-obvious compatibility, ABI, concurrency, or algorithm decisions; avoid noisy comments.
+- C/C++ 格式以仓库根 `.clang-format` 为准：四空格、不使用 Tab，续行四空格，lambda 函数体相对签名缩进一级，不按函数参数列大幅右移。编辑器关闭缩进自动探测，C/C++ 输入缩进也固定为四空格。修改时只格式化本次涉及的文件，避免批量改动无关历史代码。
 - Public APIs need focused tests and, when useful, examples. If Redis++ or middleware behavior is touched, include the specialized devtool command or documented environment requirement.
 - Typical validation: `./dev build-cpp`, `./dev test-cpp`, `./dev coverage-cpp`, `./dev fmt-cpp`, `./dev vet-cpp`, `./dev guard-cpp`, `./dev test-redispp`, `./dev install-cpp`, `./dev verify-install`. For shared C++ changes, locally exercise at least the oldest and newest relevant standards when feasible, for example `CXX_STD=11 ./dev build-cpp --config Debug` and `CXX_STD=23 ./dev build-cpp --config Debug`; rely on the post-merge/manual full CI for the complete OS/compiler/standard matrix.
 

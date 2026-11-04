@@ -8,8 +8,6 @@
 - `src/debug/stacktrace_common.c`
 - `src/debug/stacktrace_posix.c`（Linux/macOS）
 - `src/debug/stacktrace_windows.c`（Windows）
-- `examples/debug/stacktrace/crash_c.c`
-- `examples/debug/stacktrace/crash_cpp.cpp`
 
 ## 构建
 
@@ -20,7 +18,6 @@ cmake --build cpp/build
 
 构建目标：
 - `stacktrace`（静态库）
-- `crash_c` / `crash_cpp`（示例程序）
 
 ## 快速使用
 
@@ -139,6 +136,4 @@ static const st_formatter_t k_my_formatter = {
 
 当 `format_kind=ST_FORMAT_PYTHON`：输出类似 Python 的堆栈格式，便于阅读。
 
-## 示例说明
-
-示例位于：`cpp/examples/debug/stacktrace/README.md`，包含 C 与 C++ 的堆栈差异演示。
+本仓库不再维护独立的 C/C++ 崩溃示例程序。

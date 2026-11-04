@@ -13,5 +13,61 @@
   "git.detectSubmodulesLimit": 0,
   "java.compile.nullAnalysis.mode": "automatic",
   "java.configuration.updateBuildConfiguration": "interactive",
-  "cmake.sourceDirectory": "/volume2/workflow/common/cpp"
+  "cmake.sourceDirectory": "/volume2/workflow/common/cpp",
+  "cmake.buildDirectory": "${workspaceFolder}/cpp/build",
+  "cmake.configureOnOpen": true,
+  "cmake.configureOnEdit": true,
+  "cmake.automaticReconfigure": true,
+  "[cpp]": {
+    "editor.tabSize": 4,
+    "editor.insertSpaces": true,
+    "editor.detectIndentation": false
+  },
+  "[c]": {
+    "editor.tabSize": 4,
+    "editor.insertSpaces": true,
+    "editor.detectIndentation": false
+  },
+  "cmake.configureSettings": {
+    "M1104_ENABLE_WEB": true
+  },
+  "todo-tree.general.tags": [
+    "TODO",
+    "FIXME",
+    "BUG",
+    "HACK",
+    "XXX",
+    "<<<<<<<",
+    ">>>>>>>"
+  ],
+  "todo-tree.filtering.useBuiltInExcludes": "none",
+  "todo-tree.filtering.excludeGlobs": [
+    "**/.git/**",
+    "**/.vscode/**",
+    "**/cpp/lib/**",
+    "**/cpp/thirdparty/**",
+    "**/artifacts/**",
+    "**/cpp/build*/**",
+    "**/python/build/**",
+    "**/python/dist/**",
+    "**/export/*/build/**",
+    "**/export/python/dist/**",
+    "**/.venv/**",
+    "**/node_modules/**",
+    "**/*.egg-info/**",
+    "**/target/**",
+    "**/dotnet/**/bin/**",
+    "**/dotnet/**/obj/**",
+    "**/__pycache__/**",
+    "**/.cache/**",
+    "**/.pytest_cache/**",
+    "**/.mypy_cache/**",
+    "**/.ruff_cache/**",
+    "**/devops/prompt/**",
+    "**/devops/INSTALLROOT/root/extensions.json",
+    "**/*.md",
+    "**/requirements.txt",
+    "**/boost_required_submodules.txt",
+    "**/boost_sparse_checkout.txt"
+  ]
 }

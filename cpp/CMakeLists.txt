@@ -14,3 +14,9 @@ include(cmake/stacktrace.cmake)
 include(cmake/testing.cmake)
 include(cmake/benchmarks.cmake)
 include(cmake/coverage.cmake)
+
+# Web 目标在现有构建目录组织，主库默认保留原有依赖与兼容范围。
+option(M1104_ENABLE_WEB "Build the independent C++17 web module" OFF)
+if(M1104_ENABLE_WEB)
+  include(cmake/web.cmake)
+endif()

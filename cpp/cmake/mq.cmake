@@ -1,6 +1,5 @@
 option(M1104_ENABLE_KAFKA "Enable librdkafka-backed message queue adapter when available" ON)
 option(M1104_ENABLE_PULSAR "Enable pulsar-client-cpp-backed adapter when available" ON)
-option(M1104_BUILD_MQ_EXAMPLES "Build the no-broker MQ Bridge example" ON)
 option(M1104_INSTALL_MQ_DEPS "Explicitly prepare enabled MQ SDKs with apt on Debian/Ubuntu" OFF)
 
 set(_m1104_prepare_mq FALSE)
@@ -67,10 +66,4 @@ int main() { pulsar::Client client(\"pulsar://127.0.0.1:6650\");
       message(STATUS "Pulsar MQ backend disabled: pulsar-client-cpp headers/library not found")
     endif()
   endif()
-endif()
-
-if(M1104_BUILD_MQ_EXAMPLES)
-  add_executable(m1104_mq_bridge_demo "${PROJECT_SOURCE_DIR}/examples/mq_bridge_demo.cpp")
-  target_link_libraries(m1104_mq_bridge_demo PRIVATE mental1104)
-  target_include_directories(m1104_mq_bridge_demo PRIVATE "${PROJECT_SOURCE_DIR}/include")
 endif()

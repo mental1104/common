@@ -4,6 +4,8 @@ file(GLOB_RECURSE M1104_CORE_SOURCES CONFIGURE_DEPENDS
   "${PROJECT_SOURCE_DIR}/src/*.cpp"
   "${PROJECT_SOURCE_DIR}/src/*.c"
 )
+# Web 模块独立链接，不能经递归 glob 混入原有主库或抬高其语言标准。
+list(FILTER M1104_CORE_SOURCES EXCLUDE REGEX "/src/web/")
 
 # 实现迁入共享库后仍按能力检查依赖，避免原来的可选头文件变成基础库的硬依赖。
 option(M1104_ENABLE_JSON "Build the JSON runtime when dependencies are available" ON)

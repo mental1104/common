@@ -46,6 +46,224 @@ Debian/Ubuntu 本机独立构建默认用 apt 补齐 Git、Python 3、pkg-config
 
 独立 `export/cpp` 构建复用 `cpp/src/json.cpp`，不要求为了 JSON 导出链接整个主库。普通测试之外，`test_linkage` 使用两个翻译单元验证独立调用方、模板包装与已编译核心的组合。消费端对象始终按库配置的标准编译；若新版 GoogleTest 把驱动提升至 C++17，C++11/14 配置的 JSON 契约通过这个独立消费端验证，避免驱动以不同的 variant/string_view 布局直接调用旧标准库。高精度实现也会按实际标准试编译，当前 Boost 不支持该标准时仅排除该能力。
 
+## 独立 HTTP / WebSocket 服务端
+
+此模块使用 C++17+，与原有 `mental1104`、`EpollServer`、cJSON/RapidJSON 能力独立。
+公共声明位于 `include/mental1104/web/`，运行时实现位于 `src/web/`。
+应用处理代码只包含 `mental1104/web/server.h`；装配代码通过
+`mental1104/web/drogon_server.h` 的工厂选择后端。更换框架时实现同一 `Server` /
+`WebSocketSession` 契约，复用应用路由与处理函数，仅替换装配处的工厂和链接目标。
+
+### 构建、依赖与安装
+
+先提供 Drogon 1.8+ 的开发包及其 CMake 配置。Ubuntu 24.04 的发行版包可用以下命令准备，
+发行版 Drogon CMake 包还会查找构建它时启用的可选 SDK：
+
+```sh
+sudo apt-get update
+sudo apt-get install -y libdrogon-dev libjsoncpp-dev libyaml-cpp-dev libbrotli-dev \
+  libsqlite3-dev libmariadb-dev libpq-dev uuid-dev zlib1g-dev libhiredis-dev
+cmake -S cpp -B build-web -DCMAKE_BUILD_TYPE=Debug -DM1104_ENABLE_WEB=ON
+cmake --build build-web --parallel 4
+ctest --test-dir build-web -R '^(test_web_lifecycle|web\.)' --output-on-failure
+cmake --install build-web --component Web --prefix /tmp/common-web-install
+```
+
+**命令结果：** 生成 `mental1104_web`、`mental1104_web_drogon` 及两个测试程序；
+CTest 成功时退出码为 `0`。构建定义集中在 `cmake/web.cmake`，复用原有依赖准备流程。
+安装目录含公共头、共享库与 `mental1104WebConfig.cmake`。
+`--component Web` 只安装 Web 模块，不执行原有主库和第三方 SDK 的安装规则。
+
+Ubuntu 24.04 的 Trantor 发行版二进制未启用 TLS，以上 apt 命令可验证 HTTP/WebSocket；
+HTTPS 需要链接启用 OpenSSL 的 SDK，否则启动明确报错。当前 code-server 镜像已从固定的
+发行版源码构建 TLS 版本到 `/usr/local`，不需要在容器内临时安装或重编译。
+网络场景测试额外需要 Boost 1.70+、OpenSSL 开发包及 `openssl` 命令；
+这些测试依赖已包含在 code-server 镜像中，不进入公共 Web 库的依赖。
+配置时生成构建目录内的临时证书，并单独执行 HTTPS 测试。
+没有 TLS 的 SDK 会跳过该用例；code-server 镜像构建另外强制检查 TLS 能力。
+
+已有 `./dev` / 主库构建也可配置 `-DM1104_ENABLE_WEB=ON` 后构建；该开关默认关闭，
+因此 C++11/14 和未安装 Drogon 的原有构建不受影响。Web 模块配置选项如下：
+
+| 选项 | 默认值 | 用途 |
+|---|---|---|
+| `M1104_WEB_WITH_DROGON` | `ON` | 构建 Drogon 后端；关闭时只构建公共 API 运行时，不查找 Drogon |
+| `M1104_WEB_BUILD_TESTS` | `ON` | 构建公共 API 测试及真实 HTTP/WebSocket 契约测试 |
+
+编辑 Web 后端时，开发构建须启用 `M1104_ENABLE_WEB=ON`，使
+`cpp/build/compile_commands.json` 包含后端的真实编译参数。仓库 `.clangd` 指向该目录，
+VS Code CMake 配置默认启用 Web 目标；此编辑器选项不改变命令行 CMake 开关的默认值。
+编辑器构建目录显式固定为 `cpp/build`，打开工程及保存 CMake 文件时自动配置，
+避免自动配置写入另一份数据库。新增源文件、切换功能开关或 SDK 后应确认配置成功；
+编译参数变化后若已打开文件仍保留旧诊断，执行 `clangd: Restart language server`。
+若编辑器报 `json/json.h` 缺失，随后出现 `registerHandlerViaRegex` 参数变成 `const int&`
+或 `<recovery-expr>`，先重新配置 CMake 并检查编译数据库，不要手工向公共头添加 SDK 依赖。
+
+安装消费使用 `find_package(mental1104Web CONFIG REQUIRED)`，应用接口代码链接
+`mental1104::web`；选择 Drogon 的最终程序链接 `mental1104::web_drogon`，其公开依赖
+自动包含前者。Drogon/Trantor 是后端共享库的私有依赖，消费工程不需要包含 SDK 头、
+查找 Drogon CMake 包或定义其编译宏，但运行机器仍须提供对应 SDK 动态库。
+库与调用者仍需使用匹配的编译器 ABI 和标准库配置，不承诺跨 ABI 二进制兼容。
+
+### 公共 API 与最小用法
+
+以下名称均位于 `mental1104::web`，状态为 **待复核**；这是第一版契约。
+
+| 类别 | 名称 | 类型 | 定义位置 / 包含 | 用途 |
+|---|---|---|---|---|
+| HTTP | `Method`, `Status`, `Header` | 枚举 / 结构体 | `mental1104/web/server.h` | 请求方法、响应状态与头字段 |
+| HTTP | `Request`, `Request::header` | 结构体 / 方法 | `mental1104/web/server.h` | 拥有请求快照；大小写无关查询头，返回 `optional<string>` |
+| HTTP | `Response`, `FileBody` | 结构体 | `mental1104/web/server.h` | 互斥的内存响应或文件响应 |
+| HTTP | `Respond`, `HttpHandler` | 回调类型 | `mental1104/web/server.h` | 异步处理及至多一次响应提交 |
+| WebSocket | `MessageType`, `Message`, `SendResult` | 枚举 / 结构体 | `mental1104/web/server.h` | 文本/二进制消息及本地发送结果 |
+| WebSocket | `WebSocketSession::send/close` | 虚接口方法 | `mental1104/web/server.h` | 跨线程发送及幂等关闭 |
+| WebSocket | `WebSocketHandler` | 回调结构体 | `mental1104/web/server.h` | 握手前鉴权、建连、完整消息和断连通知 |
+| 服务配置 | `TlsOptions`, `Listener`, `ServerOptions`, `Endpoint` | 结构体 | `mental1104/web/server.h` | TLS、监听地址、资源限制与实际绑定地址 |
+| 服务生命周期 | `Server::add_route/add_websocket/start/request_stop/wait` | 非虚公共方法 | `mental1104/web/server.h` | 固定注册校验、配置冻结、启动、停止幂等与线程回收流程 |
+| 后端装配 | `make_drogon_server` | 工厂函数 | `mental1104/web/drogon_server.h` | 返回 bool，成功时通过输出参数交付 `unique_ptr<Server>` |
+
+HTTP、文件下载和 WebSocket 的调用见 `test/web/server_scenarios.cc`。
+本仓库不再维护 C++ examples 目录。
+
+其余能力的调用与可观察结果：
+
+工厂、路由注册、`start(endpoint)` 和 `wait()` 的外层以 bool 报告结果，
+内部异常捕获后返回 false，调用方无需为这些入口编写 try/catch。
+路由参数通过只读引用传入，在函数内部复制并捕获复制失败。
+工厂输出参数必须为空；创建或启动失败均保持输出参数原值。
+`request_stop()` 返回 bool，重复停止同样成功；会话 `close()` 为不抛异常的幂等操作；
+`Respond` 提交失败返回 false，WebSocket 发送继续保留细分的 `SendResult`。
+
+配置阶段使用哈希索引检查重复：HTTP 以 `(method, path)` 为键，WebSocket 以路径为键，
+两者独立。完整路由仍按注册顺序保存在列表中；列表保存失败时撤销索引插入，允许重试。
+索引在启动冻结配置或启动前取消时释放，不长期占用运行阶段的路径副本与哈希桶。
+
+```cpp
+// 装配入口检查返回值，失败时交由应用决定退出、记录或降级。
+std::unique_ptr<mental1104::web::Server> server;
+if (!mental1104::web::make_drogon_server(options, server)) return 1;
+if (!server->add_route(mental1104::web::Method::Get, "/health", handler)) return 1;
+mental1104::web::Endpoint endpoint{};
+if (!server->start(endpoint)) return 1;
+server->request_stop();
+if (!server->wait()) return 1;
+```
+
+**示例结果：** 已定义 `options` 和 `handler` 的应用入口中，成功时取得非零监听端口并回收线程；
+失败时返回退出码 1，无须捕获框架内部异常，无标准输出。
+
+| 场景 | 最小用法 | 结果 |
+|---|---|---|
+| 请求读取 | `request.header("Content-Type")` | 存在时返回独立字符串；缺失时为空；字段值为空时仍有值 |
+| 原始响应 | 设置 `response.body` 为字符串后调用 `respond(std::move(response))` | 首次提交返回 `true`；同一请求后续提交返回 `false` |
+| 文件下载 | 设置 `response.body = FileBody{path, "report.bin"}` | 成功时发送文件，设置附件名；不存在返回 404 |
+| WebSocket | `handler.message` 中调用 `session->send(message)` | 返回 `Accepted`、`Closed`、`TooLarge` 或 SDK 异常对应的 `Failed`，不抛异常 |
+| 关闭连接 | `session->close()` | 发起正常关闭；重复调用无副作用，无标准输出 |
+| 握手鉴权 | `handler.handshake` 返回空或一个 `Response` | 空表示允许升级；返回响应时拒绝升级并发送其 HTTP 状态 |
+| 临时端口 | 默认 `ServerOptions` 后调用 `start(endpoint)` | 成功返回 true，endpoint 为 `127.0.0.1` 和非零端口 |
+| HTTPS | 为 `Listener::tls` 提供 `TlsOptions{certificate, private_key}` | 该监听器使用 TLS；证书/私钥由应用配置 |
+| 停止 | 管理线程调用 `request_stop()`，随后 `wait()` | 不再接受异步提交，回收后台线程；无标准输出 |
+
+一个 `Server` 只管理一个监听器：通过 `ServerOptions::listener` 配置地址与端口，
+`start(endpoint)` 成功时写入单个 `Endpoint`，后端 `do_listen()` 返回该地址。默认监听本机 HTTP 的临时端口；
+HTTP 路由和 WebSocket 路由共用该监听器。若启用已有 TLS 选项，则该监听器使用 HTTPS。
+这里不预留监听器集合；后续存在明确的多监听需求时再调整契约。
+
+### 实现其他 Web 后端
+
+`Server` 采用模板方法（NVI），不使用 C++ 类模板。应用继续调用非虚公共方法；
+后端继承 `Server`，构造时传入 `ServerOptions`，只重写以下受保护钩子：
+
+| 扩展点 | 后端职责 | 基类保证 |
+|---|---|---|
+| `do_configure(const Configuration&)` | 应用 SDK 配置，注册路由与监听参数，不启动监听 | 配置冻结，配置失败后仍执行清理 |
+| `do_listen()` | 启动监听，等实际就绪后返回监听地址 | 基类统一发布就绪并结束 `start()` 等待，后端不接收启动回调 |
+| `do_run_event_loop()` | 驱动或等待后端事件循环退出 | 基类固定在监听成功和就绪发布后进入该阶段 |
+| `do_cleanup() noexcept` | 清理部分初始化资源，停止并回收全部后端线程和回调 | 配置、监听或运行任一阶段失败均执行一次，启动错误在清理后报告 |
+| `do_request_stop() noexcept` | 唤醒并停止 SDK，允许与运行结束竞争 | 启动成功后至多提交一次；启动期间取消由清理阶段回收资源 |
+| `do_is_io_thread() const noexcept` | 判断当前是否为后端 I/O 回调线程 | `wait` 拒绝 I/O 线程和管理线程的自等待 |
+| `shutdown()` | 派生类析构函数中调用，须在成员销毁前执行 | 公共停止与等待，析构不传播已经记录的运行异常 |
+
+`Configuration`、`HttpRoute`、`WebSocketRoute` 是受保护的后端契约类型。
+公共协议规则位于 `server.h` / `server.cpp` 的 `detail` 辅助接口：
+响应头校验与名称规范化、最终状态范围校验、下载名称校验、文件大小查询，
+以及单段 Range 请求筛选和字节范围解析。各后端复用这些规则，
+负责 SDK 类型转换、响应构造及回调适配，并在提交边界捕获内部辅助函数的异常。
+字面路径转正则用于适配 Drogon 的路由注册，保留在 Drogon 实现中。
+
+启动完成前收到 `request_stop()` 时，基类跳过事件循环阶段，先清理再让
+`start(endpoint)` 返回 false，`wait()` 回收线程后也返回 false，不向调用方传播异常。
+取消检查与启动成功提交共用状态锁；成功提交后收到的停止请求按运行期停止处理，
+因此成功返回的监听地址不保证服务在调用方使用时仍在运行。
+配置和路由由基类拥有，后端在整个服务运行期间可只读借用。
+`Server::run()` 固定执行“配置 → 监听 → 发布就绪 → 运行事件循环 → 清理”，
+成功与异常路径都由基类控制，不再把整段流程交给一个后端 `do_run`。
+公共状态锁不会跨后端虚调用持有，停止钩子可重入 `request_stop()` 而不会重复提交。
+后端的清理钩子必须在返回前停止其工作线程及回调，不能继续访问派生类成员。
+基类析构不调用虚钩子，因此新后端必须在派生类析构中调用 `shutdown()`；
+从服务回调中析构或遗漏线程回收属于契约违例，将终止进程。
+
+无需 SDK 的参考后端与可观察结果见 `test/web/lifecycle_scenarios.cc`：执行重复路由拒绝、
+启动前/启动中取消、阶段顺序、各阶段失败清理、异常传播、自等待保护及析构回收测试。
+
+Drogon 的 `app.run()` 同时启动监听和运行事件循环。适配器在监听阶段启动私有 SDK 线程，
+`BeginningAdvice` 只确认绑定完成，实际 `listen` 尚未执行；适配器还会通过 SDK
+建立一次不发送业务数据的本地 TCP 连接，确认端口可连接后才返回地址。
+探测最多等待五秒，超时启动返回 false；事件循环阶段等待 SDK 线程退出。
+因此该后端有一条基类管理线程、一条 SDK 主循环线程，以及配置数量的网络 I/O 线程。
+这项 SDK 差异封装在适配器内部，应用和公共基类均不依赖 Drogon 的启动回调。
+Linux 上多个 I/O 线程的内部监听记录必须指向同一公共地址；使用临时端口时，
+适配器先保留共享绑定，待所有 SDK 监听器绑定同一端口后释放，避免各线程取得不同端口。
+
+### 复用后端场景测试
+
+`test/web/server_scenarios.cc` 只使用公共 Server 接口，HTTP/HTTPS/WebSocket 请求由
+`wire_client.cc` 中独立的 Beast 客户端发送。场景覆盖路由、HEAD、文件和 Range、
+错误隔离、延迟响应、请求大小限制、WebSocket 鉴权/消息/断连以及 TLS。
+默认使用两个 I/O 线程和临时端口，网络操作有三秒截止时间。
+
+接入新的后端只需新增一个接入文件，按 `test/web/backend.h` 定义 `web_test::backend()`，
+提供后端名称、返回 bool 的 Server 工厂及 TLS 能力，再在构建中调用
+`m1104_add_web_backend_scenarios(测试目标 后端库目标 接入文件绝对路径)`。
+参考 `drogon_backend.cc`；SDK 专属限制的测试放在该接入文件，不放进公共场景。
+公共场景编译为可复用 OBJECT 目标，新的测试程序直接链接同一组场景，无需复制测试源码。
+
+通过 CTest 执行上述筛选命令。每个网络场景运行于独立进程，允许并行执行，
+不要求后端支持进程内重启。当前共 19 个 CTest 项，其中生命周期项包含多项故障注入测试；
+Linux 后端专属场景会人为阻塞监听线程，验证 start 不会提前返回成功。
+无 TLS 的后端显式跳过 HTTPS 场景。关闭 `M1104_WEB_WITH_DROGON` 后仍可运行生命周期测试。
+不要直接运行整个 Drogon 测试程序来批量执行场景，因为 Drogon 每进程只能启动一次。
+
+### 行为边界
+
+- HTTP 按方法和字面路径匹配，区分大小写；Get 默认提供 HEAD，复用 Get 回调并省略响应体。
+  HEAD 以 Get 方法交付回调，暂不支持独立 Head handler，注册 Head 返回 false。
+  GET/HEAD 应保持只读业务语义；需要改变业务状态的操作应使用 POST 等合适方法。
+  未注册方法不会进入其他方法的 handler，当前未统一后端返回 404 或 405 的策略。
+  不提供框架专属路径模板，
+  动态资源标识可暂由 query/body 承载。未显式注册的静态文件不自动对外提供。
+- 请求体和原始 query 拷贝进 `Request`，可转移给应用执行器；本模块不绑定 JSON 库，
+  不解析 multipart，也不替代 schema 解码或业务校验。请求体上限默认 16 MiB，超限由后端拒绝。
+- HTTP/WebSocket 回调在 I/O 线程执行，不允许直接做阻塞 HTTP 调用、长时间磁盘扫描或重计算。
+  可在回调内调用 `request_stop()`，不得调用 `wait()` 或销毁服务。管理线程负责 start/wait/销毁。
+- `Respond` 可复制保存并从其他线程提交；首次响应生效，停止后提交返回 `false`。
+  handler 抛异常或所有未提交句柄释放时发送空体 500；保留未完成句柄的责任由应用承担，
+  模块不提供每请求的业务截止时间。返回 `true` 不保证对端收到，也不代表传输完成。
+- SDK 内部上传缓存使用服务独占的系统临时目录，停止后清理，不在调用方工作目录创建 uploads。
+- 响应状态允许 200..599，头字段名称要求唯一，禁止控制字符及手写消息定界/连接字段；
+  非法响应转换成 500。第一版不提供多个 `Set-Cookie` 字段的建模。
+- 文件支持 GET 单段 `Range`（闭区间、开放结尾、后缀）、206/416 与 GET 默认提供的 HEAD。
+  多段 Range、其他范围单位及带 If-Range 的请求返回完整实体；尚无 ETag/条件请求机制。
+  应用负责路径权限和传输期间文件稳定性；后端发送失败不能承诺已经开始响应后的状态改写。
+- WebSocket 只交付完整文本/二进制消息；控制帧由后端处理。默认单条消息上限 1 MiB。
+  会话句柄通过弱引用访问后端连接，关闭后保留句柄不会继续持有连接。
+  `Accepted` 只表示提交给 SDK；第一版不提供发送背压或对端消费确认，高频推送由应用限速。
+  已验证服务端主动关闭与客户端 TCP 断连通知；Drogon 1.8.7 对客户端发起的关闭握手
+  会直接关闭传输，Beast 报 EOF，当前不承诺该方向的完整关闭帧握手。
+- `request_stop()` 为非排空停止：不等待在途 HTTP 或 WebSocket 消息完成，也不承诺逐连接断开通知。
+  析构自动请求停止并等待。Drogon 为进程单例，每进程仅能启动一次，不支持多实例或重启，
+  不可与其他直接配置 `drogon::app()` 的代码混用；绑定失败等 SDK 致命错误仍遵循 Drogon 行为。
+
 ## MQ SDK 依赖准备
 
 Kafka 与 Pulsar 通过真实 SDK 实现：CMake 分别建立 `M1104::KafkaSDK`、`M1104::PulsarSDK` 导入目标，并作为 `mental1104` 的私有链接依赖。公共 MQ 类型不要求调用方包含 SDK 头文件。
