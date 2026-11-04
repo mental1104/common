@@ -12,6 +12,7 @@
 #include <set>
 #include <stdexcept>
 #include <thread>
+#include <unordered_map>
 #include <unordered_set>
 
 namespace mental1104 {
@@ -35,6 +36,333 @@ std::optional<std::size_t> byte_position(const std::string &text) {
         return std::nullopt;
     }
     return result;
+}
+/// 比较 HTTP token，不依赖 locale。
+/// @param left 第一个只读 token。
+/// @param right 第二个只读 token。
+/// @return 忽略 ASCII 大小写后相等为 true。
+bool token_equal(const std::string &left, const std::string &right) {
+    return left.size() == right.size() &&
+           std::equal(left.begin(), left.end(), right.begin(),
+               [](char a, char b) { return ascii_lower(a) == ascii_lower(b); });
+}
+
+/// 校验白名单中的具体头名称，拒绝空名称、通配符和分隔符。
+/// @param name 只读字段名称。
+/// @return 合法具体 HTTP token 为 true。
+bool cors_header_name(const std::string &name) {
+    return !name.empty() && name != "*" &&
+           std::all_of(name.begin(), name.end(), [](unsigned char c) {
+               return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+                      (c >= '0' && c <= '9') ||
+                      std::string("!#$%&'*+-.^_`|~").find(c) !=
+                          std::string::npos;
+           });
+}
+
+/// 将策略方法转换成协议 token，非法枚举拒绝构造。
+/// @param method 只读方法值。
+/// @return 大写方法名称；非法值抛 invalid_argument，由工厂捕获。
+std::string cors_method(Method method) {
+    switch (method) {
+        case Method::Get:
+            return "GET";
+        case Method::Head:
+            return "HEAD";
+        case Method::Post:
+            return "POST";
+        case Method::Put:
+            return "PUT";
+        case Method::Delete:
+            return "DELETE";
+        case Method::Patch:
+            return "PATCH";
+        case Method::Options:
+            return "OPTIONS";
+    }
+    throw std::invalid_argument("invalid CORS method");
+}
+
+/// 构造时验证静态策略，防止非法配置到请求阶段才暴露。
+/// @param policy 只读白名单；来源由调用方提供标准序列化形式。
+/// @return 字段可安全写入 HTTP 头时返回 true；非法方法可能抛异常。
+bool valid_cors_policy(const CorsPolicy &policy) {
+    if (policy.origins.empty() || policy.methods.empty() ||
+        policy.max_age.count() < 0)
+        return false;
+    for (const auto &origin : policy.origins) {
+        if (origin.empty() || origin == "*" ||
+            !std::all_of(origin.begin(), origin.end(),
+                [](unsigned char c) { return c > 32 && c < 127 && c != ','; }))
+            return false;
+    }
+    for (const auto method : policy.methods) cors_method(method);
+    return std::all_of(policy.request_headers.begin(),
+               policy.request_headers.end(), cors_header_name) &&
+           std::all_of(policy.exposed_headers.begin(),
+               policy.exposed_headers.end(), cors_header_name);
+}
+
+/// 检查大小写敏感的来源或方法 token。
+/// @param values 白名单，不修改。
+/// @param value 待匹配值。
+/// @return 白名单包含该值时为 true。
+bool contains_exact(
+    const std::vector<std::string> &values, const std::string &value) {
+    return std::find(values.begin(), values.end(), value) != values.end();
+}
+
+/// 展开 GET 隐含的 HEAD，并去掉重复方法。
+/// @param policy 已校验的策略。
+/// @return 独立的大写方法列表。
+std::vector<std::string> cors_methods(const CorsPolicy &policy) {
+    std::vector<std::string> result;
+    for (const auto method : policy.methods) {
+        const auto name = cors_method(method);
+        if (!contains_exact(result, name)) result.push_back(name);
+        if (method == Method::Get && !contains_exact(result, "HEAD"))
+            result.push_back("HEAD");
+    }
+    return result;
+}
+
+/// 拆分逗号列表，仅去除 HTTP 可选空白，保留空项供调用方拒绝。
+/// @param value 只读字段值。
+/// @return 各 token 的独立副本。
+std::vector<std::string> cors_tokens(const std::string &value) {
+    std::vector<std::string> result;
+    std::size_t begin = 0;
+    do {
+        const auto end = value.find(',', begin);
+        const auto part =
+            value.substr(begin, end == std::string::npos ? end : end - begin);
+        const auto first = part.find_first_not_of(" \t");
+        result.push_back(
+            first == std::string::npos
+                ? ""
+                : part.substr(first, part.find_last_not_of(" \t") - first + 1));
+        if (end == std::string::npos) break;
+        begin = end + 1;
+    } while (true);
+    return result;
+}
+
+/// 合并头字段列表。
+/// @param values 已校验的 token 列表。
+/// @return 逗号分隔值，空列表返回空字符串。
+std::string cors_join(const std::vector<std::string> &values) {
+    std::string result;
+    for (const auto &value : values) {
+        if (!result.empty()) result += ", ";
+        result += value;
+    }
+    return result;
+}
+
+/// 合并缓存变体，保留业务 Vary，星号已经包含全部变化维度。
+/// @param response 要修改的独立响应。
+/// @param preflight 是否追加预检的方法和请求头维度。
+void cors_vary(Response &response, bool preflight) {
+    std::vector<std::string> values;
+    auto &headers = response.headers;
+    for (const auto &header : headers) {
+        if (!token_equal(header.name, "vary")) continue;
+        for (const auto &token : cors_tokens(header.value)) {
+            if (!token.empty() && std::none_of(values.begin(), values.end(),
+                                      [&token](const std::string &value) {
+                                          return token_equal(value, token);
+                                      }))
+                values.push_back(token);
+        }
+    }
+    headers.erase(std::remove_if(headers.begin(), headers.end(),
+                      [](const Header &header) {
+                          return token_equal(header.name, "vary");
+                      }),
+        headers.end());
+    const std::vector<std::string> required =
+        preflight ? std::vector<std::string>{"Origin",
+                        "Access-Control-Request-Method",
+                        "Access-Control-Request-Headers"}
+                  : std::vector<std::string>{"Origin"};
+    for (const auto &name : required) {
+        if (!contains_exact(values, "*") &&
+            std::none_of(values.begin(), values.end(),
+                [&name](const std::string &value) {
+                    return token_equal(value, name);
+                }))
+            values.push_back(name);
+    }
+    headers.push_back({"Vary", cors_join(values)});
+}
+
+/// 策略独占 CORS 字段，避免业务重复头或越过白名单；无 Origin 也设置 Vary。
+/// @param response 接管待装饰响应。
+/// @param policy 已校验的只读策略。
+/// @param origin 获准的来源，空字符串表示不授予跨域读取许可。
+/// @return 带策略头的独立响应。
+Response cors_response(
+    Response response, const CorsPolicy &policy, const std::string &origin) {
+    auto &headers = response.headers;
+    headers.erase(std::remove_if(headers.begin(), headers.end(),
+                      [](const Header &header) {
+                          return header.name.size() >= 15 &&
+                                 token_equal(header.name.substr(0, 15),
+                                     "access-control-");
+                      }),
+        headers.end());
+    cors_vary(response, false);
+    if (origin.empty()) return response;
+    headers.push_back({"Access-Control-Allow-Origin", origin});
+    if (policy.allow_credentials)
+        headers.push_back({"Access-Control-Allow-Credentials", "true"});
+    if (!policy.exposed_headers.empty())
+        headers.push_back({"Access-Control-Expose-Headers",
+            cors_join(policy.exposed_headers)});
+    return response;
+}
+
+/// 检查预检申请的头名称，不把 Authorization 当成通配许可。
+/// @param request 当前预检快照。
+/// @param policy 已校验策略。
+/// @return 未申请额外头或每个头都在白名单中时为 true。
+bool cors_headers_allowed(const Request &request, const CorsPolicy &policy) {
+    const auto header = request.header("access-control-request-headers");
+    if (!header) return true;
+    for (const auto &name : cors_tokens(*header)) {
+        if (!cors_header_name(name) ||
+            std::none_of(policy.request_headers.begin(),
+                policy.request_headers.end(),
+                [&name](const std::string &allowed) {
+                    return token_equal(name, allowed);
+                }))
+            return false;
+    }
+    return true;
+}
+}  // namespace
+
+namespace {
+/// 从已验证策略生成预检函数，异常交由 with_cors 捕获。
+/// @param policy 要复制的白名单。
+/// @return 配套 OPTIONS handler；204 表示通过，400/403 表示拒绝。
+HttpHandler cors_preflight(const CorsPolicy &policy);
+}  // namespace
+
+CorsPolicy::CorsPolicy(std::vector<std::string> origins,
+    std::vector<Method> methods, std::vector<std::string> request_headers,
+    std::vector<std::string> exposed_headers, bool allow_credentials,
+    std::chrono::seconds max_age)
+    : origins(std::move(origins)),
+      methods(std::move(methods)),
+      request_headers(std::move(request_headers)),
+      exposed_headers(std::move(exposed_headers)),
+      allow_credentials(allow_credentials),
+      max_age(max_age) {}
+
+std::optional<CorsHandlers> with_cors(
+    const CorsPolicy &policy, const HttpHandler &handler) noexcept try {
+    if (!handler || !valid_cors_policy(policy)) return std::nullopt;
+    const auto methods = cors_methods(policy);
+    HttpHandler result = [policy, handler, methods](
+                             Request request, Respond respond) {
+        const auto origin = request.header("origin");
+        const bool allowed =
+            origin && contains_exact(policy.origins, *origin) &&
+            contains_exact(methods, cors_method(request.method));
+        // 按请求复制许可来源；跨线程响应不借用 Request，也不共享可变策略状态。
+        Respond decorated_respond = [policy, respond,
+                                        source = allowed ? *origin : ""](
+                                        Response response) noexcept {
+            try {
+                return respond(
+                    cors_response(std::move(response), policy, source));
+            } catch (...) {
+                return false;
+            }
+        };
+        if (origin && !allowed) {
+            Response denied;
+            denied.status = Status::Forbidden;
+            decorated_respond(std::move(denied));
+            return;
+        }
+        try {
+            handler(std::move(request), decorated_respond);
+        } catch (...) {
+            // 经过装饰器的同步业务异常也携带 CORS；SDK
+            // 自行产生的错误不经过此处。
+            Response failed;
+            failed.status = Status::InternalServerError;
+            decorated_respond(std::move(failed));
+        }
+    };
+    return CorsHandlers{std::move(result), cors_preflight(policy)};
+} catch (...) {
+    return std::nullopt;
+}
+
+namespace {
+HttpHandler cors_preflight(const CorsPolicy &policy) {
+    const auto methods = cors_methods(policy);
+    HttpHandler result = [policy, methods](Request request, Respond respond) {
+        const auto origin = request.header("origin");
+        const auto method = request.header("access-control-request-method");
+        Response response;
+        response.status = Status::BadRequest;
+        if (request.method == Method::Options && origin && method) {
+            response.status = Status::Forbidden;
+            if (contains_exact(policy.origins, *origin) &&
+                contains_exact(methods, *method) &&
+                cors_headers_allowed(request, policy)) {
+                response.status = Status::NoContent;
+                response = cors_response(std::move(response), policy, *origin);
+                response.headers.push_back(
+                    {"Access-Control-Allow-Methods", cors_join(methods)});
+                if (!policy.request_headers.empty())
+                    response.headers.push_back({"Access-Control-Allow-Headers",
+                        cors_join(policy.request_headers)});
+                response.headers.push_back({"Access-Control-Max-Age",
+                    std::to_string(policy.max_age.count())});
+            }
+        }
+        cors_vary(response, true);
+        respond(std::move(response));
+    };
+    return result;
+}
+
+/// 按集合语义比较策略列表，头名称忽略大小写，列表顺序和重复项不影响结果。
+/// @param values 只读来源、方法或头名称列表。
+/// @param ignore_case 是否按头字段规则折叠大小写。
+/// @return 独立的规范化集合。
+std::set<std::string> cors_set(
+    const std::vector<std::string> &values, bool ignore_case = false) {
+    std::set<std::string> result;
+    for (auto value : values) {
+        if (ignore_case)
+            std::transform(
+                value.begin(), value.end(), value.begin(), ascii_lower);
+        result.insert(std::move(value));
+    }
+    return result;
+}
+
+/// 同路径只能共享语义等价的预检策略，避免注册顺序改变跨域权限。
+/// @param left 已注册策略。
+/// @param right 待注册策略。
+/// @return 所有权限与缓存配置等价时为 true。
+bool same_cors_policy(const CorsPolicy &left, const CorsPolicy &right) {
+    const bool checks[] = {cors_set(left.origins) == cors_set(right.origins),
+        cors_set(cors_methods(left)) == cors_set(cors_methods(right)),
+        cors_set(left.request_headers, true) ==
+            cors_set(right.request_headers, true),
+        cors_set(left.exposed_headers, true) ==
+            cors_set(right.exposed_headers, true),
+        left.allow_credentials == right.allow_credentials,
+        left.max_age == right.max_age};
+    return std::all_of(
+        std::begin(checks), std::end(checks), [](bool value) { return value; });
 }
 }  // namespace
 
@@ -213,7 +541,47 @@ public:
     struct RouteIndexes {
         std::unordered_set<RouteKey, RouteKeyHash> http;
         std::unordered_set<std::string> websocket;
+        std::unordered_map<std::string, CorsPolicy> cors;
     };
+
+    /// 在已持有配置锁时原子提交业务路由与可选预检，异常回滚全部索引和列表。
+    /// @param pending 已独立构造的路由；首项为业务，次项为首次注册的预检。
+    /// @param policy 新路径策略；已有策略时传空，不重复写入。
+    /// @return 全部提交成功为 true；冲突或分配异常为 false。
+    bool commit_http(std::vector<HttpRoute> pending,
+        const std::optional<CorsPolicy> &policy) {
+        auto &indexes = *this->route_indexes;
+        auto &routes = this->configuration.http_routes;
+        std::vector<RouteKey> keys;
+        for (const auto &route : pending) {
+            keys.push_back({route.method, route.path});
+            if (indexes.http.count(keys.back())) return false;
+        }
+        const auto old_size = routes.size();
+        std::size_t inserted = 0;
+        bool policy_added = false;
+        try {
+            // 按几何容量增长，不为每条注册精确 reserve 而退化为反复复制。
+            if (routes.capacity() < old_size + pending.size())
+                routes.reserve(
+                    std::max(old_size + pending.size(), routes.capacity() * 2));
+            if (policy)
+                policy_added =
+                    indexes.cors.emplace(keys.front().path, *policy).second;
+            for (const auto &key : keys) {
+                indexes.http.insert(key);
+                ++inserted;
+            }
+            for (auto &route : pending) routes.push_back(std::move(route));
+            return true;
+        } catch (...) {
+            while (routes.size() > old_size) routes.pop_back();
+            for (std::size_t i = 0; i < inserted; ++i)
+                indexes.http.erase(keys[i]);
+            if (policy_added) indexes.cors.erase(keys.front().path);
+            return false;
+        }
+    }
     /// 公共生命周期；Starting 阶段收到停止请求时取消启动并统一清理。
     enum class State { Configuring, Starting, Running, Stopping, Stopped };
     /// 保存配置副本，随后由 Server 构造函数完成公共校验。
@@ -303,9 +671,11 @@ bool Server::is_configuring() const noexcept {
 /// @param method 支持的 HTTP 方法；Get 包含 HEAD，独立 Head 注册返回 false。
 /// @param path 复制字面路径，不允许查询、片段、换行或 NUL。
 /// @param handler 复制非空处理函数，持有到公共配置销毁。
+/// @param cors 可选白名单；与业务路由一起提交预检，失败不留下部分注册。
 /// @return 成功为 true；包括复制失败在内的内部异常全部转换为 false。
 bool Server::add_route(Method method, const std::string &path,
-    const HttpHandler &handler) noexcept try {
+    const HttpHandler &handler, const std::optional<CorsPolicy> &cors) noexcept
+    try {
     std::lock_guard<std::mutex> lock(this->impl_->mutex);
     if (!this->is_configuring()) return false;
     switch (method) {
@@ -325,18 +695,26 @@ bool Server::add_route(Method method, const std::string &path,
     if (!Server::is_valid_route_path(path) || !handler) {
         throw std::invalid_argument("invalid HTTP route");
     }
-    auto &index = this->impl_->route_indexes->http;
-    const auto inserted = index.insert(Impl::RouteKey{method, path});
-    if (!inserted.second) return false;
-    try {
-        this->impl_->configuration.http_routes.push_back(
-            {method, path, handler});
-    } catch (...) {
-        // 回调复制或 vector 扩容失败时撤销本次占位，允许相同路由随后重试。
-        index.erase(inserted.first);
+    if (!cors)
+        return this->impl_->commit_http(
+            {{method, path, handler}}, std::nullopt);
+    if (method == Method::Options ||
+        !contains_exact(cors_methods(*cors), cors_method(method)))
         return false;
+    const auto &policies = this->impl_->route_indexes->cors;
+    const auto existing = policies.find(path);
+    const bool first = existing == policies.end();
+    if (!first && !same_cors_policy(existing->second, *cors)) return false;
+    auto decorated = with_cors(*cors, handler);
+    if (!decorated) return false;
+    std::vector<HttpRoute> pending;
+    pending.push_back({method, path, std::move(decorated->request)});
+    if (first) {
+        pending.push_back(
+            {Method::Options, path, std::move(decorated->preflight)});
     }
-    return true;
+    return this->impl_->commit_http(
+        std::move(pending), first ? cors : std::nullopt);
 } catch (...) {
     return false;
 }

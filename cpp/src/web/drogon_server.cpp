@@ -13,6 +13,7 @@
 #include <mutex>
 #include <stdexcept>
 #include <thread>
+#include <unordered_map>
 #include <utility>
 
 #ifdef __linux__
@@ -605,9 +606,18 @@ public:
     ~DrogonServer() override { this->shutdown(); }
 
 protected:
-    /// 配置 SDK 选项、路由和监听参数；实际绑定留给监听阶段。
+    /// 先检查后端保留路由，再配置 SDK；实际绑定留给监听阶段。
     /// @param configuration 基类拥有的冻结配置，仅在运行期间借用。
+    /// OPTIONS /* 不受 SDK 路由拦截器控制，配置异常由公共 start 转为 false。
     void do_configure(const Configuration &configuration) override {
+        // Drogon 1.8 的 onAsyncRequest 在 pre-routing advice 前直接响应
+        // OPTIONS /*，显式 handler 和 CORS 预检均无法执行，因此拒绝启动。
+        // 在占用进程单例或修改 SDK 配置前检查，失败不影响其他实例启动；
+        // 普通 GET /* 仍是可用的字面路由，不在这里扩大限制。
+        for (const auto &route : configuration.http_routes) {
+            if (route.method == Method::Options && route.path == "/*")
+                throw std::invalid_argument("Drogon reserves OPTIONS /*");
+        }
         this->claim_runtime();
         this->configure_options(configuration.options);
         this->configure_listener(configuration.options.listener);
@@ -684,9 +694,12 @@ protected:
         this->stop_sdk();
     }
 
-    /// 查询 SDK I/O 线程标识，管理线程自身由基类判断。
+    /// 仅在 SDK 运行期间查询 I/O 线程标识，管理线程自身由基类判断。
     /// @return 当前为 SDK 网络线程时返回 true。
     bool do_is_io_thread() const noexcept override try {
+        // SDK 尚未启动时，getLoop 可能仍属于创建 app 的调用方线程。
+        // 此时没有 SDK 回调需要保护，不能阻止配置失败后的 wait 回收线程。
+        if (!this->runtime_->sdk_running.load()) return false;
         return drogon::app().getLoop()->isInLoopThread() ||
                drogon::app().getCurrentThreadIndex() !=
                    std::numeric_limits<std::size_t>::max();
@@ -796,7 +809,16 @@ private:
     /// @param routes 基类拥有的只读路由集合；SDK 回调保存所需字段的副本。
     void register_http_routes(const std::vector<HttpRoute> &routes) {
         auto &app = drogon::app();
+        auto options =
+            std::make_shared<std::unordered_map<std::string, HttpHandler>>();
         for (const auto &route : routes) {
+            // Drogon 1.8 将 Options 路由标记为自动 CORS，绕过用户 handler。
+            // 单独保存显式 OPTIONS，在路由前精确分派，策略仍由公共 handler
+            // 决定。
+            if (route.method == Method::Options) {
+                options->emplace(route.path, route.handler);
+                continue;
+            }
             const auto handler = route.handler;
             const auto runtime = this->runtime_;
             const auto path = route.path;
@@ -821,6 +843,23 @@ private:
                 },
                 {native_method(route.method)});
         }
+        if (options->empty()) return;
+        const auto runtime = this->runtime_;
+        app.registerPreRoutingAdvice(
+            [options, runtime](const drogon::HttpRequestPtr &request,
+                drogon::AdviceCallback &&callback,
+                drogon::AdviceChainCallback &&next) {
+                if (request->method() != drogon::Options) {
+                    next();
+                    return;
+                }
+                const auto found = options->find(request->path());
+                if (found == options->end()) {
+                    next();
+                    return;
+                }
+                dispatch(found->second, runtime, request, std::move(callback));
+            });
     }
 
     /// 共享路由快照给握手鉴权和消息控制器，再注册各 WebSocket 路径。

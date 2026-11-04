@@ -79,6 +79,48 @@ using Respond = std::function<bool(Response)>;
 /// HTTP 回调接管请求快照与提交句柄，在 I/O 线程执行；阻塞任务需转交应用执行器。
 using HttpHandler = std::function<void(Request, Respond)>;
 
+/// 单个路径的 CORS 白名单；同路径业务方法与 OPTIONS 应复用相同策略。
+/// origins 使用完整序列化来源（含协议及非默认端口），不支持通配符；
+/// 不替代鉴权。预检不调用业务，实际请求仍由业务鉴权。
+struct CorsPolicy {
+    /// 一次构造完整策略，字段含义见下方成员；不在构造时校验。
+    /// @param origins 精确来源白名单，不支持通配符。
+    /// @param methods 同路径允许的方法；Get 同时允许 HEAD。
+    /// @param request_headers 允许的额外请求头。
+    /// @param exposed_headers 暴露给浏览器的额外响应头。
+    /// @param allow_credentials 是否允许凭据。
+    /// @param max_age 预检缓存时间；负值在注册时拒绝。
+    explicit CorsPolicy(std::vector<std::string> origins,
+        std::vector<Method> methods = {Method::Get},
+        std::vector<std::string> request_headers = {},
+        std::vector<std::string> exposed_headers = {},
+        bool allow_credentials = false,
+        std::chrono::seconds max_age = std::chrono::seconds{600});
+    std::vector<std::string> origins;
+    std::vector<Method> methods{Method::Get};  ///< Get 同时允许 HEAD。
+    std::vector<std::string>
+        request_headers;  ///< 允许的非简单请求头，忽略大小写。
+    std::vector<std::string> exposed_headers;  ///< 浏览器可读取的额外响应头。
+    bool allow_credentials{false};             ///< 是否允许携带凭据。
+    std::chrono::seconds max_age{600};  ///< 浏览器预检缓存秒数，零表示不缓存。
+};
+
+/// 同一策略生成的业务与预检处理函数；普通接入由 add_route 自动使用。
+struct CorsHandlers {
+    HttpHandler request;
+    HttpHandler preflight;
+};
+
+/// 一次生成业务装饰器和配套预检；包装 Respond，支持异步提交和文件响应。
+/// @param policy 复制策略；来源必须精确匹配，空白名单或非法字段返回空。
+/// @param handler 复制非空业务处理函数；无 Origin 时照常执行，有 Origin 但
+/// 不获允许时返回 403。业务异常转为带许可头的 500，后端自行生成的错误不覆盖。
+/// @return 成功返回两个处理函数，非法输入或内部异常返回 nullopt。
+/// 策略拥有 CORS 响应头，
+/// 合并 Vary，覆盖业务写入的 Access-Control-* 字段。
+std::optional<CorsHandlers> with_cors(
+    const CorsPolicy &policy, const HttpHandler &handler) noexcept;
+
 /// WebSocket 应用消息类型；协议控制帧由后端管理。
 enum class MessageType { Text, Binary };
 
@@ -163,9 +205,13 @@ public:
     /// @param path 以 / 开头、不包含查询或片段的字面路径，区分大小写。
     /// @param handler 非空回调，复制后在服务生命周期内保存；HEAD 复用 Get
     /// 回调并以 Get 方法交付，后端负责省略响应体，不应依赖回调区分二者。
+    /// @param cors 可选跨域策略；提供后自动装饰业务并原子注册同路径 OPTIONS。
+    /// 同路径多个方法须使用等价策略；已有手工 OPTIONS 或策略冲突返回 false。
+    /// method 须在策略中，不能给 Options/Head 本身添加该参数。
     /// @return 注册成功为 true；非法、重复、配置冻结或内部异常为 false。
     bool add_route(Method method, const std::string &path,
-        const HttpHandler &handler) noexcept;
+        const HttpHandler &handler,
+        const std::optional<CorsPolicy> &cors = std::nullopt) noexcept;
 
     /// 注册 WebSocket 路由，握手与普通 HTTP 路由分开分派。
     /// @param path 与 HTTP 路由相同的字面路径约定，不可重复注册。

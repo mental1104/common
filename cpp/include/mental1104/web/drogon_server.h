@@ -12,6 +12,8 @@ namespace web {
 /// false，不向外抛异常。 Drogon 运行时为进程单例：每进程仅允许一个实例成功进入
 /// start，不支持重启， 不能与直接操作 drogon::app() 的代码混用；绑定失败等致命
 /// SDK 错误遵循 Drogon 行为。
+/// OPTIONS /* 是 SDK 保留请求；注册该路由或为 /* 启用 CORS 后，start 返回
+/// false，且不占用进程运行机会。普通 GET /* 不受此限制。
 bool make_drogon_server(
     const ServerOptions &options, std::unique_ptr<Server> &server) noexcept;
 

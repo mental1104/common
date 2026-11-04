@@ -452,5 +452,204 @@ TEST_F(ServerScenarios, HttpsUsesTheSamePublicRoutes) {
     EXPECT_EQ(200U, result.status);
     EXPECT_EQ("secure", result.body);
 }
+/// 指定路由的跨域许可覆盖文件/HEAD；未装饰路由保持原状。
+TEST_F(ServerScenarios, CorsIsScopedToRouteAndPreservesMetadata) {
+    const CorsPolicy policy({"https://front.example"}, {Method::Get}, {},
+        {"Content-Disposition", "ETag"}, true);
+    ASSERT_TRUE(server_->add_route(Method::Get, "/cors", download(), policy));
+    ASSERT_TRUE(server_->add_route(Method::Get, "/plain", download()));
+    start();
+    const std::vector<Header> headers{{"Origin", "https://front.example"}};
+    const auto file = ask("/cors", Method::Get, "", headers);
+    EXPECT_EQ("0123456789", file.body);
+    EXPECT_EQ(
+        "https://front.example", file.header("access-control-allow-origin"));
+    EXPECT_EQ("true", file.header("access-control-allow-credentials"));
+    EXPECT_EQ("Content-Disposition, ETag",
+        file.header("access-control-expose-headers"));
+    const auto head = ask("/cors", Method::Head, "", headers);
+    EXPECT_TRUE(head.body.empty());
+    EXPECT_EQ("10", head.header("content-length"));
+    EXPECT_EQ(file.header("access-control-allow-origin"),
+        head.header("access-control-allow-origin"));
+    EXPECT_TRUE(ask("/plain", Method::Get, "", headers)
+                    .header("access-control-allow-origin")
+                    .empty());
+    const auto local = ask("/cors");
+    EXPECT_EQ(200U, local.status);
+    EXPECT_TRUE(local.header("access-control-allow-origin").empty());
+    EXPECT_EQ("Origin", local.header("vary"));
+    const auto denied = ask(
+        "/cors", Method::Get, "", {{"Origin", "https://front.example.evil"}});
+    EXPECT_EQ(403U, denied.status);
+    EXPECT_TRUE(denied.header("access-control-allow-origin").empty());
+}
+
+/// OPTIONS 独立校验来源、方法和请求头，预检不会执行业务鉴权或处理函数。
+TEST_F(ServerScenarios, CorsPreflightChecksPolicyWithoutCallingBusiness) {
+    const CorsPolicy policy({"https://front.example"},
+        {Method::Get, Method::Post}, {"Authorization", "Content-Type"}, {},
+        false, 120s);
+    const auto called = std::make_shared<std::atomic<int>>(0);
+    ASSERT_TRUE(server_->add_route(
+        Method::Post, "/cors",
+        [called](Request, Respond respond) {
+            ++*called;
+            respond(Response{});
+        },
+        policy));
+    ASSERT_TRUE(server_->add_route(
+        Method::Get, "/cors",
+        [](Request, Respond respond) { respond(Response{}); }, policy));
+    start();
+    const auto check = [&](const std::string &origin, const std::string &method,
+                           const std::string &headers) {
+        return ask("/cors", Method::Options, "",
+            {{"Origin", origin}, {"Access-Control-Request-Method", method},
+                {"Access-Control-Request-Headers", headers}});
+    };
+    const auto accepted =
+        check("https://front.example", "POST", "authorization, CONTENT-TYPE");
+    EXPECT_EQ(204U, accepted.status);
+    EXPECT_TRUE(accepted.body.empty());
+    EXPECT_EQ(
+        "GET, HEAD, POST", accepted.header("access-control-allow-methods"));
+    EXPECT_EQ("120", accepted.header("access-control-max-age"));
+    EXPECT_EQ("Authorization, Content-Type",
+        accepted.header("access-control-allow-headers"));
+    EXPECT_EQ(
+        204U, check("https://front.example", "HEAD", "Authorization").status);
+    EXPECT_EQ(
+        403U, check("https://other.example", "POST", "Authorization").status);
+    EXPECT_EQ(
+        403U, check("https://front.example", "DELETE", "Authorization").status);
+    EXPECT_EQ(403U, check("https://front.example", "POST", "X-Secret").status);
+    EXPECT_EQ(400U, ask("/cors", Method::Options).status);
+    EXPECT_EQ(
+        403U, ask("/cors", Method::Post, "", {{"Origin", "null"}}).status);
+    EXPECT_EQ(0, called->load());
+    EXPECT_EQ(200U,
+        ask("/cors", Method::Post, "", {{"Origin", "https://front.example"}})
+            .status);
+    EXPECT_EQ(1, called->load());
+}
+
+/// 异步业务返回的错误也携带许可头，合并 Vary 且不能覆盖策略白名单。
+TEST_F(ServerScenarios, CorsDecoratesDeferredErrorsAndMergesVary) {
+    const CorsPolicy policy({"https://front.example"});
+    const auto pending = std::make_shared<std::promise<Respond>>();
+    auto work = pending->get_future();
+    ASSERT_TRUE(server_->add_route(
+        Method::Get, "/cors",
+        [pending](Request, Respond respond) {
+            pending->set_value(std::move(respond));
+        },
+        policy));
+    ASSERT_TRUE(server_->add_route(
+        Method::Get, "/throw", [](Request, Respond) { throw 42; }, policy));
+    start();
+    auto network = std::async(std::launch::async, [&] {
+        return ask(
+            "/cors", Method::Get, "", {{"Origin", "https://front.example"}});
+    });
+    ASSERT_EQ(std::future_status::ready, work.wait_for(3s));
+    auto respond = work.get();
+    Response error;
+    error.status = Status::Forbidden;
+    error.headers = {{"Vary", "Accept-Encoding, origin"},
+        {"Access-Control-Allow-Origin", "*"},
+        {"access-control-allow-origin", "https://evil.example"},
+        {"Access-Control-Allow-Credentials", "true"}};
+    ASSERT_TRUE(respond(std::move(error)));
+    EXPECT_FALSE(respond(Response{}));
+    const auto result = network.get();
+    EXPECT_EQ(403U, result.status);
+    EXPECT_EQ(
+        "https://front.example", result.header("access-control-allow-origin"));
+    EXPECT_TRUE(result.header("access-control-allow-credentials").empty());
+    EXPECT_EQ("Accept-Encoding, origin", result.header("vary"));
+    const auto failed =
+        ask("/throw", Method::Get, "", {{"Origin", "https://front.example"}});
+    EXPECT_EQ(500U, failed.status);
+    EXPECT_EQ(
+        "https://front.example", failed.header("access-control-allow-origin"));
+}
+
+/// 无效策略返回空且不占用路由，之后同路径可以正常注册。
+TEST_F(ServerScenarios, CorsInvalidPolicyLeavesRoutesUnchanged) {
+    HttpHandler original = [](Request, Respond respond) {
+        Response response;
+        response.body = "unchanged";
+        respond(std::move(response));
+    };
+    CorsPolicy policy({});
+    EXPECT_FALSE(with_cors(policy, original));
+    policy.origins = {"*"};
+    EXPECT_FALSE(with_cors(policy, original));
+    EXPECT_FALSE(
+        server_->add_route(Method::Get, "/unchanged", original, policy));
+    policy.origins = {"https://front.example\r\nInjected: yes"};
+    EXPECT_FALSE(with_cors(policy, original));
+    policy.origins = {"https://front.example"};
+    policy.request_headers = {"bad name"};
+    EXPECT_FALSE(with_cors(policy, original));
+    policy.request_headers.clear();
+    policy.max_age = -1s;
+    EXPECT_FALSE(with_cors(policy, original));
+    ASSERT_TRUE(server_->add_route(Method::Get, "/unchanged", original));
+    const auto bundle =
+        with_cors(CorsPolicy({"https://front.example"}), original);
+    ASSERT_TRUE(bundle);
+    EXPECT_TRUE(bundle->request);
+    EXPECT_TRUE(bundle->preflight);
+    start();
+    EXPECT_EQ("unchanged", ask("/unchanged").body);
+}
+
+/// 手工 OPTIONS 冲突或业务路由重复时，两条注册均不留下新增项。
+TEST_F(ServerScenarios, CorsRegistrationConflictsAreAtomic) {
+    const CorsPolicy policy({"https://front.example"});
+    const HttpHandler plain = [](Request, Respond respond) {
+        respond(Response{});
+    };
+    ASSERT_TRUE(server_->add_route(Method::Options, "/manual", plain));
+    EXPECT_FALSE(server_->add_route(Method::Get, "/manual", plain, policy));
+    EXPECT_TRUE(server_->add_route(Method::Get, "/manual", plain));
+    ASSERT_TRUE(server_->add_route(Method::Get, "/duplicate", plain));
+    EXPECT_FALSE(server_->add_route(Method::Get, "/duplicate", plain, policy));
+    EXPECT_TRUE(server_->add_route(Method::Options, "/duplicate", plain));
+    EXPECT_FALSE(server_->add_route(Method::Post, "/method", plain, policy));
+    EXPECT_TRUE(server_->add_route(Method::Options, "/method", plain));
+    EXPECT_FALSE(server_->add_route(Method::Options, "/nested", plain, policy));
+    EXPECT_TRUE(server_->add_route(Method::Get, "/nested", plain, policy));
+}
+
+/// 同路径共享等价策略，冲突拒绝后仍允许使用原策略重试新增方法。
+TEST_F(ServerScenarios, CorsSharedPreflightRejectsConflictingPolicy) {
+    const CorsPolicy policy({"https://front.example"},
+        {Method::Get, Method::Post}, {"Authorization"});
+    const CorsPolicy equivalent({"https://front.example"},
+        {Method::Post, Method::Get}, {"authorization"});
+    const CorsPolicy conflicting({"https://evil.example"},
+        {Method::Get, Method::Post}, {"Authorization"});
+    const HttpHandler plain = [](Request, Respond respond) {
+        respond(Response{});
+    };
+    ASSERT_TRUE(server_->add_route(Method::Get, "/shared", plain, policy));
+    EXPECT_FALSE(
+        server_->add_route(Method::Post, "/shared", plain, conflicting));
+    ASSERT_TRUE(server_->add_route(Method::Post, "/shared", plain, equivalent));
+    EXPECT_FALSE(server_->add_route(Method::Options, "/shared", plain));
+    start();
+    EXPECT_EQ(200U,
+        ask("/shared", Method::Post, "", {{"Origin", "https://front.example"}})
+            .status);
+    EXPECT_EQ(
+        204U, ask("/shared", Method::Options, "",
+                  {{"Origin", "https://front.example"},
+                      {"Access-Control-Request-Method", "POST"},
+                      {"Access-Control-Request-Headers", "authorization"}})
+                  .status);
+}
 }  // namespace
 }  // namespace web_test

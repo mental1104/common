@@ -6,6 +6,7 @@
 
 #include "backend.h"
 #include "mental1104/web/drogon_server.h"
+#include "wire_client.h"
 
 namespace web_test {
 /// 只有此翻译单元依赖被测 SDK；公共场景不认识 Drogon。
@@ -27,6 +28,79 @@ TEST(DrogonOnly, SecondRuntimeIsRejected) {
     EXPECT_FALSE(second->start(endpoint));
     EXPECT_TRUE(first->request_stop());
     EXPECT_TRUE(first->wait());
+}
+
+/// 保留 OPTIONS 路由在 SDK 配置前失败，保持输出地址及后续实例的运行机会。
+TEST(DrogonOnly, ReservedOptionsRouteRejectsStartupWithoutClaimingRuntime) {
+    using namespace mental1104::web;
+    std::unique_ptr<Server> rejected;
+    ASSERT_TRUE(backend().create(ServerOptions{}, rejected));
+    ASSERT_TRUE(
+        rejected->add_route(Method::Options, "/*", [](Request, Respond) {
+            ADD_FAILURE() << "Reserved OPTIONS handler must not run";
+        }));
+    // 注册只校验公共约束；后端配置失败须在启动时报告，不能交付假监听地址。
+    Endpoint endpoint{"unchanged", 4321};
+    ASSERT_FALSE(rejected->start(endpoint));
+    EXPECT_EQ("unchanged", endpoint.address);
+    EXPECT_EQ(4321, endpoint.port);
+    EXPECT_FALSE(rejected->wait());
+
+    // 被拒绝的配置不能污染 SDK；普通路径仍可正常分派显式 OPTIONS。
+    std::unique_ptr<Server> valid;
+    ASSERT_TRUE(backend().create(ServerOptions{}, valid));
+    ASSERT_TRUE(valid->add_route(
+        Method::Options, "/download", [](Request, Respond respond) {
+            Response response;
+            response.body = "explicit options";
+            respond(std::move(response));
+        }));
+    ASSERT_TRUE(valid->start(endpoint));
+    const auto response = request(endpoint, Method::Options, "/download");
+    EXPECT_EQ(200U, response.status);
+    EXPECT_EQ("explicit options", response.body);
+    EXPECT_TRUE(valid->request_stop());
+    EXPECT_TRUE(valid->wait());
+}
+
+/// CORS 自动生成的 OPTIONS /* 同样触发后端限制，不能绕过显式路由检查。
+TEST(DrogonOnly, ReservedCorsPreflightRejectsStartup) {
+    using namespace mental1104::web;
+    std::unique_ptr<Server> server;
+    ASSERT_TRUE(backend().create(ServerOptions{}, server));
+    const CorsPolicy policy(
+        {"https://front.example"}, {Method::Get}, {"Authorization"});
+    ASSERT_TRUE(server->add_route(
+        Method::Get, "/*",
+        [](Request, Respond) {
+            ADD_FAILURE() << "Rejected CORS handler must not run";
+        },
+        policy));
+    Endpoint endpoint{"unchanged", 4321};
+    ASSERT_FALSE(server->start(endpoint));
+    EXPECT_EQ("unchanged", endpoint.address);
+    EXPECT_EQ(4321, endpoint.port);
+    EXPECT_FALSE(server->wait());
+}
+
+/// 星号属于字面路径的一部分；仅注册 GET 时无需 OPTIONS，仍可正常启动和访问。
+TEST(DrogonOnly, ReservedOptionsPathStillAllowsOrdinaryGet) {
+    using namespace mental1104::web;
+    std::unique_ptr<Server> server;
+    ASSERT_TRUE(backend().create(ServerOptions{}, server));
+    ASSERT_TRUE(
+        server->add_route(Method::Get, "/*", [](Request, Respond respond) {
+            Response response;
+            response.body = "literal star";
+            respond(std::move(response));
+        }));
+    Endpoint endpoint{};
+    ASSERT_TRUE(server->start(endpoint));
+    const auto response = request(endpoint, Method::Get, "/*");
+    EXPECT_EQ(200U, response.status);
+    EXPECT_EQ("literal star", response.body);
+    EXPECT_TRUE(server->request_stop());
+    EXPECT_TRUE(server->wait());
 }
 
 /// 人为延迟 Linux 监听线程，确认 start 不会把 BeginningAdvice 当成监听就绪。

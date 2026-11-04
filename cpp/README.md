@@ -169,6 +169,62 @@ if (!server->wait()) return 1;
 HTTP 路由和 WebSocket 路由共用该监听器。若启用已有 TLS 选项，则该监听器使用 HTTPS。
 这里不预留监听器集合；后续存在明确的多监听需求时再调整契约。
 
+### 指定接口的 CORS 装饰器
+
+以下能力均声明于 `mental1104/web/server.h`，实现位于 `src/web/server.cpp`，
+链接 `mental1104::web` 即可使用，与 Drogon 无关。
+
+| 类别 | 名称 | 类型 | 用途 |
+|---|---|---|---|
+| 跨域配置 | `CorsPolicy` | 构造式策略 | 一次提供来源、方法、请求头、暴露响应头、凭据许可与预检缓存时间 |
+| 路由注册 | `Server::add_route` | 返回 bool 的方法 | 第四参数提供策略时，自动装饰业务并原子注册 OPTIONS；省略参数保持普通路由 |
+| 组合装饰器 | `with_cors` / `CorsHandlers` | 函数 / 结构体 | 返回 `optional<CorsHandlers>`，包含 request 和 preflight；失败为 nullopt，无输出参数 |
+
+```cpp
+#include "mental1104/web/server.h"
+
+/// 为下载路径注册 CORS 与预检；其他路由不受影响。
+/// @param server 尚未启动的服务，借用并向其注册路由。
+/// @param download 已实现鉴权与文件响应的业务 handler，只读借用并复制。
+/// @return 业务路由及预检一起注册成功为 true；失败不改变已有路由。
+bool register_download(mental1104::web::Server &server,
+    const mental1104::web::HttpHandler &download) {
+    using namespace mental1104::web;
+    const CorsPolicy policy({"https://front.example"}, {Method::Get},
+        {"Authorization"}, {"Content-Disposition"}, true);
+    return server.add_route(Method::Get, "/download", download, policy);
+}
+```
+
+**示例结果：** 注册成功返回 true，无标准输出。启动后，来自 `https://front.example`
+的 GET/HEAD 响应携带匹配的 `Access-Control-Allow-Origin` 和凭据许可，浏览器可读取
+`Content-Disposition`；允许 GET/HEAD 和 Authorization 的有效预检返回 204。
+普通路由不传第四参数。只限制来源时，可直接构造 `CorsPolicy({"https://front.example"})`，
+其他参数默认 GET、空请求头/暴露头列表、不允许凭据、预检缓存 600 秒。
+构造函数接收配置，合法性由 `add_route` 或 `with_cors` 校验。
+
+策略只支持精确的序列化来源，不支持 `*`；例如非默认端口需要写入来源字符串，
+不包含路径或结尾 `/`。`null` 只有被显式列入白名单才会获准。
+无 Origin 的普通请求照常执行业务；携带未获准 Origin 或方法的请求返回 403，
+不执行业务。预检缺少字段返回 400，申请未获准来源、方法或请求头返回 403。
+同路径多个业务方法应传入包含全部允许方法的等价策略；OPTIONS 自动创建一次并共享。
+注册方法必须在策略白名单中；来源、方法、头列表按集合比较，头名称忽略大小写。
+手工 OPTIONS 冲突、重复业务路由、策略不一致或内部失败均返回 false，并回滚本次新增项。
+不能为 Options 或 Head 本身传入 CORS 策略。策略声明允许的方法仍需由应用注册对应业务路由。
+Drogon 后端将 `OPTIONS /*` 作为 SDK 保留请求：手工注册该路由，或为字面路径 `/*`
+启用 CORS 时，公共 `add_route` 仍可返回 true，但 `start(endpoint)` 和 `wait()` 返回 false，
+且 endpoint 保持原值。检查发生在修改 SDK 配置之前，不占用进程内唯一的运行机会；
+仅注册普通 `GET /*` 可以正常启动。应用应使用 `/download` 等路径承载需要 OPTIONS 的接口。
+`with_cors(policy, handler)` 是需要单独组合时的底层入口，一次返回业务和预检两部分，
+不再提供独立 `make_cors_preflight` 或通过输出参数返回 handler 的旧接口。
+
+装饰器包装 Respond，所以异步响应、文件及业务错误响应均可携带 CORS 头。
+业务写入的 Access-Control-* 字段由策略替换，已有 Vary 保留并合并 Origin；
+无 Origin 响应和拒绝响应也设置 Vary，预检另包含申请方法和请求头维度。
+同步业务异常转换为带许可头的 500；后端自行生成的 413、响应转换失败或未提交句柄
+释放时的兜底 500 不经过装饰器，不保证携带 CORS 头。CORS 不替代业务鉴权，
+也不适用于 WebSocket 握手的来源校验。尚未进行浏览器端到端测试，场景测试验证实际 HTTP 头。
+
 ### 实现其他 Web 后端
 
 `Server` 采用模板方法（NVI），不使用 C++ 类模板。应用继续调用非虚公共方法；
@@ -229,7 +285,7 @@ Linux 上多个 I/O 线程的内部监听记录必须指向同一公共地址；
 公共场景编译为可复用 OBJECT 目标，新的测试程序直接链接同一组场景，无需复制测试源码。
 
 通过 CTest 执行上述筛选命令。每个网络场景运行于独立进程，允许并行执行，
-不要求后端支持进程内重启。当前共 19 个 CTest 项，其中生命周期项包含多项故障注入测试；
+不要求后端支持进程内重启。当前共 28 个 CTest 项，其中生命周期项包含多项故障注入测试；
 Linux 后端专属场景会人为阻塞监听线程，验证 start 不会提前返回成功。
 无 TLS 的后端显式跳过 HTTPS 场景。关闭 `M1104_WEB_WITH_DROGON` 后仍可运行生命周期测试。
 不要直接运行整个 Drogon 测试程序来批量执行场景，因为 Drogon 每进程只能启动一次。
