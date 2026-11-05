@@ -10,12 +10,12 @@ option(EXPORT_BUILD_PYBIND11 "Build pybind11 Python extension" ON)
 set(REPO_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../..")
 set(THIRDROOT "${REPO_ROOT}/cpp/lib")
 
-file(GLOB EXPORT_JSON_CORE_SRCS CONFIGURE_DEPENDS
+file(GLOB_RECURSE EXPORT_JSON_CORE_SRCS CONFIGURE_DEPENDS
     "${REPO_ROOT}/cpp/src/json/*.cpp")
 set(EXPORT_JSON_SRCS
     src/json.cpp
     src/json_capi.cpp
-    # 独立导出库与主库复用同一解析实现，不再依赖头文件生成定义。
+    # 递归复用公共核心及 detail 后端，避免遗漏私有实现的链接定义。
     ${EXPORT_JSON_CORE_SRCS}
 )
 

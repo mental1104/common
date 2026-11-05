@@ -10,13 +10,13 @@ This repository is a multi-language common-library workspace, so generated code 
 
 ## Required Workflow
 
-1. Treat `.codex/skills/common-codegen-guidelines` as the live repository guidance. Directory organization and C++ declaration/implementation boundary rules are maintained directly in root `AGENTS.md` at the user's explicit request; read and follow them before choosing file locations or making C++ changes. Other archived AGENTS guidance remains under this skill.
+1. Treat `.codex/skills/common-codegen-guidelines` as the live repository guidance. Directory organization, C++ declaration/implementation boundaries, and the minimum-complete-usage first-test rule are maintained directly in root `AGENTS.md` at the user's explicit request; read and follow them before creating or modifying code, tests, or examples. Other archived AGENTS guidance remains under this skill.
 2. Read the nearest existing implementation, tests, README, build file, and devtool command for the language you are touching. When compatibility may be affected, also inspect the matching `.github/workflows/` workflow and `.github/actions/` local actions.
 3. For non-trivial code generation, read `references/repo-style.md`; for historical recent-work context or detailed archived rules, read `references/agents-archive.md`.
 4. Keep edits close to the existing module boundary. Prefer extending current helpers, aliases, registries, and command wrappers over adding a parallel style.
-5. Add or update tests next to the existing tests for the touched language. Public APIs need behavior tests; cross-language/installation surfaces also need install or verify checks.
+5. Add or update tests next to the existing tests for the touched language. Follow root `AGENTS.md` section `最小完整用法与测试首例（铁律）` when maintaining usage examples and their tests. Public APIs need behavior tests; cross-language/installation surfaces also need install or verify checks.
 6. Validate with `./dev` commands whenever available. Prefer language aliases such as `./dev test-python`, `./dev coverage-cpp`, or `./dev verify-install` over direct tool invocations unless debugging a lower-level failure. NAS 工作区统一在既有 `code-server` 容器中执行本地开发与验证命令，具体边界见 `references/repo-style.md` 的 `Repository Shape`。
-7. Update this skill, especially `references/repo-style.md` or `references/agents-archive.md`, whenever a change creates or changes public workflows, install/verify behavior, CI/coverage conventions, or reusable APIs that future agents must know. Directory organization and C++ declaration/implementation rules belong in root `AGENTS.md`; reference them here instead of maintaining duplicates. Keep other maintenance guidance in this skill.
+7. Update this skill, especially `references/repo-style.md` or `references/agents-archive.md`, whenever a change creates or changes public workflows, install/verify behavior, CI/coverage conventions, or reusable APIs that future agents must know. Directory organization, C++ declaration/implementation boundaries, and the minimum-complete-usage first-test rule belong in root `AGENTS.md`; reference them here instead of maintaining duplicates. Keep other maintenance guidance in this skill.
 
 ## Generation Conditions
 

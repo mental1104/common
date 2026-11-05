@@ -1,3 +1,5 @@
+/// @file
+/// 不依赖 GoogleTest 的消费端入口，仅以退出码报告跨翻译单元验证结果。
 #include "consumer.h"
 
 /// 使用实际库标准编译的独立调用方，不受 GoogleTest 最低标准影响。

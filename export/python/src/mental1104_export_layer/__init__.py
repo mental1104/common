@@ -1,8 +1,6 @@
-"""Python entrypoint for the mental1104 export layer.
+"""通过 pybind11 或 ctypes 调用 C++ JSON 实现。
 
-Provides a simple API to call C++ backends via pybind11 (preferred) or ctypes
-fallback. Currently exposes `parse_json`, backed by the canonical
-`mental1104::parse_json` implementation.
+Python 导出协议仍为 parse_json，核心实现入口为 mental1104::load_json。
 """
 
 from __future__ import annotations

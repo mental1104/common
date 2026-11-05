@@ -319,7 +319,7 @@ Pulsar 的 Producer 创建接口通过实际头文件与库进行编译链接探
 | 容器与字符串 | `ExponentialBackoff` | 类 | `mental1104/util.h` | 按上限推进重试延迟，可显式加入对称随机抖动。 |
 | 缓存包装器 | `LRUCache`, `make_lru_cache`, `make_cache` | 类 / 函数 | `mental1104/core/cache.h` | 用 tuple 键 LRU 或无界缓存包装可调用对象。 |
 | 缓存包装器 | `LFUCache`, `make_lfu_cache` | 类 / 函数 | `mental1104/core/cache.h` | 用 tuple 键 LFU 缓存包装可调用对象。 |
-| JSON | `IJsonParser`, `IJsonDocument`, `CJsonParser`, `RapidJsonParser`, `JsonParser`, `parse_json`, `ParseResult`, `JsonDoc`, `JsonValueView`, `JsonType`, `JsonOptional`, `JsonValueReader` | 接口 / 类 / 枚举 / 函数 / 模板 | `mental1104/json.h` 或 `mental1104/json/*.h` | 可替换后端解析、只读节点访问、类型化可选读取及调用方模型转换。 |
+| JSON | `IJsonParser`, `IJsonDocument`, `CJsonParser`, `RapidJsonParser`, `JsonParser`, `load_json`, `dump_json`, `ParseResult`, `DumpResult`, `JsonDoc`, `JsonValueView`, `JsonType`, `JsonOptional`, `JsonValueReader` | 接口 / 类 / 枚举 / 函数 / 结构体 / 模板 | `mental1104/json/codec.h`、`mental1104/json/access.h` | 可替换后端编解码、只读节点访问、类型化可选读取及调用方模型转换。 |
 | 日志 | `LogLevel`, `get_log_level`, `set_log_level`, `log`, `logf`, `M1104_LOG_*` | 枚举 / 函数 / 宏 | `mental1104/log.h` | 通过 stdout/stderr 输出分级日志，可用时使用 spdlog。 |
 | C API 兼容 | `COMMON_EXTERN_C_BEGIN`, `COMMON_EXTERN_C_END`, `COMMON_EXTERN_C` | 宏 | `mental1104/common/c_api_compat.h` | 包装 C 声明，使同一头文件可被 C 和 C++ 包含。 |
 | 资源管理 | `unique_fd` | 类 | `mental1104/c_api_raii.h` | 持有 POSIX 文件描述符。 |
@@ -422,36 +422,41 @@ int main() {
 
 - 模板参数顺序为返回类型，然后是参数类型。
 
-### JSON 解析
+### JSON 编解码与对象访问
 
 - **类别：** JSON
-- **类型：** 枚举、函数、类
+- **类型：** 枚举、函数、类、结构体
 - **定义位置：** `cpp/include/mental1104/json/`；运行时实现位于 `cpp/src/json/`
-- **包含：** `mental1104/json.h` 聚合全部接口；可单独包含 `mental1104/json/rapidjson_parser.h`、`cjson_parser.h`、`parser.h`、`document.h` 或 `value.h`
-- **用途：** 通过基类替换后端，用统一视图访问成员、数组和嵌套路径，并读取可选的具体类型。
+- **包含：** `mental1104/json/codec.h` 提供文本转换入口和解析器，并包含对象访问接口；只需文档、节点访问或类型化读取时可单独包含 `mental1104/json/access.h`
+- **用途：** 加载 JSON 文本为独占文档，通过统一视图读取对象，再使用文档所属后端输出紧凑 JSON 文本。
 
 **基础用法：**
 
 ```cpp
-#include "mental1104/json/rapidjson_parser.h"
+#include "mental1104/json/codec.h"
 #include <iostream>
 
-/// 解析配置并展示可选读取与 null 判断。
-/// @return 成功返回 0，解析失败返回 1。
+/// 加载配置、读取嵌套成员并序列化为独立文本。
+/// @return 成功返回 0，编解码失败返回 1。
 int main() {
-    const mental1104::RapidJsonParser parser;
-    auto result = parser.parse(mental1104::string_view(
-        R"({"status":{"settings":{"uuid":"test-id"}},"nil":null})"));
+    auto result = mental1104::load_json(
+        R"({"status":{"settings":{"uuid":"test-id"}},"nil":null})");
     if (!result) {
         std::cerr << result.error << " @" << result.offset << "\n";
         return 1;
     }
-    const auto root = result.doc.root();
+    const auto root = result.get();
     const auto uuid = root.get_optional<std::string>(
         {"status", "settings", "uuid"});
     std::cout << uuid.value_or("unknown") << "\n";
     std::cout << root.get("missing").is_valid() << " "
               << root.get("nil").is_null() << "\n";
+    const auto dumped = mental1104::dump_json(result);
+    if (!dumped) {
+        std::cerr << dumped.error << "\n";
+        return 1;
+    }
+    std::cout << dumped.text << "\n";
 }
 ```
 
@@ -460,25 +465,51 @@ int main() {
 ```text
 test-id
 0 1
+{"status":{"settings":{"uuid":"test-id"}},"nil":null}
 ```
 
 **备注：**
 
 | 接口 | 结果与失败语义 |
 |---|---|
+| `load_json(text, backend)`、`load_json(data, length, backend)` | 返回内部独占文档的 `ParseResult`；以 `result.get()` 直接取得根视图，失败时提供 `error` 和错误字节 `offset`。省略后端时固定使用 cJSON；若未构建 cJSON 则返回错误，不自动切换。可显式指定 RapidJSON。 |
+| `load_json("{}")` | NUL 结尾字符串和字符串字面量可直接传入；nullptr 返回错误。不要求 NUL 结尾的缓冲应使用指针/长度重载。 |
+| `dump_json(result)`、`dump_json(document)` | 接受加载结果或独占文档，返回 `DumpResult`；成功时 `ok=true`、`text` 为独立字符串且 `error` 为空；失败时 `text` 为空且 `error` 提供诊断。使用文档所属后端，无须再次指定枚举。 |
 | `type()`、`is_valid()`、`is_null()`、`is_object()`、`is_array()`、`is_string()`、`is_bool()`、`is_number()` | 区分 `JsonType::Missing` 与有效的 JSON `null`，缺失成员不触发后端异常或断言。 |
 | `get(key)`、`get({"a", "b"})`、`has(key)` | 区分大小写；非对象、成员缺失或路径中断返回空视图；空路径返回当前节点。 |
 | `size()`、`at(index)` | 数组长度及元素；非数组长度为 0，非数组或越界返回空视图。 |
-| `as_optional<T>()`、`get_optional<T>(key/path)` | 支持布尔、标准整数、浮点、`std::string`，C++17 起支持借用的 `std::string_view`。缺失、null、类型错误或越界返回空；false、0、空字符串仍包含值。 |
+| `for (const auto item : result.get())` | 按顺序借用数组元素，嵌套数组视图也可遍历；空数组及非数组为空范围，不枚举对象成员。 |
+| `get_optional<T>()`、`get_optional<T>(key/path)` | 无参读取当前节点，带键或路径读取成员。支持布尔、标准整数、浮点、`std::string`，C++17 起支持借用的 `std::string_view`。缺失、null、类型错误或越界返回空；false、0、空字符串仍包含值。 |
 | `as_string()`、`as_string_copy()`、`as_bool()`、`as_i64()`、`as_f64()` | 保留默认值读取；`as_i64()` 仍向零截断小数，越界返回默认值；严格 optional 整数读取拒绝小数。 |
 | `JsonValueReader<T>::read(view)` | 调用方特化可组合统一读取能力，生成自定义模型，无须修改库或显式实例化。 |
 
 **所有权与扩展：**
 
-- `IJsonParser::parse` 每次产生独立文档，完成后可销毁解析器和输入。`ParseResult` 保留 `ok`、`error`、`offset`、`doc` 和布尔判断；成功拥有文档，失败时文档为空。
+数组根可以直接遍历，每个元素仍是统一的借用视图：
+
+```cpp
+const auto loaded = mental1104::load_json(
+    mental1104::string_view(R"([{"id":1},{"id":2}])"),
+    mental1104::JsonParser::RapidJSON);
+// 成功后按顺序读取元素；加载失败时根为 Missing，范围为空。
+if (loaded) {
+    for (const auto item : loaded.get()) {
+        std::cout << item.get_optional<int>("id").value_or(-1) << "\n";
+    }
+}
+```
+
+示例输出为两行 `1`、`2`。数组标量可用 `item.get_optional<int>()` 读取当前节点。
+
+- 公开接口按两项职责组织：`codec.h/.cpp` 提供 `load_json`、`dump_json`、编解码结果与统一入口；`access.h/.cpp` 提供文档所有权、节点视图、路径遍历和类型转换。调用方需要的模板留在 `access.h`，固定签名实现独立编译。两层都不包含原生 SDK 头文件。
+- 具体后端集中在私有 `src/json/detail/`：`cjson.cpp` 与 `rapidjson.cpp` 各自完整管理原生 DOM、节点读取、解析和序列化，不再把同一个后端拆散到外层文件。`detail/backend.h` 只声明通用诊断、输入检查和数值转换，不暴露原生类型；这些私有文件不安装给调用方。独立导出工程递归收集该目录中的源文件。
+
+- `IJsonParser::parse` 每次产生独立文档，完成后可销毁解析器和输入。`ParseResult` 公开 `ok`、`error`、`offset`，内部独占文档，调用方通过 `get()` 访问根，通过 `backend()` 查询诊断标识。布尔判断同时检查解析成功和当前所有权；默认构造、失败及移出后的结果为 false，`get()` 返回 Missing。整个结果可移动、不可复制，不再公开 `doc` 成员。
 - `JsonDoc` 独占 `IJsonDocument`，允许移动、禁止复制；`valid()`、`backend()`、`root()` 保持原用途。移动所有权不改变后端地址，已有视图仍有效；覆盖或销毁文档使其旧视图失效。视图和借用字符串不延长文档生命周期，`std::string` 结果是独立副本。
-- 应用可派生 `IJsonParser` 和 `IJsonDocument`，通过 `JsonDoc(unique_ptr<IJsonDocument>)` 接入。文档实现 protected `do_root/type/get/size/at/string/bool/i64/u64/f64` 钩子；句柄只由所属文档解释，nullptr 表示缺失，非空句柄属于该文档；DOM 只读。公共视图负责路径和模板转换，无须增加枚举分支或全局注册。默认诊断标识为 `JsonParser::Custom`。
-- 原 `parse_json(text, JsonParser::CJSON/RapidJSON)` 及指针/长度入口仍可使用，委托给派生解析器。旧 `JsonValueView::from_cjson/from_rapid` 原生节点注入接口已移除，应通过文档取得视图。
+- 应用可派生 `IJsonParser` 和 `IJsonDocument`，通过 `ParseResult(JsonDoc(unique_ptr<IJsonDocument>))` 返回独占的成功结果。文档实现 protected `do_root/type/get/size/at/string/bool/i64/u64/f64` 钩子；句柄只由所属文档解释，nullptr 表示缺失，非空句柄属于该文档；DOM 只读。公共视图负责路径和模板转换，无须增加枚举分支或全局注册。默认诊断标识为 `JsonParser::Custom`。
+- 需要支持序列化的自定义文档覆写 `IJsonDocument::do_dump() const`，返回 `DumpResult`。默认钩子返回明确的不支持错误，因此只实现读取的后端仍可使用。内置文档的节点读取与文本生成均封装在对应的 `detail` 后端文件中。
+- `dump_json` 不修改文档，不使已有借用视图失效；其文本可在源文档销毁后继续使用。默认空文档和移动后的空对象返回错误，有效的 JSON `null` 文档则成功输出 `null`。输出为紧凑格式，不保留输入空白或数字的原始拼写；不承诺不同后端输出逐字相同。
+- 统一入口为 `load_json(text, JsonParser::CJSON/RapidJSON)`，同时提供指针/长度重载，并委托给派生解析器；原 `parse_json` 已更名，不保留同义入口。旧 `JsonValueView::from_cjson/from_rapid` 原生节点注入接口已移除，应通过文档取得视图。
 - 本次调整了公开对象布局及部分函数签名，需要重新编译库与调用方，不兼容旧版二进制 ABI。
 
 **构建、链接与限制：**
@@ -488,6 +519,8 @@ test-id
 - `JsonOptional<T>` 在 C++17+ 等同 `std::optional<T>`，C++11/14 等同 `boost::optional<T>`；通过布尔判断和 `value_or` 使用。旧标准的 `string_view` 为 `std::string`，可能分配内存，这些路径不承诺 `noexcept`。
 - 输入不要求 NUL 结尾；根后仅允许 JSON 空白。空输入及原始 NUL 返回错误，转义的 `\u0000` 由后端处理。语法诊断和偏移细节可能不同，cJSON 的宽松语法未被完整校验器替代。
 - 严格数值读取不转换字符串或布尔，不截断小数，检查符号、范围及浮点有限性；浮点转换允许舍入。cJSON 数字以 double 保存，不能承诺原始完整 64 位整数精度；RapidJSON 保留原生 64 位整数。cJSON 字符串和键没有独立长度元数据，不能完整读取含内嵌 NUL 的字符串和键，此类输入应选择 RapidJSON。
+- 数组范围游标与节点一样借用文档，移动加载结果后仍有效，销毁或覆盖拥有者后失效；每次解引用使用后端索引访问，cJSON 链表数组的完整遍历可能需要平方级时间。游标只提供 range-for 所需操作，不承诺标准库迭代器接口。
+- 序列化不能恢复原生 DOM 已丢失的精度或字符串长度。cJSON 解析产生的非有限数值在 `dump_json` 中返回错误，避免被打印成 `null`；RapidJSON Writer 失败时也返回错误，不暴露未完成的文本前缀。
 - 缺失和类型错误表现为空；分配失败及自定义转换异常仍可抛出。cJSON 使用进程级 hooks/错误状态，不承诺并发解析；需要并发解析时选择 RapidJSON。文档销毁、覆盖或自定义后端的可变操作不能与视图读取并发。
 
 **验证入口：** 构建后运行 `./dev test-cpp --file '^test_json'`。两后端复用相同场景；`test_json_consumer` 不链接 GoogleTest，按实际库标准编译多个翻译单元，验证调用方自定义类型、模板和运行时链接。
