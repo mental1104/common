@@ -8,11 +8,21 @@
 
 namespace json_consumer {
 namespace {
-#if M1104_HAS_JSON_CJSON || M1104_HAS_JSON_RAPIDJSON
+#if M1104_HAS_JSON_CJSON || M1104_HAS_JSON_RAPIDJSON || M1104_HAS_JSON_NLOHMANN
 /// 用借用解析器产生独立文档，检查调用方模型、移动与编解码边界。
 /// @param parser 借用的后端无关解析入口。
 /// @return 调用方模板、加载/序列化往返及移动后视图均有效时为 true。
 bool verify_parser(const mental1104::IJsonParser &parser) {
+    // 独立翻译单元也必须链接公共错误路径，最低标准不能只覆盖正常分派。
+    const auto empty = parser.parse(mental1104::string_view{});
+    const char nul_input[] = {'{', '}', '\0', 'x'};
+    const auto nul =
+        parser.parse(mental1104::string_view(nul_input, sizeof(nul_input)));
+    if (empty || empty.error != "empty JSON input or embedded NUL byte" ||
+        empty.offset != 0 || nul || nul.error != empty.error ||
+        nul.offset != 2) {
+        return false;
+    }
     auto parsed = parser.parse(mental1104::string_view(
         "{\"status\":{\"settings\":{\"uuid\":\"consumer\"}},"
         "\"count\":42,\"ratio\":1.5,\"flag\":false}"));
@@ -42,6 +52,8 @@ bool verify_parser(const mental1104::IJsonParser &parser) {
     }
     return restored_settings && restored_settings->uuid == "consumer" &&
            sum == 6 && settings && settings->uuid == "consumer" &&
+           // 移出后的读取按公开契约返回 Missing，属于本消费测试的验证目标。
+           // NOLINTNEXTLINE(clang-analyzer-cplusplus.Move)
            !parsed.get().is_valid() &&
            root.get_optional<int>("count").value_or(0) == 42 &&
            root.get_optional<unsigned>("count").value_or(0) == 42u &&
@@ -68,6 +80,9 @@ bool verify() {
 #endif
 #if M1104_HAS_JSON_RAPIDJSON
     ok = ok && verify_parser(mental1104::RapidJsonParser{});
+#endif
+#if M1104_HAS_JSON_NLOHMANN
+    ok = ok && verify_parser(mental1104::NlohmannJsonParser{});
 #endif
     return ok;
 }

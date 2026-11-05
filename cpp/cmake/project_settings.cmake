@@ -12,7 +12,8 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 # CMAKE_BUILD_TYPE 是 CMake 内建缓存变量，单配置生成器下用来选 Debug/Release/RelWithDebInfo/Minsizerel；
 # 默认空值，常通过 -DCMAKE_BUILD_TYPE=Release 传入，故这里给未设置时兜底为 Debug
 if(NOT CMAKE_BUILD_TYPE)
-  set(CMAKE_BUILD_TYPE Debug)
+  # 同时写入缓存，确保 devtool 读取到的类型与实际生成的 Debug 编译规则一致。
+  set(CMAKE_BUILD_TYPE Debug CACHE STRING "Build type" FORCE)
 endif()
 message(STATUS "Build type: ${CMAKE_BUILD_TYPE}")
 

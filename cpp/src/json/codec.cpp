@@ -29,22 +29,6 @@ ParseResult parse_error(const char *message, std::size_t offset) {
     result.offset = offset;
     return result;
 }
-/// 检查空输入和原始 NUL，避免后端提前终止解析。
-/// @param text 只读输入，不保存引用。
-/// @return 非法位置，通过检查时为空。
-JsonOptional<std::size_t> invalid_input(const string_view &text) {
-    // 零字节输入不是 JSON；避免对可能为空的 data() 调用 memchr。
-    if (text.empty()) {
-        return std::size_t{0};
-    }
-    // 原始 NUL 不能出现在 JSON 文本中；提前统一两种后端的结束符处理。
-    const auto *nul =
-        static_cast<const char *>(std::memchr(text.data(), '\0', text.size()));
-    return nul ? JsonOptional<std::size_t>(
-                     static_cast<std::size_t>(nul - text.data()))
-               : JsonOptional<std::size_t>{};
-}
-
 }  // namespace json_detail
 
 /// 将已经解析的文档转入结果，所有节点仍由原有的固定地址后端解释。
@@ -103,6 +87,14 @@ DumpResult dump_json(const JsonDoc &document) {
 
 /// 允许经基类指针销毁解析器；已返回的独立文档不依赖解析器继续存活。
 IJsonParser::~IJsonParser() = default;
+/// 输入校验失败时才创建诊断字符串，正常路径不调用此函数。
+/// @param offset 空输入为 0，否则为首个原始 NUL 的字节偏移。
+/// @return 统一的输入错误，不创建后端文档。
+ParseResult IJsonParser::input_error(std::size_t offset) {
+    return json_detail::parse_error(
+        "empty JSON input or embedded NUL byte", offset);
+}
+
 /// 仅选择内置解析器，原生树创建与释放规则由各自 detail 后端负责。
 /// @param text 只读 JSON 字节，不要求 NUL 结尾，解析完成后不保存其引用。
 /// @param parser 内置后端标识，调用方省略时使用 cJSON；自定义实现应直接调用
@@ -114,6 +106,8 @@ ParseResult load_json(const string_view &text, JsonParser parser) {
             return CJsonParser{}.parse(text);
         case JsonParser::RapidJSON:
             return RapidJsonParser{}.parse(text);
+        case JsonParser::NlohmannJSON:
+            return NlohmannJsonParser{}.parse(text);
         case JsonParser::Custom:
             break;
     }

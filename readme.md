@@ -231,5 +231,5 @@ docker build -t mental1104:dev .
 ## 开发建议
 
 - Python 依赖维护于 `python/requirements.txt`，`pyproject.toml` 描述打包信息。
-- C++ 头文件位于 `cpp/include/mental1104/`，单测在 `cpp/test/`，第三方依赖于 `cpp/lib/`、`cpp/thirdparty/`。
+- C++ 头文件位于 `cpp/include/mental1104/`，单测在 `cpp/test/unit/`，性能基准在 `cpp/test/bench/`，第三方依赖于 `cpp/lib/`、`cpp/thirdparty/`。
 - 提交前请至少执行：`./dev test all`；必要时 `./dev coverage all`；结束前可 `./dev clean all` 保持仓库整洁。

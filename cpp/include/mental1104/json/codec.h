@@ -61,6 +61,7 @@ private:
 /// 内存分配或自定义后端异常仍传播到调用方。
 DumpResult dump_json(const ParseResult &result);
 /// 可替换的解析入口；每次产生独立文档，文档不依赖解析器存活。
+/// 公共入口固定输入校验，派生类仅实现 do_parse，不能覆写 parse 绕过校验。
 /// 并发限制由具体后端决定；const 入口不代表第三方库没有进程级状态。
 class IJsonParser {
 public:
@@ -68,8 +69,28 @@ public:
     virtual ~IJsonParser();
     /// 解析完整输入，不借用输入、不改变之前返回的文档。
     /// @param text 只读 JSON 字节，允许没有 NUL 结束符。
-    /// @return 独占文档或解析错误；分配失败仍可抛异常。
-    virtual ParseResult parse(const string_view &text) const = 0;
+    /// @return 独占文档或解析错误；空输入、原始 NUL 在后端分派前失败。
+    /// 薄入口内联以保留优化机会；不捕获后端异常，分配失败仍可抛出。
+    virtual ParseResult parse(const string_view &text) const final {
+        // 空输入不能构成 JSON，也不能交给依赖有效首字节的后端。
+        if (text.empty()) return input_error(0);
+        const auto nul = text.find('\0');
+        // 原始 NUL 会让部分 SDK 提前结束；转义的 \\u0000 不受此检查影响。
+        if (nul != string_view::npos) return input_error(nul);
+        return this->do_parse(text);
+    }
+
+protected:
+    /// 解析已通过公共字节校验的输入；后端仍负责语法与完整消费校验。
+    /// @param text 非空且不含原始 NUL 的只读字节，不要求 NUL 结尾。
+    /// @return 独占文档或后端错误；异常直接传播，不保留输入借用。
+    virtual ParseResult do_parse(const string_view &text) const = 0;
+
+private:
+    /// 在失败路径构造统一诊断，避免把错误字符串构造放进内联入口。
+    /// @param offset 空输入为 0，否则为首个原始 NUL 的字节偏移。
+    /// @return 不含文档的输入错误。
+    static ParseResult input_error(std::size_t offset);
 };
 /// 使用指定内置后端加载完整 JSON 文本，结果独占文档。
 /// @param text 只读输入，不保存引用。
@@ -102,20 +123,31 @@ ParseResult load_json(
 /// 底层仍写进程级错误状态，不承诺并发解析。
 /// 原生文档及打印缓冲全部释放之前，不得切换 cJSON 全局内存 hooks。
 class CJsonParser final : public IJsonParser {
-public:
+private:
     /// 用 cJSON 解析完整输入，文档独立拥有原生树。
-    /// @param text 不要求 NUL 结尾的只读字节。
+    /// @param text 已通过公共字节校验、不要求 NUL 结尾的只读字节。
     /// @return 独占文档或带偏移的错误；后端禁用时返回错误。
-    ParseResult parse(const string_view &text) const override;
+    ParseResult do_parse(const string_view &text) const override;
 };
 
 /// 无状态 RapidJSON 适配器，每次创建独立 Document 与 allocator。
 /// 文档解析后保持只读，已有文档不会被后续 parse 调用复用或覆盖。
 class RapidJsonParser final : public IJsonParser {
-public:
+private:
     /// 解析完整输入，不使用借用输入存储的原地解析。
-    /// @param text 不要求 NUL 结尾的只读字节。
+    /// @param text 已通过公共字节校验、不要求 NUL 结尾的只读字节。
     /// @return 独占文档或带偏移的错误；后端禁用时返回错误。
-    ParseResult parse(const string_view &text) const override;
+    ParseResult do_parse(const string_view &text) const override;
+};
+
+/// 无状态 nlohmann JSON 适配器，原生类型仅在私有实现中使用。
+/// 每次解析创建独立且只读的 DOM，保留对象成员顺序及完整的 64 位整数。
+class NlohmannJsonParser final : public IJsonParser {
+private:
+    /// 加载完整 JSON 文本并接管原生 DOM，不保留输入缓冲。
+    /// @param text 已通过公共字节校验、不要求 NUL 结尾的只读字节。
+    /// @return 独占文档或错误；语法错误偏移从 0 开始，数值溢出无位置时为 0。
+    /// 后端禁用时返回错误，分配失败仍可抛异常。
+    ParseResult do_parse(const string_view &text) const override;
 };
 }  // namespace mental1104

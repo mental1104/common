@@ -64,10 +64,10 @@ if(M1104_WEB_BUILD_TESTS)
     find_package(GTest REQUIRED)
     set(_web_gtest GTest::gtest_main)
   endif()
-  add_executable(test_web_lifecycle "${_web_root}/test/web/lifecycle_scenarios.cc")
+  add_executable(test_web_lifecycle "${_web_root}/test/unit/web/lifecycle_scenarios.cc")
   target_link_libraries(test_web_lifecycle PRIVATE mental1104_web ${_web_gtest})
   add_test(NAME test_web_lifecycle COMMAND test_web_lifecycle)
-  set_tests_properties(test_web_lifecycle PROPERTIES TIMEOUT 20)
+  set_tests_properties(test_web_lifecycle PROPERTIES TIMEOUT 20 LABELS "unit")
 
   # 给任意 Server 派生实现复用相同场景；只有 adapter_source 了解被测 SDK。
   # target: 新测试程序名；backend_target: 后端库目标；adapter_source: 接入文件绝对路径。
@@ -77,13 +77,13 @@ if(M1104_WEB_BUILD_TESTS)
       find_package(OpenSSL REQUIRED)
       find_program(M1104_WEB_OPENSSL openssl REQUIRED)
       add_library(mental1104_web_wire_client STATIC
-        "${_web_root}/test/web/wire_client.cc")
+        "${_web_root}/test/unit/web/wire_client.cc")
       # 隔离父目录的第三方头搜索路径，测试客户端统一使用 find_package 选出的 Boost。
       set_property(TARGET mental1104_web_wire_client PROPERTY INCLUDE_DIRECTORIES "")
       target_link_libraries(mental1104_web_wire_client PUBLIC mental1104_web
         PRIVATE Boost::boost OpenSSL::SSL OpenSSL::Crypto Threads::Threads)
       add_library(mental1104_web_scenarios OBJECT
-        "${_web_root}/test/web/server_scenarios.cc")
+        "${_web_root}/test/unit/web/server_scenarios.cc")
       target_link_libraries(mental1104_web_scenarios PUBLIC
         mental1104_web_wire_client ${_web_gtest})
       file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/test-tls")
@@ -100,18 +100,18 @@ if(M1104_WEB_BUILD_TESTS)
     add_executable(${target} "${adapter_source}")
     target_link_libraries(${target} PRIVATE
       mental1104_web_scenarios ${backend_target})
-    target_include_directories(${target} PRIVATE "${_web_root}/test/web")
+    target_include_directories(${target} PRIVATE "${_web_root}/test/unit/web")
     include(GoogleTest)
     get_target_property(_tls_dir mental1104_web_scenarios M1104_TEST_TLS_DIR)
     # 每个测试单独启动进程，后端不需要支持重启，场景可并行、筛选和单独重跑。
     gtest_discover_tests(${target} TEST_PREFIX "web.${target}."
-      DISCOVERY_TIMEOUT 30 PROPERTIES TIMEOUT 20
+      DISCOVERY_TIMEOUT 30 PROPERTIES TIMEOUT 20 LABELS "unit"
       ENVIRONMENT "M1104_TEST_TLS_DIR=${_tls_dir}")
   endfunction()
 
   if(M1104_WEB_WITH_DROGON)
     m1104_add_web_backend_scenarios(test_web_drogon mental1104_web_drogon
-      "${_web_root}/test/web/drogon_backend.cc")
+      "${_web_root}/test/unit/web/drogon_backend.cc")
     target_link_libraries(test_web_drogon PRIVATE Drogon::Drogon)
   endif()
 endif()

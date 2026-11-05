@@ -18,10 +18,6 @@ ParseResult parse_error(const char *message, std::size_t offset = 0);
 /// @param message 复制保存的 ASCII 错误说明。
 /// @return text 为空的失败结果。
 DumpResult dump_error(const char *message);
-/// 检查空输入和原始 NUL，避免后端提前终止读取。
-/// @param text 只读输入，不保存引用。
-/// @return 非法位置；通过检查时为空。
-JsonOptional<std::size_t> invalid_input(const string_view &text);
 /// 检查有限数值能否无截断地表示为有符号整数。
 /// @param value 已解析数值，不恢复后端丢失的原始精度。
 /// @return 范围内的整数或空结果。

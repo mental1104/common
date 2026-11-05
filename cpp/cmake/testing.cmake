@@ -1,9 +1,9 @@
 enable_testing()
 
-set(TEST_DIR ${CMAKE_CURRENT_SOURCE_DIR}/test)
+set(TEST_DIR ${CMAKE_CURRENT_SOURCE_DIR}/test/unit)
 file(GLOB_RECURSE TEST_FILES CONFIGURE_DEPENDS "${TEST_DIR}/*.cpp")
 list(LENGTH TEST_FILES _TEST_COUNT)
-message(STATUS "Collected ${_TEST_COUNT} test files under ${TEST_DIR} (recursive)")
+message(STATUS "Collected ${_TEST_COUNT} unit test files under ${TEST_DIR} (recursive)")
 
 set(M1104_SKIP_TESTS "")
 # 新版 GoogleTest 会将测试驱动提升至 C++17。按实际库标准独立编译消费端，
@@ -51,6 +51,8 @@ endif()
 set(TEST_DEPS_test_redis_lock "HIREDIS;REDISPP")
 set(TEST_REQUIRE_LIBS_test_redis_lock "HIREDIS;REDISPP")
 
+# 从单元测试目录创建可用的测试程序，业务实现只链接 mental1104，不重复列入源码。
+# SRC: 测试翻译单元的绝对路径；不满足当前平台、标准或依赖时跳过注册。
 function(add_optional_test SRC)
   get_filename_component(TEST_NAME "${SRC}" NAME_WE)
   message(STATUS "Consider test ${TEST_NAME} -> ${SRC}")
@@ -98,7 +100,7 @@ function(add_optional_test SRC)
 
   set(_extra_sources "")
   if(TEST_NAME STREQUAL "test_json")
-    list(APPEND _extra_sources "${TEST_DIR}/json/consumer.cc")
+    list(APPEND _extra_sources $<TARGET_OBJECTS:m1104_json_consumer>)
   endif()
   if (TEST_NAME STREQUAL "test_c_api_compat")
     list(APPEND _extra_sources "${TEST_DIR}/c_api_compat_c_smoke.c")
@@ -165,8 +167,18 @@ function(add_optional_test SRC)
   target_use_all_components(${TEST_NAME})
 
   add_test(NAME ${TEST_NAME} COMMAND ${TEST_NAME})
+  set_tests_properties(${TEST_NAME} PROPERTIES LABELS "unit")
   message(STATUS "Added test ${TEST_NAME}")
 endfunction()
+
+if(M1104_HAS_JSON)
+  # 同一份消费端源码只按库的实际标准编译一次，复用给行为测试及独立消费程序。
+  # GoogleTest 提升测试驱动标准时，不能连带改变此对象库的 optional/string_view ABI。
+  add_library(m1104_json_consumer OBJECT "${TEST_DIR}/json/consumer.cc")
+  target_link_libraries(m1104_json_consumer PRIVATE mental1104)
+  set_target_properties(m1104_json_consumer PROPERTIES
+    CXX_STANDARD ${CMAKE_CXX_STANDARD} CXX_STANDARD_REQUIRED ON)
+endif()
 
 foreach(SRC ${TEST_FILES})
   add_optional_test("${SRC}")
@@ -175,11 +187,12 @@ endforeach()
 if(M1104_HAS_JSON)
   # 不链接 GoogleTest，确保最低标准也实际编译并链接 JSON 公共模板。
   add_executable(test_json_consumer
-    "${TEST_DIR}/json/consumer.cc" "${TEST_DIR}/json/consumer_main.cc")
+    "${TEST_DIR}/json/consumer_main.cc" $<TARGET_OBJECTS:m1104_json_consumer>)
   target_link_libraries(test_json_consumer PRIVATE mental1104)
   set_target_properties(test_json_consumer PROPERTIES
     CXX_STANDARD ${CMAKE_CXX_STANDARD} CXX_STANDARD_REQUIRED ON)
   add_test(NAME test_json_consumer COMMAND test_json_consumer)
+  set_tests_properties(test_json_consumer PROPERTIES LABELS "unit")
 endif()
 
 option(BUILD_THIRD_LIBS_FROM_SOURCE "Add lib/* that contain CMakeLists.txt via add_subdirectory" OFF)

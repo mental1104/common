@@ -57,7 +57,7 @@ Observation observe_consumer() {
     // promise 的借用持续到 future.get 完成，执行器在离开作用域时回收线程。
     executor.execute([&result, &cache] { result.set_value(cache(41)); });
 
-#if M1104_HAS_JSON_CJSON || M1104_HAS_JSON_RAPIDJSON
+#if M1104_HAS_JSON_CJSON || M1104_HAS_JSON_RAPIDJSON || M1104_HAS_JSON_NLOHMANN
     const char payload[] = "{\"ok\":true}";
 #endif
     // 按实际库能力访问
@@ -77,6 +77,12 @@ Observation observe_consumer() {
         payload, sizeof(payload) - 1, mental1104::JsonParser::CJSON);
     parse_ok = parse_ok && parsed_cjson.ok &&
                parsed_cjson.get().get_optional<bool>("ok").value_or(false);
+#endif
+#if M1104_HAS_JSON_NLOHMANN
+    const auto parsed_nlohmann = mental1104::load_json(
+        payload, sizeof(payload) - 1, mental1104::JsonParser::NlohmannJSON);
+    parse_ok = parse_ok && parsed_nlohmann &&
+               parsed_nlohmann.get().get_optional<bool>("ok").value_or(false);
 #endif
     mental1104::unique_file file(std::tmpfile());
     mental1104::ExponentialBackoff backoff(10, 100);

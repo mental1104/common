@@ -44,3 +44,7 @@
 	url = https://github.com/boostorg/boost.git
 	ignore = dirty
 	shallow = true
+[submodule "cpp/lib/nlohmann_json"]
+	path = cpp/lib/nlohmann_json
+	url = https://github.com/nlohmann/json.git
+	ignore = dirty

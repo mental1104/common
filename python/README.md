@@ -108,6 +108,7 @@ True
 **备注：**
 
 - 无效 JSON 会返回 `None`，并在后端提供上下文时打印解析上下文。
+- `cpp` 后端需要可用的 `mental1104_export_layer` 绑定，可通过 `JsonUtil.get_parser_names()` 查询。绑定直接返回 Python 对象时复用该对象；仅返回校验状态时，再由标准库构造对象。策略选择与环境覆盖见导出层的 [interface.py](../export/python/src/mental1104_export_layer/interface.py)，共享库定位见 [_ctypes_strategy.py](../export/python/src/mental1104_export_layer/_ctypes_strategy.py) 中的就地说明。
 
 ### YAML 工具
 

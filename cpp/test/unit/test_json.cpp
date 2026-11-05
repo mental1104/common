@@ -3,12 +3,13 @@
 #include <cstdint>
 #include <limits>
 #include <memory>
+#include <stdexcept>
 #include <utility>
 #include <vector>
 
 #include "json/consumer.h"
 /// @file
-/// 两种内置后端复用的行为场景，覆盖读取、错误、视图生命周期及编解码往返。
+/// 各个内置后端复用的行为场景，覆盖读取、错误、视图生命周期及编解码往返。
 /// 应用自有后端场景只依赖公开抽象，不通过原生类型强转验证实现细节。
 #include "mental1104/json/codec.h"
 
@@ -25,6 +26,9 @@ std::vector<JsonParser> enabled_backends() {
 #if M1104_HAS_JSON_RAPIDJSON
     result.push_back(JsonParser::RapidJSON);
 #endif
+#if M1104_HAS_JSON_NLOHMANN
+    result.push_back(JsonParser::NlohmannJSON);
+#endif
     return result;
 }
 
@@ -36,6 +40,21 @@ protected:
     /// @return 独占解析结果。
     ParseResult parse(const std::string &text) const {
         return load_json(text.data(), text.size(), GetParam());
+    }
+    /// 建立当前后端的独立解析器，用于验证重复调用和解析器先行销毁。
+    /// @return 独占解析器；非内置枚举为空，不回退到其他后端。
+    std::unique_ptr<IJsonParser> make_parser() const {
+        switch (GetParam()) {
+            case JsonParser::CJSON:
+                return std::unique_ptr<IJsonParser>(new CJsonParser);
+            case JsonParser::RapidJSON:
+                return std::unique_ptr<IJsonParser>(new RapidJsonParser);
+            case JsonParser::NlohmannJSON:
+                return std::unique_ptr<IJsonParser>(new NlohmannJsonParser);
+            case JsonParser::Custom:
+                return {};
+        }
+        return {};
     }
 };
 
@@ -147,6 +166,8 @@ TEST_P(JsonAccess, LoadedRootSupportsArrayTraversal) {
     const auto first = loaded.get().begin();
     auto moved = std::move(loaded);
     EXPECT_FALSE(loaded);
+    // 公共契约允许读取移出后的结果，此处应返回 Missing 而非访问原 DOM。
+    // NOLINTNEXTLINE(clang-analyzer-cplusplus.Move)
     EXPECT_FALSE(loaded.get().is_valid());
     EXPECT_EQ((*first).as_i64(), 1);
     const auto dumped = dump_json(moved);
@@ -253,13 +274,9 @@ TEST_P(JsonAccess, DocumentsAndViewsHaveIndependentLifetimes) {
     ParseResult parsed;
     {
         std::string input = R"({"value":"owned"})";
-        if (GetParam() == JsonParser::CJSON) {
-            const CJsonParser parser;
-            parsed = parser.parse(string_view(input));
-        } else {
-            const RapidJsonParser parser;
-            parsed = parser.parse(string_view(input));
-        }
+        const auto parser = this->make_parser();
+        ASSERT_TRUE(parser);
+        parsed = parser->parse(string_view(input));
         input.assign(input.size(), 'x');
     }
     ASSERT_TRUE(parsed);
@@ -267,6 +284,8 @@ TEST_P(JsonAccess, DocumentsAndViewsHaveIndependentLifetimes) {
     const auto child = root.get("value");
     const auto copy = child.get_optional<std::string>();
     auto moved = std::move(parsed);
+    // 专门验证移出后的 Missing 契约，不再读取已转移的文档。
+    // NOLINTNEXTLINE(clang-analyzer-cplusplus.Move)
     EXPECT_FALSE(parsed.get().is_valid());
     EXPECT_EQ(child.as_string_copy(), "owned");
     ParseResult assigned;
@@ -283,10 +302,8 @@ TEST_P(JsonAccess, DocumentsAndViewsHaveIndependentLifetimes) {
 
 /// 同一解析器可连续产生多个独立文档，根可以是任意 JSON 类型。
 TEST_P(JsonAccess, RepeatedParsingAndScalarRoots) {
-    const std::unique_ptr<IJsonParser> parser(
-        GetParam() == JsonParser::CJSON
-            ? static_cast<IJsonParser *>(new CJsonParser)
-            : static_cast<IJsonParser *>(new RapidJsonParser));
+    const auto parser = this->make_parser();
+    ASSERT_TRUE(parser);
     const auto first = parser->parse(string_view("42"));
     const auto second = parser->parse(string_view("null"));
     const auto third = parser->parse(string_view("false"));
@@ -337,7 +354,7 @@ TEST_P(JsonAccess, KeysUseCaseAndLength) {
     EXPECT_FALSE(root.has(string_view(embedded.data(), embedded.size())));
 }
 
-/// 两种后端均能输出完整的紧凑 JSON，且序列化不修改原文档或视图。
+/// 各个后端均能输出完整的紧凑 JSON，且序列化不修改原文档或视图。
 TEST_P(JsonAccess, DumpRoundTripsNestedValuesAcrossEnabledBackends) {
     auto parsed = this->parse(
         R"({"message":"quote: \" slash: \\ line: \n tab: \t",)"
@@ -468,15 +485,40 @@ private:
     }
 };
 
-/// 最小应用侧解析器，用于验证第三方扩展无需注册。
+/// 最小应用侧解析器，记录钩子调用以验证第三方扩展也经过公共校验。
 class ConstantParser final : public IJsonParser {
 public:
+    /// 查询实际进入后端钩子的次数，不把被公共校验拒绝的调用计入其中。
+    /// @return 当前实例完成的后端钩子调用次数。
+    std::size_t parse_calls() const noexcept { return this->parse_calls_; }
+    /// 读取最后一次进入钩子的完整输入副本，不借用调用方缓冲。
+    /// @return 当前实例持有的只读文本，尚未进入钩子时为空。
+    const std::string &last_input() const noexcept { return this->last_input_; }
+
+private:
     /// 创建固定文档，不解释输入内容。
-    /// @param text 在此测试适配器中忽略的只读输入。
+    /// @param text 已通过公共校验的只读输入，复制保存以验证原样转发。
     /// @return 独占的自定义文档。
-    ParseResult parse(const string_view &) const override {
+    ParseResult do_parse(const string_view &text) const override {
+        ++this->parse_calls_;
+        this->last_input_.assign(text.data(), text.size());
         return ParseResult(
             JsonDoc(std::unique_ptr<IJsonDocument>(new ConstantDocument)));
+    }
+    /// 仅用于单线程测试观察后端是否被调用，不修改生产解析器的并发契约。
+    mutable std::size_t parse_calls_{0};
+    /// 最近一次钩子输入的拥有型副本，防止测试读取悬空视图。
+    mutable std::string last_input_;
+};
+
+/// 模拟调用方解析器抛异常，检查统一入口仍保留原有异常传播契约。
+class ThrowingParser final : public IJsonParser {
+private:
+    /// 在输入通过公共校验后抛出后端异常。
+    /// @param text 在本测试替身中忽略的已校验输入。
+    /// @return 不返回结果，始终抛出 std::runtime_error。
+    ParseResult do_parse(const string_view &) const override {
+        throw std::runtime_error("custom backend failure");
     }
 };
 
@@ -488,6 +530,69 @@ TEST(JsonExtension, ApplicationBackendNeedsNoRegistry) {
     EXPECT_EQ(parsed.backend(), JsonParser::Custom);
     EXPECT_EQ(parsed.get().get_optional<int>().value_or(0), 42);
     EXPECT_FALSE(load_json(string_view("42"), JsonParser::Custom));
+}
+
+/// 空输入和所有位置的原始 NUL 都由公共入口拒绝，不能进入自定义后端。
+TEST(JsonExtension, InputValidationPrecedesBackendDispatch) {
+    const ConstantParser parser;
+    const IJsonParser &base = parser;
+    const std::vector<std::string> inputs{"", std::string("\0{}", 3),
+        std::string("{}\0tail", 7), std::string("{}\0", 3),
+        std::string("\"a\0b\"", 5)};
+    const std::vector<std::size_t> offsets{0, 0, 2, 2, 2};
+    for (std::size_t i = 0; i < inputs.size(); ++i) {
+        // 同时验证经基类引用和具体类型调用时，公共校验都不会被绕过。
+        const auto result = base.parse(string_view(inputs[i]));
+        const auto direct = parser.parse(string_view(inputs[i]));
+        EXPECT_FALSE(result);
+        EXPECT_FALSE(direct);
+        EXPECT_FALSE(result.ok);
+        EXPECT_FALSE(result.get().is_valid());
+        EXPECT_EQ(result.error, "empty JSON input or embedded NUL byte");
+        EXPECT_EQ(result.offset, offsets[i]);
+        EXPECT_EQ(direct.error, result.error);
+        EXPECT_EQ(direct.offset, result.offset);
+    }
+    EXPECT_EQ(parser.parse_calls(), 0u);
+
+    // 转义 NUL 是普通 JSON 字节，公共入口必须保留空白和整个有界区间。
+    const char buffer[] = {' ', '"', '\\', 'u', '0', '0', '0', '0', '"', '\n'};
+    const auto result = base.parse(string_view(buffer, sizeof(buffer)));
+    ASSERT_TRUE(result) << result.error;
+    EXPECT_EQ(result.get().as_i64(), 42);
+    EXPECT_EQ(parser.parse_calls(), 1u);
+    EXPECT_EQ(parser.last_input(), std::string(buffer, sizeof(buffer)));
+}
+
+/// 公共校验不通过时不执行后端，通过后不吞掉或重新包装后端异常。
+TEST(JsonExtension, BackendExceptionsPropagateAfterValidation) {
+    const ThrowingParser parser;
+    const auto invalid = parser.parse(string_view{});
+    EXPECT_FALSE(invalid);
+    EXPECT_THROW(parser.parse(string_view("{}")), std::runtime_error);
+}
+
+/// 经直接解析器和加载入口调用时，所有内置后端提供相同的公共输入错误。
+TEST(JsonConfiguration, InputErrorsPrecedeBackendAvailability) {
+    const CJsonParser cjson;
+    const RapidJsonParser rapid;
+    const NlohmannJsonParser nlohmann;
+    const std::vector<const IJsonParser *> parsers{&cjson, &rapid, &nlohmann};
+    const std::vector<JsonParser> backends{
+        JsonParser::CJSON, JsonParser::RapidJSON, JsonParser::NlohmannJSON};
+    for (std::size_t i = 0; i < parsers.size(); ++i) {
+        const auto empty = parsers[i]->parse(string_view{});
+        const auto loaded = load_json(string_view{}, backends[i]);
+        EXPECT_FALSE(empty);
+        EXPECT_EQ(empty.error, "empty JSON input or embedded NUL byte");
+        EXPECT_EQ(empty.offset, 0u);
+        EXPECT_EQ(loaded.error, empty.error);
+        const char buffer[] = {'{', '}', '\0', 'x'};
+        const auto nul = parsers[i]->parse(string_view(buffer, sizeof(buffer)));
+        EXPECT_FALSE(nul);
+        EXPECT_EQ(nul.error, empty.error);
+        EXPECT_EQ(nul.offset, 2u);
+    }
 }
 
 /// 独立翻译单元可组合调用方自定义类型与运行时核心。
@@ -541,7 +646,75 @@ TEST(JsonConfiguration, DisabledBackendsReportFailure) {
     EXPECT_FALSE(rapid);
     EXPECT_FALSE(rapid.error.empty());
 #endif
+#if !M1104_HAS_JSON_NLOHMANN
+    const auto nlohmann = NlohmannJsonParser{}.parse(string_view("{}"));
+    EXPECT_FALSE(nlohmann);
+    EXPECT_FALSE(nlohmann.error.empty());
+    EXPECT_FALSE(load_json("{}", JsonParser::NlohmannJSON));
+#endif
 }
+
+#if M1104_HAS_JSON_NLOHMANN
+/// 完整数值、内嵌 NUL 键与字符串在读取及序列化往返中均不丢失。
+TEST(JsonNlohmannCapabilities, FullWidthIntegersKeysAndStrings) {
+    const char text[] =
+        R"({"max":9223372036854775807,"min":-9223372036854775808,)"
+        R"("umax":18446744073709551615,"s":"a\u0000b","a\u0000b":7})";
+    const auto loaded = load_json(text, JsonParser::NlohmannJSON);
+    ASSERT_TRUE(loaded) << loaded.error;
+    const auto dumped = dump_json(loaded);
+    ASSERT_TRUE(dumped) << dumped.error;
+    const auto restored = load_json(dumped.text, JsonParser::NlohmannJSON);
+    ASSERT_TRUE(restored) << restored.error;
+    const std::string nul_key("a\0b", 3);
+    for (const auto *result : {&loaded, &restored}) {
+        const auto root = result->get();
+        EXPECT_EQ(root.get_optional<long long>("max").value_or(0),
+            (std::numeric_limits<long long>::max)());
+        EXPECT_EQ(root.get_optional<long long>("min").value_or(0),
+            (std::numeric_limits<long long>::min)());
+        EXPECT_EQ(root.get_optional<unsigned long long>("umax").value_or(0),
+            (std::numeric_limits<unsigned long long>::max)());
+        EXPECT_FALSE(root.get_optional<long long>("umax"));
+        EXPECT_EQ(root.get_optional<std::string>("s").value_or(""), nul_key);
+        EXPECT_EQ(root.get_optional<int>(string_view(nul_key)).value_or(0), 7);
+        EXPECT_FALSE(root.has("a"));
+    }
+    EXPECT_EQ(dumped.text.find('\0'), std::string::npos);
+}
+
+/// 统一语法错误的字节偏移，数值溢出与无效 UTF-8 不向调用方抛原生异常。
+TEST(JsonNlohmannCapabilities, ParsingErrorsStayWithinUnifiedContract) {
+    const std::string malformed = "{\n\"value\":]}";
+    const auto syntax = load_json(malformed, JsonParser::NlohmannJSON);
+    EXPECT_FALSE(syntax);
+    EXPECT_EQ(syntax.offset, malformed.find(']'));
+    const auto eof = load_json("{", JsonParser::NlohmannJSON);
+    EXPECT_FALSE(eof);
+    EXPECT_EQ(eof.offset, 1u);
+    const auto overflow = load_json("1e9999", JsonParser::NlohmannJSON);
+    EXPECT_FALSE(overflow);
+    EXPECT_FALSE(overflow.error.empty());
+    EXPECT_EQ(overflow.offset, 0u);
+    const auto invalid_utf8 =
+        load_json(std::string("\"\xff\"", 3), JsonParser::NlohmannJSON);
+    EXPECT_FALSE(invalid_utf8);
+    for (const unsigned char byte : invalid_utf8.error) {
+        EXPECT_LE(byte, 127u);
+    }
+    EXPECT_FALSE(load_json("[1,]", JsonParser::NlohmannJSON));
+}
+
+/// 直接接入保序 DOM，输入成员顺序在紧凑输出中保持，不经中间 JSON 类型重排。
+TEST(JsonNlohmannCapabilities, DumpPreservesMemberOrder) {
+    const std::string text = R"({"z":1,"a":2,"nested":{"y":3,"b":4}})";
+    const auto loaded = load_json(text, JsonParser::NlohmannJSON);
+    ASSERT_TRUE(loaded) << loaded.error;
+    const auto dumped = dump_json(loaded);
+    ASSERT_TRUE(dumped) << dumped.error;
+    EXPECT_EQ(dumped.text, text);
+}
+#endif
 
 #if M1104_HAS_JSON_RAPIDJSON
 /// RapidJSON 保留完整整数和内嵌 NUL；这些是明确的后端能力差异。

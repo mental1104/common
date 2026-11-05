@@ -159,14 +159,9 @@ private:
 }  // namespace
 
 /// 常规解析有界只读输入，成功后把 DOM 与 allocator 一起移入固定地址的文档。
-/// @param text 不要求 NUL 结尾的 JSON 字节，不修改输入，也不借用其存储到结果。
+/// @param text 已通过公共字节校验的只读输入，不借用其存储到结果。
 /// @return 独占文档或错误，错误位置为输入起点的字节偏移；分配异常仍可抛出。
-ParseResult RapidJsonParser::parse(const string_view &text) const {
-    // 统一拒绝空输入和原始 NUL，避免不同 SDK 对结束符的处理产生分歧。
-    if (const auto bad = json_detail::invalid_input(text)) {
-        return json_detail::parse_error(
-            "empty JSON input or embedded NUL byte", *bad);
-    }
+ParseResult RapidJsonParser::do_parse(const string_view &text) const {
     // 使用非原地解析，DOM 的字符串存储不依赖调用方输入缓冲继续存活。
     rapidjson::Document document;
     document.Parse(text.data(), text.size());
@@ -184,8 +179,9 @@ ParseResult RapidJsonParser::parse(const string_view &text) const {
 
 #else
 /// 当前构建缺少 RapidJSON，接收但不读取传入的只读视图，也不保存其存储。
+/// @param text 已通过公共字节校验的只读输入，在本分支中忽略。
 /// @return 后端不可用错误，不隐式改用 cJSON 或其他实现。
-ParseResult RapidJsonParser::parse(const string_view &) const {
+ParseResult RapidJsonParser::do_parse(const string_view &) const {
     return json_detail::parse_error("RapidJSON backend is not built");
 }
 #endif

@@ -1,8 +1,9 @@
 option(M1104_REGISTER_BENCHMARK_TESTS "Build benchmarks and include them in ordinary CTest runs" OFF)
+set(_m1104_benchmark_catalog "")
 if (HAVE_GOOGLE_BENCHMARK)
-  set(BENCH_DIR ${PROJECT_SOURCE_DIR}/bench)
+  set(BENCH_DIR ${PROJECT_SOURCE_DIR}/test/bench)
   if (EXISTS "${BENCH_DIR}")
-    file(GLOB BENCH_SRCS CONFIGURE_DEPENDS "${BENCH_DIR}/*.cpp")
+    file(GLOB_RECURSE BENCH_SRCS CONFIGURE_DEPENDS "${BENCH_DIR}/*.cpp")
     if (BENCH_SRCS)
       set(_bench_targets "")
       if (DEFINED CMAKE_CXX_STANDARD AND CMAKE_CXX_STANDARD LESS 20)
@@ -30,6 +31,8 @@ if (HAVE_GOOGLE_BENCHMARK)
           add_executable(${TGT} EXCLUDE_FROM_ALL "${SRC}")
         endif()
         list(APPEND _bench_targets ${TGT})
+        # 由生成器记录当前配置实际定义的目标，不扫描 bin 中可能遗留的旧程序。
+        string(APPEND _m1104_benchmark_catalog "$<TARGET_FILE:${TGT}>\n")
         target_include_directories(${TGT} PRIVATE
           ${PROJECT_SOURCE_DIR}/include
         )
@@ -63,3 +66,8 @@ if (HAVE_GOOGLE_BENCHMARK)
     message(STATUS "Benchmark dir not found: ${BENCH_DIR}")
   endif()
 endif()
+
+# 默认不把基准加入 ALL 或 CTest；显式聚合目标始终复用同一份库与基准编译产物。
+# 按配置分别生成，兼容单配置生成器与 Visual Studio/Ninja Multi-Config。
+file(GENERATE OUTPUT "${CMAKE_BINARY_DIR}/m1104-benchmarks-$<CONFIG>.txt"
+  CONTENT "${_m1104_benchmark_catalog}")

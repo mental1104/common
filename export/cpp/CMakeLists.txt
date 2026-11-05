@@ -6,6 +6,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 option(EXPORT_BUILD_PYBIND11 "Build pybind11 Python extension" ON)
+option(M1104_ENABLE_JSON_NLOHMANN "Enable the nlohmann JSON parser backend" ON)
 
 set(REPO_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../..")
 set(THIRDROOT "${REPO_ROOT}/cpp/lib")
@@ -24,10 +25,17 @@ set(M1104_BUILD_HAS_ASYNC_SIMPLE FALSE)
 set(M1104_HAS_JSON TRUE)
 set(M1104_HAS_JSON_CJSON FALSE)
 set(M1104_HAS_JSON_RAPIDJSON FALSE)
+set(M1104_HAS_JSON_NLOHMANN FALSE)
 find_path(EXPORT_RAPIDJSON_INCLUDE_DIR rapidjson/document.h
     PATHS "${THIRDROOT}/rapidjson/include")
 if(EXPORT_RAPIDJSON_INCLUDE_DIR)
     set(M1104_HAS_JSON_RAPIDJSON TRUE)
+endif()
+find_path(EXPORT_NLOHMANN_JSON_INCLUDE_DIR nlohmann/json.hpp
+    HINTS "${THIRDROOT}/nlohmann_json/single_include"
+        "${THIRDROOT}/nlohmann_json/include")
+if(M1104_ENABLE_JSON_NLOHMANN AND EXPORT_NLOHMANN_JSON_INCLUDE_DIR)
+    set(M1104_HAS_JSON_NLOHMANN TRUE)
 endif()
 
 # cJSON 为导出库的私有原生实现，缺失时保留明确的后端错误。
@@ -45,6 +53,9 @@ target_include_directories(export_json BEFORE PUBLIC
     "${CMAKE_CURRENT_BINARY_DIR}/include")
 if(EXPORT_RAPIDJSON_INCLUDE_DIR)
     target_include_directories(export_json PRIVATE "${EXPORT_RAPIDJSON_INCLUDE_DIR}")
+endif()
+if(M1104_HAS_JSON_NLOHMANN)
+    target_include_directories(export_json SYSTEM PRIVATE "${EXPORT_NLOHMANN_JSON_INCLUDE_DIR}")
 endif()
 
 set(THIRD_INCLUDE_DIRS

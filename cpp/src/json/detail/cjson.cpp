@@ -182,15 +182,10 @@ private:
 }  // namespace
 
 /// 使用有界输入创建 cJSON 树，检查尾部后才提交成功文档。
-/// @param text 不要求 NUL 结尾的只读字节；解析后不保留对输入存储的借用。
+/// @param text 已通过公共字节校验的只读输入；解析后不保留对输入存储的借用。
 /// @return 成功时独占文档；失败时文档为空，提供相对于输入起点的错误字节偏移。
 /// cJSON 仍访问进程级状态，不承诺并发解析；C++ 分配异常沿调用链传播。
-ParseResult CJsonParser::parse(const string_view &text) const {
-    // 先处理空输入和原始 NUL，避免 SDK 把缓冲中途的 NUL 当成完整输入结束。
-    if (const auto bad = json_detail::invalid_input(text)) {
-        return json_detail::parse_error(
-            "empty JSON input or embedded NUL byte", *bad);
-    }
+ParseResult CJsonParser::do_parse(const string_view &text) const {
     // end 只属于本次调用；原生树一创建就进入 RAII，后续失败也不会遗留资源。
     const char *end = nullptr;
     CJsonTree tree(
@@ -221,8 +216,9 @@ ParseResult CJsonParser::parse(const string_view &text) const {
 
 #else
 /// 当前构建缺少 cJSON，接收但不读取传入的只读视图，也不保留其存储。
+/// @param text 已通过公共字节校验的只读输入，在本分支中忽略。
 /// @return 明确的后端不可用错误，不回退到其他 JSON 库。
-ParseResult CJsonParser::parse(const string_view &) const {
+ParseResult CJsonParser::do_parse(const string_view &) const {
     return json_detail::parse_error("cJSON backend is not built");
 }
 #endif

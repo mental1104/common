@@ -19,7 +19,47 @@ Debian/Ubuntu 本机独立构建默认用 apt 补齐 Git、Python 3、pkg-config
 
 `M1104_AUTO_SETUP` 控制自动源码/SDK 准备，独立本机构建默认开启；被其他工程包含、设置了 `CI` 环境变量或交叉编译时默认关闭。离线构建可用 `-DM1104_AUTO_SETUP=OFF` 复用已经提供的依赖；仅关闭系统包安装可用 `-DM1104_INSTALL_SYSTEM_DEPS=OFF`，源码准备仍然执行。`AUTO_FETCH_SUBMODULES=OFF` 禁止自动拉取缺失源码。SDK 二进制按构建树存于 `_deps/`，避免不同 C++ 标准的 SDK 相互覆盖；`M1104_DEPENDENCY_JOBS` 默认 `4`，可调整准备阶段并发数。
 
-默认 CTest 只注册功能测试。benchmark 仍可通过 `./dev bench-cpp` 单独运行；希望普通构建与 CTest 同时包含 benchmark 时，配置 `-DM1104_REGISTER_BENCHMARK_TESTS=ON`。
+单元/行为测试及其辅助文件位于 `cpp/test/unit/`，性能基准位于 `cpp/test/bench/`。默认构建只编译单元测试，普通 `ctest` 也只执行单元测试；基准目标保留在同一构建图中，按需构建。
+
+在仓库根目录执行 `./dev test-cpp`，始终只运行 `unit` 标签的测试；`./dev bench-cpp` 构建 `m1104_benchmarks` 并运行 `bench/` 当前配置启用的程序，沿用 `--file` 和 `--filter` 筛选。基准结果写入 `artifacts/bench/cpp/`。两类测试链接同一份业务库，共享的 JSON 消费端辅助代码也只通过对象库编译一次。此约定以同一构建目录和编译配置为单位，不跨不同标准或 Debug/Release 复用对象。
+
+若要让普通构建与 CTest 显式包含基准，在原构建目录配置：
+
+```sh
+cmake -DM1104_REGISTER_BENCHMARK_TESTS=ON .
+cmake --build . --parallel 4
+ctest -L bench --output-on-failure
+```
+
+**命令结果：** 构建缺失的基准产物，并仅执行 `bench` 标签的性能用例；此配置下直接 `ctest` 会执行两类测试，`./dev test-cpp` 仍只执行单元测试。用 `-DM1104_REGISTER_BENCHMARK_TESTS=OFF` 恢复默认注册方式，已有库和测试对象保持复用。
+
+### JSON parser 基准
+
+`cpp/test/bench/bench_json_gbench.cpp` 使用同一程序比较已启用的 cJSON、RapidJSON 和 nlohmann JSON。一次操作为 `load_json`、成功状态检查及文档释放，包含公共校验、DOM 分配和销毁，不含输入生成、文件读取、业务字段遍历或序列化。参数 `0` 是短对象，`64/256/1024` 是嵌套文档中的用户数；实际输入长度由 `input_bytes` 给出。
+
+在已准备仓库依赖的环境中，从仓库根目录运行下列命令。NAS 工作区在 `code-server` 容器内执行，Linux 可在最后一条命令前加 `taskset -c 2` 固定到一个可用 CPU：
+
+```sh
+cmake -S cpp -B cpp/build/json-bench-release \
+  -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_STANDARD=23 \
+  -DENABLE_COVERAGE=OFF -DCOVERAGE=OFF \
+  -DM1104_AUTO_SETUP=OFF -DAUTO_FETCH_SUBMODULES=OFF \
+  -DM1104_ENABLE_WEB=OFF -DM1104_ENABLE_REDIS_LOCK=OFF \
+  -DM1104_ENABLE_HIGH_PRECISION=OFF -DM1104_ENABLE_BOOST_ASIO=OFF \
+  -DM1104_ENABLE_KAFKA=OFF -DM1104_ENABLE_PULSAR=OFF
+cmake --build cpp/build/json-bench-release --target bench_bench_json_gbench --parallel 4
+mkdir -p artifacts/bench/cpp/json-parser
+cpp/build/json-bench-release/bin/bench_bench_json_gbench \
+  --benchmark_enable_random_interleaving=true \
+  --benchmark_out=artifacts/bench/cpp/json-parser/results.json \
+  --benchmark_out_format=json
+```
+
+**命令结果：** 运行三个后端各四种输入规模；每组预热至少 `0.1s`，每个吞吐 trial 至少 `0.3s`，重复五次并交错顺序。标准输出及 JSON 包含每次 trial 和 `mean/median/stddev/cv` 汇总，其中 `cv` 为变异系数。可用 `--benchmark_filter='BM_iface_.*/0/'` 只测短对象。现有 `./dev bench-cpp --file json` 也能发现这些用例，但使用其固定的 `cpp/build` 配置；不要把 Debug 或覆盖率结果用于后端性能排名。
+
+- `ops_per_second` 和 `bytes_per_second` 为单线程墙钟吞吐。每个 trial 的吞吐计时结束后，另测 `512` 次相同操作，输出 `p50_ns/p95_ns/p99_ns/max_ns`；延迟包含读钟成本，尤其对短对象有影响，不能拿采样 p50 的倒数替代吞吐。
+- POSIX 平台同时输出吞吐批次的 `user_s/sys_s/cpu_pct`、自愿及非自愿上下文切换次数。`rss_peak_kib` 是整个进程累计峰值，包含前面的后端，不能据此比较各后端独立内存占用；非 POSIX 平台不输出这些资源指标。
+- 同一进程、相同输入和优化参数便于比较当前统一 API 下的后端成本。频率调整、其他进程争用、缓存和分配器状态仍会影响结果，应结合吞吐与 p99 的 CV 判断稳定性。这组基准没有旧版本或原生 SDK 对照，不能单独证明 NVI 改动增加或减少了多少开销。
 
 ## 声明、实现与链接
 
@@ -122,7 +162,7 @@ VS Code CMake 配置默认启用 Web 目标；此编辑器选项不改变命令�
 | 服务生命周期 | `Server::add_route/add_websocket/start/request_stop/wait` | 非虚公共方法 | `mental1104/web/server.h` | 固定注册校验、配置冻结、启动、停止幂等与线程回收流程 |
 | 后端装配 | `make_drogon_server` | 工厂函数 | `mental1104/web/drogon_server.h` | 返回 bool，成功时通过输出参数交付 `unique_ptr<Server>` |
 
-HTTP、文件下载和 WebSocket 的调用见 `test/web/server_scenarios.cc`。
+HTTP、文件下载和 WebSocket 的调用见 `test/unit/web/server_scenarios.cc`。
 本仓库不再维护 C++ examples 目录。
 
 其余能力的调用与可观察结果：
@@ -203,7 +243,7 @@ HTTP 路由和 WebSocket 路由共用该监听器。若启用已有 TLS 选项�
 基类析构不调用虚钩子，因此新后端必须在派生类析构中调用 `shutdown()`；
 从服务回调中析构或遗漏线程回收属于契约违例，将终止进程。
 
-无需 SDK 的参考后端与可观察结果见 `test/web/lifecycle_scenarios.cc`：执行重复路由拒绝、
+无需 SDK 的参考后端与可观察结果见 `test/unit/web/lifecycle_scenarios.cc`：执行重复路由拒绝、
 启动前/启动中取消、阶段顺序、各阶段失败清理、异常传播、自等待保护及析构回收测试。
 
 Drogon 的 `app.run()` 同时启动监听和运行事件循环。适配器在监听阶段启动私有 SDK 线程，
@@ -217,12 +257,12 @@ Linux 上多个 I/O 线程的内部监听记录必须指向同一公共地址；
 
 ### 复用后端场景测试
 
-`test/web/server_scenarios.cc` 只使用公共 Server 接口，HTTP/HTTPS/WebSocket 请求由
+`test/unit/web/server_scenarios.cc` 只使用公共 Server 接口，HTTP/HTTPS/WebSocket 请求由
 `wire_client.cc` 中独立的 Beast 客户端发送。场景覆盖路由、HEAD、文件和 Range、
 错误隔离、延迟响应、请求大小限制、WebSocket 鉴权/消息/断连以及 TLS。
 默认使用两个 I/O 线程和临时端口，网络操作有三秒截止时间。
 
-接入新的后端只需新增一个接入文件，按 `test/web/backend.h` 定义 `web_test::backend()`，
+接入新的后端只需新增一个接入文件，按 `test/unit/web/backend.h` 定义 `web_test::backend()`，
 提供后端名称、返回 bool 的 Server 工厂及 TLS 能力，再在构建中调用
 `m1104_add_web_backend_scenarios(测试目标 后端库目标 接入文件绝对路径)`。
 参考 `drogon_backend.cc`；SDK 专属限制的测试放在该接入文件，不放进公共场景。
@@ -319,7 +359,7 @@ Pulsar 的 Producer 创建接口通过实际头文件与库进行编译链接探
 | 容器与字符串 | `ExponentialBackoff` | 类 | `mental1104/util.h` | 按上限推进重试延迟，可显式加入对称随机抖动。 |
 | 缓存包装器 | `LRUCache`, `make_lru_cache`, `make_cache` | 类 / 函数 | `mental1104/core/cache.h` | 用 tuple 键 LRU 或无界缓存包装可调用对象。 |
 | 缓存包装器 | `LFUCache`, `make_lfu_cache` | 类 / 函数 | `mental1104/core/cache.h` | 用 tuple 键 LFU 缓存包装可调用对象。 |
-| JSON | `IJsonParser`, `IJsonDocument`, `CJsonParser`, `RapidJsonParser`, `JsonParser`, `load_json`, `dump_json`, `ParseResult`, `DumpResult`, `JsonDoc`, `JsonValueView`, `JsonType`, `JsonOptional`, `JsonValueReader` | 接口 / 类 / 枚举 / 函数 / 结构体 / 模板 | `mental1104/json/codec.h`、`mental1104/json/access.h` | 可替换后端编解码、只读节点访问、类型化可选读取及调用方模型转换。 |
+| JSON | `IJsonParser`, `IJsonDocument`, `CJsonParser`, `RapidJsonParser`, `NlohmannJsonParser`, `JsonParser`, `load_json`, `dump_json`, `ParseResult`, `DumpResult`, `JsonDoc`, `JsonValueView`, `JsonType`, `JsonOptional`, `JsonValueReader` | 接口 / 类 / 枚举 / 函数 / 结构体 / 模板 | `mental1104/json/codec.h`、`mental1104/json/access.h` | 可替换后端编解码、只读节点访问、类型化可选读取及调用方模型转换。 |
 | 日志 | `LogLevel`, `get_log_level`, `set_log_level`, `log`, `logf`, `M1104_LOG_*` | 枚举 / 函数 / 宏 | `mental1104/log.h` | 通过 stdout/stderr 输出分级日志，可用时使用 spdlog。 |
 | C API 兼容 | `COMMON_EXTERN_C_BEGIN`, `COMMON_EXTERN_C_END`, `COMMON_EXTERN_C` | 宏 | `mental1104/common/c_api_compat.h` | 包装 C 声明，使同一头文件可被 C 和 C++ 包含。 |
 | 资源管理 | `unique_fd` | 类 | `mental1104/c_api_raii.h` | 持有 POSIX 文件描述符。 |
@@ -472,7 +512,7 @@ test-id
 
 | 接口 | 结果与失败语义 |
 |---|---|
-| `load_json(text, backend)`、`load_json(data, length, backend)` | 返回内部独占文档的 `ParseResult`；以 `result.get()` 直接取得根视图，失败时提供 `error` 和错误字节 `offset`。省略后端时固定使用 cJSON；若未构建 cJSON 则返回错误，不自动切换。可显式指定 RapidJSON。 |
+| `load_json(text, backend)`、`load_json(data, length, backend)` | 返回内部独占文档的 `ParseResult`；以 `result.get()` 直接取得根视图，失败时提供 `error` 和错误字节 `offset`。省略后端时固定使用 cJSON；若未构建 cJSON 则返回错误，不自动切换。可显式指定 `JsonParser::RapidJSON` 或 `JsonParser::NlohmannJSON`。 |
 | `load_json("{}")` | NUL 结尾字符串和字符串字面量可直接传入；nullptr 返回错误。不要求 NUL 结尾的缓冲应使用指针/长度重载。 |
 | `dump_json(result)`、`dump_json(document)` | 接受加载结果或独占文档，返回 `DumpResult`；成功时 `ok=true`、`text` 为独立字符串且 `error` 为空；失败时 `text` 为空且 `error` 提供诊断。使用文档所属后端，无须再次指定枚举。 |
 | `type()`、`is_valid()`、`is_null()`、`is_object()`、`is_array()`、`is_string()`、`is_bool()`、`is_number()` | 区分 `JsonType::Missing` 与有效的 JSON `null`，缺失成员不触发后端异常或断言。 |
@@ -490,7 +530,7 @@ test-id
 ```cpp
 const auto loaded = mental1104::load_json(
     mental1104::string_view(R"([{"id":1},{"id":2}])"),
-    mental1104::JsonParser::RapidJSON);
+    mental1104::JsonParser::NlohmannJSON);
 // 成功后按顺序读取元素；加载失败时根为 Missing，范围为空。
 if (loaded) {
     for (const auto item : loaded.get()) {
@@ -502,28 +542,31 @@ if (loaded) {
 示例输出为两行 `1`、`2`。数组标量可用 `item.get_optional<int>()` 读取当前节点。
 
 - 公开接口按两项职责组织：`codec.h/.cpp` 提供 `load_json`、`dump_json`、编解码结果与统一入口；`access.h/.cpp` 提供文档所有权、节点视图、路径遍历和类型转换。调用方需要的模板留在 `access.h`，固定签名实现独立编译。两层都不包含原生 SDK 头文件。
-- 具体后端集中在私有 `src/json/detail/`：`cjson.cpp` 与 `rapidjson.cpp` 各自完整管理原生 DOM、节点读取、解析和序列化，不再把同一个后端拆散到外层文件。`detail/backend.h` 只声明通用诊断、输入检查和数值转换，不暴露原生类型；这些私有文件不安装给调用方。独立导出工程递归收集该目录中的源文件。
+- 具体后端集中在私有 `src/json/detail/`：`cjson.cpp`、`rapidjson.cpp` 与 `nlohmann.cpp` 各自完整管理原生 DOM、节点读取、解析和序列化，不再把同一个后端拆散到外层文件。`detail/backend.h` 只声明通用诊断和数值转换，不暴露原生类型；这些私有文件不安装给调用方。独立导出工程递归收集该目录中的源文件。
 
 - `IJsonParser::parse` 每次产生独立文档，完成后可销毁解析器和输入。`ParseResult` 公开 `ok`、`error`、`offset`，内部独占文档，调用方通过 `get()` 访问根，通过 `backend()` 查询诊断标识。布尔判断同时检查解析成功和当前所有权；默认构造、失败及移出后的结果为 false，`get()` 返回 Missing。整个结果可移动、不可复制，不再公开 `doc` 成员。
 - `JsonDoc` 独占 `IJsonDocument`，允许移动、禁止复制；`valid()`、`backend()`、`root()` 保持原用途。移动所有权不改变后端地址，已有视图仍有效；覆盖或销毁文档使其旧视图失效。视图和借用字符串不延长文档生命周期，`std::string` 结果是独立副本。
-- 应用可派生 `IJsonParser` 和 `IJsonDocument`，通过 `ParseResult(JsonDoc(unique_ptr<IJsonDocument>))` 返回独占的成功结果。文档实现 protected `do_root/type/get/size/at/string/bool/i64/u64/f64` 钩子；句柄只由所属文档解释，nullptr 表示缺失，非空句柄属于该文档；DOM 只读。公共视图负责路径和模板转换，无须增加枚举分支或全局注册。默认诊断标识为 `JsonParser::Custom`。
+- 应用可派生 `IJsonParser` 和 `IJsonDocument`，通过 `ParseResult(JsonDoc(unique_ptr<IJsonDocument>))` 返回独占的成功结果。解析器只覆写非公开的 `do_parse(const string_view &) const`：公共 `parse` 为 `final` 内联入口，统一拒绝空输入和原始 NUL 后再分派；后端仅负责语法、完整消费与文档创建，无需重复公共校验。入口不包装或吞掉后端异常，错误字符串仅在失败路径构造。已有派生类应将 `parse` 覆写迁移为 `do_parse`，并与库一起重新编译；调用方式仍为 `parser.parse(text)`。文档实现 protected `do_root/type/get/size/at/string/bool/i64/u64/f64` 钩子；句柄只由所属文档解释，nullptr 表示缺失，非空句柄属于该文档；DOM 只读。公共视图负责路径和模板转换，无须增加枚举分支或全局注册。默认诊断标识为 `JsonParser::Custom`。
+- 公共输入校验先于后端可用性检查：即使对应后端未构建，空输入及原始 NUL 也返回统一输入错误；空输入偏移为 0，原始 NUL 偏移为首个 NUL 的字节位置。转义的 `\u0000` 不会被公共入口拒绝。
 - 需要支持序列化的自定义文档覆写 `IJsonDocument::do_dump() const`，返回 `DumpResult`。默认钩子返回明确的不支持错误，因此只实现读取的后端仍可使用。内置文档的节点读取与文本生成均封装在对应的 `detail` 后端文件中。
 - `dump_json` 不修改文档，不使已有借用视图失效；其文本可在源文档销毁后继续使用。默认空文档和移动后的空对象返回错误，有效的 JSON `null` 文档则成功输出 `null`。输出为紧凑格式，不保留输入空白或数字的原始拼写；不承诺不同后端输出逐字相同。
-- 统一入口为 `load_json(text, JsonParser::CJSON/RapidJSON)`，同时提供指针/长度重载，并委托给派生解析器；原 `parse_json` 已更名，不保留同义入口。旧 `JsonValueView::from_cjson/from_rapid` 原生节点注入接口已移除，应通过文档取得视图。
+- 统一入口为 `load_json(text, backend)`，后端可选 `JsonParser::CJSON`、`JsonParser::RapidJSON` 或 `JsonParser::NlohmannJSON`，同时提供指针/长度重载，并委托给派生解析器；原 `parse_json` 已更名，不保留同义入口。旧 `JsonValueView::from_cjson/from_rapid` 原生节点注入接口已移除，应通过文档取得视图。
 - 本次调整了公开对象布局及部分函数签名，需要重新编译库与调用方，不兼容旧版二进制 ABI。
 
 **构建、链接与限制：**
 
-- 链接既有 `mental1104` 共享库。公共 JSON 头不依赖 cJSON/RapidJSON SDK，原生 SDK 为私有依赖。头与库仍须匹配 C++ 标准，不能混用 C++11/14 与 C++17+ 的 `string_view`/optional 配置。
-- `M1104_ENABLE_JSON` 控制模块；`M1104_ENABLE_JSON_CJSON`、`M1104_ENABLE_JSON_RAPIDJSON` 独立控制内置后端，能力写入安装的 `mental1104/build_config.h`。缺依赖或禁用的后端返回错误，不自动切换；两内置后端都关闭时仍可接入自定义实现。
+- 链接既有 `mental1104` 共享库。公共 JSON 头不依赖 cJSON、RapidJSON 或 nlohmann JSON SDK，原生 SDK 为私有依赖。头与库仍须匹配 C++ 标准，不能混用 C++11/14 与 C++17+ 的 `string_view`/optional 配置。
+- `M1104_ENABLE_JSON` 控制模块；`M1104_ENABLE_JSON_CJSON`、`M1104_ENABLE_JSON_RAPIDJSON`、`M1104_ENABLE_JSON_NLOHMANN` 独立控制内置后端，能力写入安装的 `mental1104/build_config.h`，nlohmann 的能力宏为 `M1104_HAS_JSON_NLOHMANN`。缺依赖或禁用的后端返回错误，不自动切换；全部内置后端关闭时仍可接入自定义实现。
+- nlohmann JSON 依赖位于 `cpp/lib/nlohmann_json`，子模块固定为 v3.12.0。复用既有子模块初始化流程；也可用 CMake 的 `M1104_NLOHMANN_JSON_INCLUDE_DIR` 指向兼容的头文件根目录。独立 `export/cpp` 同样支持该后端和开关，头文件路径使用 `EXPORT_NLOHMANN_JSON_INCLUDE_DIR`；Python/C 导出的既有协议名称保持不变。
 - `JsonOptional<T>` 在 C++17+ 等同 `std::optional<T>`，C++11/14 等同 `boost::optional<T>`；通过布尔判断和 `value_or` 使用。旧标准的 `string_view` 为 `std::string`，可能分配内存，这些路径不承诺 `noexcept`。
 - 输入不要求 NUL 结尾；根后仅允许 JSON 空白。空输入及原始 NUL 返回错误，转义的 `\u0000` 由后端处理。语法诊断和偏移细节可能不同，cJSON 的宽松语法未被完整校验器替代。
-- 严格数值读取不转换字符串或布尔，不截断小数，检查符号、范围及浮点有限性；浮点转换允许舍入。cJSON 数字以 double 保存，不能承诺原始完整 64 位整数精度；RapidJSON 保留原生 64 位整数。cJSON 字符串和键没有独立长度元数据，不能完整读取含内嵌 NUL 的字符串和键，此类输入应选择 RapidJSON。
+- 严格数值读取不转换字符串或布尔，不截断小数，检查符号、范围及浮点有限性；浮点转换允许舍入。cJSON 数字以 double 保存，不能承诺原始完整 64 位整数精度；RapidJSON 与 nlohmann JSON 保留原生 64 位整数。cJSON 字符串和键没有独立长度元数据，不能完整读取含内嵌 NUL 的字符串和键，此类输入应选择 RapidJSON 或 nlohmann JSON。
+- nlohmann JSON 后端使用只读的保序 DOM，紧凑输出保留对象成员的输入顺序；原生语法异常转换为 ASCII 诊断，错误字节偏移统一从 0 开始。数值溢出没有原生位置信息时偏移为 0；内存分配失败仍可抛异常。
 - 数组范围游标与节点一样借用文档，移动加载结果后仍有效，销毁或覆盖拥有者后失效；每次解引用使用后端索引访问，cJSON 链表数组的完整遍历可能需要平方级时间。游标只提供 range-for 所需操作，不承诺标准库迭代器接口。
 - 序列化不能恢复原生 DOM 已丢失的精度或字符串长度。cJSON 解析产生的非有限数值在 `dump_json` 中返回错误，避免被打印成 `null`；RapidJSON Writer 失败时也返回错误，不暴露未完成的文本前缀。
 - 缺失和类型错误表现为空；分配失败及自定义转换异常仍可抛出。cJSON 使用进程级 hooks/错误状态，不承诺并发解析；需要并发解析时选择 RapidJSON。文档销毁、覆盖或自定义后端的可变操作不能与视图读取并发。
 
-**验证入口：** 构建后运行 `./dev test-cpp --file '^test_json'`。两后端复用相同场景；`test_json_consumer` 不链接 GoogleTest，按实际库标准编译多个翻译单元，验证调用方自定义类型、模板和运行时链接。
+**验证入口：** 构建后运行 `./dev test-cpp --file '^test_json'`。三种后端复用相同场景，首例展示加载、数组访问和输出的最小完整用法；`test_json_consumer` 不链接 GoogleTest，按实际库标准编译多个翻译单元，验证调用方自定义类型、模板和运行时链接。
 
 ### 日志
 
