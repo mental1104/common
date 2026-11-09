@@ -2,7 +2,7 @@
 
 namespace mental1104 {
 
-#if !defined(_WIN32)
+#if !M1104_OS_WINDOWS
 
 /// 释放仍由本对象持有的文件描述符；析构不抛异常。
 unique_fd::~unique_fd() noexcept { this->reset(); }

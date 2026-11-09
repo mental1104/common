@@ -1,17 +1,19 @@
 #ifndef MENTAL1104_C_API_RAII_H
 #define MENTAL1104_C_API_RAII_H
 
+#include "mental1104/meta/platform_support.h"
+
 #include <cstdio>
 #include <type_traits>
 #include <utility>
 
-#if !defined(_WIN32)
+#if !M1104_OS_WINDOWS
 #include <unistd.h>
 #endif
 
 namespace mental1104 {
 
-#if !defined(_WIN32)
+#if !M1104_OS_WINDOWS
 /// 独占 POSIX 文件描述符；无效状态为 -1，系统释放逻辑由库提供。
 class unique_fd {
 public:

@@ -1,4 +1,5 @@
 #include "mental1104/web/drogon_server.h"
+#include "mental1104/meta/platform_support.h"
 
 #include <drogon/HttpAppFramework.h>
 #include <drogon/HttpFilter.h>
@@ -15,7 +16,7 @@
 #include <thread>
 #include <utility>
 
-#ifdef __linux__
+#if M1104_OS_LINUX
 #include <sys/socket.h>
 #include <unistd.h>
 #endif
@@ -27,7 +28,7 @@ namespace {
 /// 进程单例后端只允许运行一次，避免已注册路由及事件循环状态被误用。
 std::atomic<bool> runtime_claimed{false};
 
-#ifdef __linux__
+#if M1104_OS_LINUX
 /// 为 Drogon 的多个 SO_REUSEPORT 监听器预留同一个临时端口。
 /// 只绑定、不 listen；在 SDK 全部绑定完成前持有端口，不接收业务连接。
 class ListenerReservation {
@@ -652,7 +653,7 @@ protected:
             std::thread([this, startup] { this->run_sdk(startup); });
         const auto endpoint = ready.get();
         this->wait_for_listener(endpoint);
-#ifdef __linux__
+#if M1104_OS_LINUX
         this->listener_reservation_.reset();
 #endif
         return endpoint;
@@ -673,7 +674,7 @@ protected:
             this->sdk_thread_.join();
         }
         this->uploads_.reset();
-#ifdef __linux__
+#if M1104_OS_LINUX
         this->listener_reservation_.reset();
 #endif
     }
@@ -775,7 +776,7 @@ private:
         if (listener.tls && !app.supportSSL())
             throw std::runtime_error("Drogon has no TLS support");
         auto port = listener.port;
-#ifdef __linux__
+#if M1104_OS_LINUX
         // Drogon 1.8 在 Linux 为每个 I/O 线程分别 bind；直接传零会得到
         // 不同端口。持续保留绑定，再让所有 SDK 监听器共享同一实际端口。
         if (port == 0) {
@@ -876,7 +877,7 @@ private:
 
     std::shared_ptr<Runtime> runtime_{std::make_shared<Runtime>()};
     std::unique_ptr<UploadWorkspace> uploads_;
-#ifdef __linux__
+#if M1104_OS_LINUX
     std::unique_ptr<ListenerReservation> listener_reservation_;
 #endif
     std::thread sdk_thread_;

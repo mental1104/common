@@ -1,10 +1,11 @@
 #include "stacktrace_internal.h"
+#include "mental1104/meta/platform_support.h"
 
 #include <limits.h>
 #include <stdlib.h>
 #include <string.h>
 
-#if defined(_WIN32)
+#if M1104_OS_WINDOWS
 #include <io.h>
 #else
 #include <unistd.h>
@@ -101,11 +102,11 @@ const char* st_get_symbolizer_path(void) {
 }
 
 const char* st_platform_name(void) {
-#if defined(_WIN32)
+#if M1104_OS_WINDOWS
   return "windows";
-#elif defined(__APPLE__)
+#elif M1104_OS_MACOS
   return "darwin";
-#elif defined(__linux__)
+#elif M1104_OS_LINUX
   return "linux";
 #else
   return "posix";
@@ -131,7 +132,7 @@ void st_write(const char* msg, size_t len) {
     g_options.write_cb(msg, len, g_options.user);
     return;
   }
-#if defined(_WIN32)
+#if M1104_OS_WINDOWS
   {
     int fd = g_options.output_fd >= 0 ? g_options.output_fd : 2;
     while (len > 0) {

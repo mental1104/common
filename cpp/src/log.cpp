@@ -1,6 +1,29 @@
 #include "mental1104/log.h"
 
+#include <cstdarg>
+
 namespace mental1104 {
+
+/// 执行 printf 的长度计算和缓冲区写入，避免在每个模板实例中重复运行时实现。
+/// @param format NUL 结尾的格式串，本次调用期间有效。
+/// @param ... 按 C 可变参数规则提升、且与格式串匹配的参数。
+/// @return 独立结果；长度计算失败或结果为空时返回空串。
+std::string detail::format_printf_message(const char *format, ...) {
+    va_list arguments;
+    va_start(arguments, format);
+    const int size = std::vsnprintf(nullptr, 0, format, arguments);
+    va_end(arguments);
+    if (size <= 0) return {};
+
+    // 两轮分别开始、结束参数遍历；字符串分配异常时没有活动 va_list 需要回收。
+    std::string buffer(static_cast<std::size_t>(size), '\0');
+    va_start(arguments, format);
+    // C++11/14 的 data() 返回 const char*，非空首元素提供可写的连续存储。
+    std::vsnprintf(
+        &buffer[0], static_cast<std::size_t>(size) + 1, format, arguments);
+    va_end(arguments);
+    return buffer;
+}
 
 /// 返回日志等级的静态名称。
 /// @param lvl 日志等级。
@@ -144,4 +167,4 @@ void detail::write_log_message(LogLevel level, const std::string &message) {
 #endif
 }
 
-} // namespace mental1104
+}  // namespace mental1104

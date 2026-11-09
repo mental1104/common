@@ -6,13 +6,13 @@
 #include <cstring>
 #include <stdexcept>
 
-#if defined(_WIN32)
+#if M1104_OS_WINDOWS
 #pragma message("epoll_server: stubbed on Windows; operations are no-ops")
 #else
 #include <unistd.h>
-#if defined(__linux__)
+#if M1104_OS_LINUX
 #include <sys/epoll.h>
-#elif defined(__APPLE__)
+#elif M1104_OS_MACOS
 #include <sys/event.h>
 #include <sys/time.h>
 #else
@@ -28,7 +28,7 @@ void EpollServer::set_callback_entry(int fd, EventCallback cb) {
   this->entries_[fd].cb = std::move(cb);
 }
 
-#if defined(__linux__)
+#if M1104_OS_LINUX
 
 // -------------------- Linux: epoll --------------------
 EpollServer::EpollServer() : epoll_fd_(::epoll_create1(0)) { // 构造时创建一个 epoll 实例，返回值保存到底层 epoll fd
@@ -116,7 +116,7 @@ void EpollServer::event_loop() {
     (void)this->dispatch_once(-1);
 }
 
-#elif defined(__APPLE__)
+#elif M1104_OS_MACOS
 
 // -------------------- macOS: kqueue --------------------
 static inline void to_timespec(int timeout_ms, ::timespec &ts, ::timespec *&p) {

@@ -105,6 +105,9 @@ function(add_optional_test SRC)
   if (TEST_NAME STREQUAL "test_c_api_compat")
     list(APPEND _extra_sources "${TEST_DIR}/c_api_compat_c_smoke.c")
   endif()
+  if(TEST_NAME STREQUAL "test_target_support")
+    list(APPEND _extra_sources "${TEST_DIR}/meta_support_c_smoke.c")
+  endif()
   if (TEST_NAME STREQUAL "test_linkage")
     # 第二翻译单元模拟独立调用方，检验模板与已编译核心之间的链接边界。
     add_library(m1104_linkage_consumer OBJECT "${TEST_DIR}/linkage_consumer.cc")
@@ -115,6 +118,21 @@ function(add_optional_test SRC)
   endif()
 
   add_executable(${TEST_NAME} "${SRC}" ${_extra_sources})
+  if(TEST_NAME STREQUAL "test_target_support")
+    # 用 CMake 的目标信息作独立预期，避免只与探测头自己的条件比较。
+    set(_expected_platform "unknown")
+    if(WIN32)
+      set(_expected_platform "windows")
+    elseif(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
+      set(_expected_platform "macos")
+    elseif(APPLE)
+      set(_expected_platform "apple")
+    elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+      set(_expected_platform "linux")
+    endif()
+    target_compile_definitions(${TEST_NAME} PRIVATE
+      M1104_TEST_EXPECTED_PLATFORM="${_expected_platform}")
+  endif()
   if(TEST_NAME STREQUAL "test_linkage")
     target_compile_definitions(test_linkage PRIVATE
       M1104_EXPECTED_CXX_STANDARD=${CMAKE_CXX_STANDARD})
@@ -183,6 +201,14 @@ endif()
 foreach(SRC ${TEST_FILES})
   add_optional_test("${SRC}")
 endforeach()
+
+# GoogleTest 可能要求 C++17；独立消费程序必须仍按实际库标准编译和链接。
+add_executable(test_log_consumer "${TEST_DIR}/logging/consumer.cc")
+target_link_libraries(test_log_consumer PRIVATE mental1104)
+set_target_properties(test_log_consumer PROPERTIES
+  CXX_STANDARD ${CMAKE_CXX_STANDARD} CXX_STANDARD_REQUIRED ON)
+add_test(NAME test_log_consumer COMMAND test_log_consumer)
+set_tests_properties(test_log_consumer PROPERTIES LABELS "unit")
 
 if(M1104_HAS_JSON)
   # 不链接 GoogleTest，确保最低标准也实际编译并链接 JSON 公共模板。

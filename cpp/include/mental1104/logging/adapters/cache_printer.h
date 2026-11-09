@@ -1,5 +1,5 @@
-#ifndef MENTAL1104_LOG_ADAPTERS_CACHE_PRINTER_H
-#define MENTAL1104_LOG_ADAPTERS_CACHE_PRINTER_H
+#ifndef MENTAL1104_LOGGING_ADAPTERS_CACHE_PRINTER_H
+#define MENTAL1104_LOGGING_ADAPTERS_CACHE_PRINTER_H
 
 #include "mental1104/core/cache.h"
 #include "mental1104/log.h"
@@ -94,4 +94,4 @@ std::string format_value(const LFUCache<Ret, Args...> &cache) {
 } // namespace log_detail
 } // namespace mental1104
 
-#endif // MENTAL1104_LOG_ADAPTERS_CACHE_PRINTER_H
+#endif // MENTAL1104_LOGGING_ADAPTERS_CACHE_PRINTER_H

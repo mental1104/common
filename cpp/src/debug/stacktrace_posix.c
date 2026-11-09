@@ -1,5 +1,4 @@
-#ifndef _WIN32
-
+// libc 特性开关必须先于 SDK/系统头；此处保留原始目标宏作为包含前的引导。
 #if defined(__linux__) && !defined(_GNU_SOURCE)
 #define _GNU_SOURCE
 #endif
@@ -12,6 +11,11 @@
 #define _XOPEN_SOURCE 700
 #endif
 #endif
+
+#include "mental1104/meta/architecture_support.h"
+#include "mental1104/meta/platform_support.h"
+
+#if !M1104_OS_WINDOWS
 
 #include "stacktrace_internal.h"
 
@@ -29,10 +33,10 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
-#if defined(__linux__)
+#if M1104_OS_LINUX
 #include <sys/syscall.h>
 #include <ucontext.h>
-#elif defined(__APPLE__)
+#elif M1104_OS_MACOS
 #include <mach-o/dyld.h>
 #include <pthread.h>
 #include <ucontext.h>
@@ -74,13 +78,13 @@ static const char* st_signal_name(int signo) {
 }
 
 static uint64_t st_get_tid(void) {
-#if defined(__linux__)
+#if M1104_OS_LINUX
 #ifdef SYS_gettid
   return (uint64_t)syscall(SYS_gettid);
 #else
   return (uint64_t)getpid();
 #endif
-#elif defined(__APPLE__)
+#elif M1104_OS_MACOS
   return (uint64_t)(uintptr_t)pthread_self();
 #else
   return (uint64_t)getpid();
@@ -94,7 +98,7 @@ static void st_get_regs_from_ucontext(void* uctx,
   *ip = 0;
   *sp = 0;
   *bp = 0;
-#if defined(__linux__)
+#if M1104_OS_LINUX
   if (!uctx) {
     return;
   }
@@ -110,17 +114,17 @@ static void st_get_regs_from_ucontext(void* uctx,
     *bp = (uintptr_t)ctx->uc_mcontext.gregs[REG_RBP];
 #endif
   }
-#elif defined(__APPLE__)
+#elif M1104_OS_MACOS
   if (!uctx) {
     return;
   }
   {
     ucontext_t* ctx = (ucontext_t*)uctx;
-#if defined(__x86_64__)
+#if M1104_ARCH_X86_64
     *ip = (uintptr_t)ctx->uc_mcontext->__ss.__rip;
     *sp = (uintptr_t)ctx->uc_mcontext->__ss.__rsp;
     *bp = (uintptr_t)ctx->uc_mcontext->__ss.__rbp;
-#elif defined(__aarch64__) || defined(__arm64__)
+#elif M1104_ARCH_ARM64
     *ip = (uintptr_t)ctx->uc_mcontext->__ss.__pc;
     *sp = (uintptr_t)ctx->uc_mcontext->__ss.__sp;
     *bp = (uintptr_t)ctx->uc_mcontext->__ss.__fp;
@@ -137,7 +141,7 @@ static const char* st_get_exe_path(void) {
   if (initialized) {
     return path;
   }
-#if defined(__linux__)
+#if M1104_OS_LINUX
   {
     ssize_t len = readlink("/proc/self/exe", path, sizeof(path) - 1);
     if (len > 0) {
@@ -146,7 +150,7 @@ static const char* st_get_exe_path(void) {
       return path;
     }
   }
-#elif defined(__APPLE__)
+#elif M1104_OS_MACOS
   {
     uint32_t size = (uint32_t)sizeof(path);
     if (_NSGetExecutablePath(path, &size) == 0) {
@@ -247,7 +251,7 @@ static const char* st_select_symbolizer(enum st_symbolizer_kind* kind) {
       return env;
     }
   }
-#if defined(__APPLE__)
+#if M1104_OS_MACOS
   if (st_command_exists("xcrun")) {
     *kind = ST_SYMBOLIZER_XCRUN_ATOS;
     return "xcrun";
@@ -524,7 +528,7 @@ static void st_symbolize_one(enum st_symbolizer_kind kind,
     return;
   }
 
-#if defined(__APPLE__)
+#if M1104_OS_MACOS
   if (kind == ST_SYMBOLIZER_ATOS || kind == ST_SYMBOLIZER_XCRUN_ATOS) {
     char base_buf[32];
     char pc_buf[32];
@@ -563,7 +567,7 @@ static void st_symbolize_one(enum st_symbolizer_kind kind,
 }
 
 static void st_dump_maps_linux(void) {
-#if defined(__linux__)
+#if M1104_OS_LINUX
   const st_options_t* opt = st_get_options();
   if (!opt || opt->dump_maps == 0) {
     return;
@@ -821,7 +825,7 @@ int st_platform_dump_current_thread(void) {
   }
 
   st_get_regs_from_ucontext(NULL, &ip, &sp, &bp);
-#if defined(__linux__)
+#if M1104_OS_LINUX
   {
     ucontext_t ctx;
     if (getcontext(&ctx) == 0) {

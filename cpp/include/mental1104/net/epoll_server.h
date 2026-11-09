@@ -1,9 +1,11 @@
 #pragma once
+#include "mental1104/meta/platform_support.h"
+
 #include <cstdint>
 #include <functional>
 #include <unordered_map>
 
-#if defined(__linux__)
+#if M1104_OS_LINUX
 // Linux: 给使用方（比如 bench/test）提供 EPOLL* 宏
 #include <sys/epoll.h>
 #else

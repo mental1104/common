@@ -107,7 +107,7 @@ mental1104::LogLevel consumer_log_level() {
 
 /// 提交固定文本的 Info 日志，输出由库中的等级与后端控制。
 void write_consumer_log() {
-    mental1104::log(mental1104::LogLevel::Info, "linked-message");
+    mental1104::log.info("linked-message");
 }
 
 }  // namespace linkage_test

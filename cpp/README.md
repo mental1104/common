@@ -336,6 +336,7 @@ Pulsar 的 Producer 创建接口通过实际头文件与库进行编译链接探
 
 ## 分类
 
+- 平台与架构
 - 容器与字符串
 - 缓存包装器
 - JSON
@@ -354,13 +355,15 @@ Pulsar 的 Producer 创建接口通过实际头文件与库进行编译链接探
 
 | 类别 | 名称 | 类型 | 包含 | 用途 |
 |---|---|---|---|---|
+| 平台与架构 | `M1104_OS_WINDOWS`, `M1104_OS_LINUX`, `M1104_OS_APPLE`, `M1104_OS_MACOS` | 宏 | `mental1104/meta/platform_support.h` | 判断编译目标的平台及 Apple 家族中的 macOS。 |
+| 平台与架构 | `M1104_ARCH_ARM64`, `M1104_ARCH_X86_64` | 宏 | `mental1104/meta/architecture_support.h` | 判断编译目标的原生 ARM64 或 X86_64 指令集。 |
 | 容器与字符串 | `contains` | 函数模板 | `mental1104/util.h` | 检查 STL 容器成员关系和 map 键是否存在。 |
 | 容器与字符串 | `to_lower_copy` | 函数 | `mental1104/util.h` | 返回小写化后的 `std::string` 副本。 |
 | 容器与字符串 | `ExponentialBackoff` | 类 | `mental1104/util.h` | 按上限推进重试延迟，可显式加入对称随机抖动。 |
 | 缓存包装器 | `LRUCache`, `make_lru_cache`, `make_cache` | 类 / 函数 | `mental1104/core/cache.h` | 用 tuple 键 LRU 或无界缓存包装可调用对象。 |
 | 缓存包装器 | `LFUCache`, `make_lfu_cache` | 类 / 函数 | `mental1104/core/cache.h` | 用 tuple 键 LFU 缓存包装可调用对象。 |
 | JSON | `IJsonParser`, `IJsonDocument`, `CJsonParser`, `RapidJsonParser`, `NlohmannJsonParser`, `JsonParser`, `load_json`, `dump_json`, `ParseResult`, `DumpResult`, `JsonDoc`, `JsonValueView`, `JsonType`, `JsonOptional`, `JsonValueReader` | 接口 / 类 / 枚举 / 函数 / 结构体 / 模板 | `mental1104/json/codec.h`、`mental1104/json/access.h` | 可替换后端编解码、只读节点访问、类型化可选读取及调用方模型转换。 |
-| 日志 | `LogLevel`, `get_log_level`, `set_log_level`, `log`, `logf`, `M1104_LOG_*` | 枚举 / 函数 / 宏 | `mental1104/log.h` | 通过 stdout/stderr 输出分级日志，可用时使用 spdlog。 |
+| 日志 | `Logger`, `log`, `LogLevel`, `get_log_level`, `set_log_level`, `M1104_LOG_*` | 类 / 常量对象 / 枚举 / 函数 / 宏 | `mental1104/log.h` | 通过 `log.info`、`log.warningf` 等等级方法输出消息，可用时使用 spdlog。 |
 | C API 兼容 | `COMMON_EXTERN_C_BEGIN`, `COMMON_EXTERN_C_END`, `COMMON_EXTERN_C` | 宏 | `mental1104/common/c_api_compat.h` | 包装 C 声明，使同一头文件可被 C 和 C++ 包含。 |
 | 资源管理 | `unique_fd` | 类 | `mental1104/c_api_raii.h` | 持有 POSIX 文件描述符。 |
 | 资源管理 | `unique_file`, `open_file` | 类 / 函数 | `mental1104/c_api_raii.h` | 持有 C `FILE*`。 |
@@ -379,6 +382,57 @@ Pulsar 的 Producer 创建接口通过实际头文件与库进行编译链接探
 | 数值计算器 | `high_precision`, `InfiniteDecimalCalculator`, `ECalculator`, `FixedPointCalculator`, `PiCalculator` | 别名 / 类 | `mental1104/high_precision_decimal.h` | 从高精度计算器生成十进制字符串。 |
 
 ## 详情
+
+### 平台与架构探测
+
+- **类别 / 类型：** 平台与架构 / 预处理宏。
+- **定义位置 / 包含：** `cpp/include/mental1104/meta/platform_support.h`、
+  `cpp/include/mental1104/meta/architecture_support.h`；包含路径见下例。
+- **用途：** 在公共头、C 实现和 C++ 实现中使用同一套目标判断。
+
+```cpp
+#include "mental1104/meta/platform_support.h"
+#include "mental1104/meta/architecture_support.h"
+#include <iostream>
+
+/// 按编译目标选择名称；仅打印结果，无需链接 mental1104 或释放资源。
+/// @return 正常输出后返回 0。
+int main() {
+    // Apple 家族与 macOS 分开；macOS 专用 API 应使用 M1104_OS_MACOS。
+#if M1104_OS_WINDOWS
+    const char *platform = "windows";
+#elif M1104_OS_MACOS
+    const char *platform = "macos";
+#elif M1104_OS_APPLE
+    const char *platform = "apple";
+#elif M1104_OS_LINUX
+    const char *platform = "linux";
+#else
+    const char *platform = "unknown";
+#endif
+
+#if M1104_ARCH_ARM64
+    const char *architecture = "arm64";
+#elif M1104_ARCH_X86_64
+    const char *architecture = "x86_64";
+#else
+    const char *architecture = "unknown";
+#endif
+    std::cout << platform << ' ' << architecture << '\n';
+    return 0;
+}
+```
+
+**示例结果：** 面向 Linux X86_64 编译时输出 `linux x86_64`，退出码为 `0`；
+其他目标输出对应名称。可执行首例及 C/C++ 一致性检查见
+`test/unit/test_target_support.cpp`。
+
+**限制：** 两个头均可独立被 C/C++ 包含，不依赖生成配置、CMake target 宏或库链接；
+Apple 平台使用 SDK 的 `TargetConditionals.h` 区分 macOS。标记始终为 `0/1`，
+未覆盖的平台或架构保持相应标记全为 `0`。平台标记不承诺所有系统 API 可用，
+`!M1104_OS_WINDOWS` 也不等价于 POSIX。架构标记描述编译目标，不能判断运行机器、
+CPU 厂商、指针宽度或 SIMD 能力。当前仅覆盖原生 ARM64、X86_64（AMD64），
+ARM64EC 混合 ABI 和 32 位架构保持未识别；增加标记不代表新增相应平台的完整库支持。
 
 ### `contains`, `to_lower_copy`, `ExponentialBackoff`
 
@@ -571,7 +625,7 @@ if (loaded) {
 ### 日志
 
 - **类别：** 日志
-- **类型：** 枚举、函数、宏
+- **类型：** 无状态日志入口 `Logger`、常量对象 `log`、等级枚举、配置函数与宏。
 - **定义位置：** `cpp/include/mental1104/log.h`
 - **包含：** `#include "mental1104/log.h"`
 - **用途：** 输出分级消息和格式化消息。
@@ -581,13 +635,17 @@ if (loaded) {
 ```cpp
 #include "mental1104/log.h"
 
+/// 输出普通和格式化消息，退出前恢复调用前的过滤阈值。
+/// @return 正常输出后返回 0。
 int main() {
+  const auto previous = mental1104::get_log_level();
   mental1104::set_log_level(mental1104::LogLevel::Info);
-  mental1104::log(mental1104::LogLevel::Info, "ready: ", 1);
-  mental1104::logf(mental1104::LogLevel::Warning, "retry=%d", 3);
-
-  M1104_LOG_INFO("plain macro log");
-  M1104_LOG_ERRORF("code=%d", 500);
+  mental1104::log.info("ready: ", 1);
+  mental1104::log.warningf("retry=%d", 3);
+  mental1104::log.warning("cache is full");
+  mental1104::log.errorf("code=%d", 500);
+  mental1104::set_log_level(previous);
+  return 0;
 }
 ```
 
@@ -596,15 +654,35 @@ int main() {
 未启用 spdlog 时的回退输出如下；启用 spdlog 时会由 spdlog 添加自己的时间戳 / logger 格式。
 
 ```text
-[info] ready: 1
-[warning] retry=3
-[info] plain macro log
-[error] code=500
+[INFO] ready: 1
+[WARNING] retry=3
+[WARNING] cache is full
+[ERROR] code=500
 ```
 
 **备注：**
 
 - `MENTAL1104_LOG_LEVEL` 可设置进程级初始日志级别。
+- `log.debug/info/warning/error` 只拼接消息片段，原样保留 `%`、`{}`；
+  `log.debugf/infof/warningf/errorf` 才解释格式串。两组方法均支持 C++11 起的调用方。
+- `log` 无独立配置和资源，无需创建或释放；各调用方共用库维护的日志等级与后端。
+  原 `log(LogLevel, ...)` / `logf(LogLevel, ...)` 调用应迁移到对应等级的方法；
+  现有 `M1104_LOG_*` / `M1104_LOG_*F` 宏仍分别转发到拼接 / 格式化方法。
+- 可选缓存打印适配器的包含路径为 `mental1104/logging/adapters/cache_printer.h`。
+- 调用这些方法须链接 `mental1104`；库与调用方使用匹配的 C++ 标准和 ABI。
+  等级过滤先于消息构造，低于阈值的消息不会调用参数的流式格式化。
+- 带 `f` 的方法保留原有选择顺序：标准格式化可用且含 `{` 时优先解释花括号；
+  否则含 `%` 时按 printf 解释；其他文本使用标准格式化，缺少该能力时拼接格式串、
+  一个空格和参数。printf 参数须匹配占位符；对象参数不进入 C 可变参数函数。
+  标准格式串错误继续抛出 `std::format_error`。
+- 格式化能力以标准库的真实特性宏为准，不因 `<format>` 头可见而补定义标准宏。
+  spdlog 的头文件探测修正后，可用环境会按既有设计启用该后端，输出前缀随之后端变化。
+- 容器打印使用同一份流式实现，不要求 fmt/ranges 或 C++20 ranges。
+  C++11/14 保留对无 `size()` 容器的距离计数以及嵌套 map 的迭代顺序；
+  C++17 起无 `size()` 容器省略大小，嵌套 map 按键排序；调用位置能力可用时保留调用方文件和行号。
+- 可执行最小用法是 `test/unit/test_log.cpp` 的首例。
+  `test_log_consumer` 按实际库标准独立编译，避免 GoogleTest 的标准要求掩盖 C++11/14 问题；
+  运行 `./dev test-cpp --file '^test_log'` 同时执行日志行为和独立消费验证。
 
 ### C API 兼容宏
 
