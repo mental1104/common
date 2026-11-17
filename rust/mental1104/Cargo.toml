@@ -13,12 +13,17 @@ path = "src/lib.rs"
 [features]
 # 可选：加速 Hash（默认关，跨平台更稳）
 fast-hash = ["dep:ahash"]
+# 加密按需启用，不影响原有仅使用集合工具的消费方。
+encryption = ["dep:aes-gcm", "dep:cbc", "dep:base64"]
 
 [dependencies]
 thiserror = "1"
 
 # 可选加速哈希：在你需要 hash 容器极致性能时启用
 ahash = { version = "0.8", optional = true }
+aes-gcm = { version = "0.10", optional = true }
+cbc = { version = "0.1", features = ["alloc"], optional = true }
+base64 = { version = "0.22", optional = true }
 
 [dev-dependencies]
 criterion = "0.5"

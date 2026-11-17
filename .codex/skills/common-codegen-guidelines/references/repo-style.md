@@ -8,6 +8,7 @@ Use this reference after `SKILL.md` triggers. Load only the sections relevant to
 - 文档归属、目录组织、文件放置与新增目录约束，以及跨语言的最小完整用法测试首例规则，以根目录 `AGENTS.md` 为准；不在此维护独立规则副本。
 - Use `./dev` as the preferred entrypoint. It wraps setup, build, test, coverage, fmt, bench, install, uninstall, vet, guard, Docker, Java/Flink run, and verify-install commands.
 - NAS 工作区的本地开发与验证统一在既有 `code-server` 容器挂载的仓库根目录运行 `./dev`，不要改在 NAS 宿主机或其他开发容器中执行。开发服务的镜像与部署配置在仓库外维护，不在本仓库恢复专用开发容器。其他平台与 CI 继续使用各自的原生工具链。
+- 从 NAS 调用项目命令时使用 `docker exec -u abc -w /volume2/workflow/common code-server ...`，避免 root 改写工作区或 Git 配置的所有者。Python 虚拟环境位于持久挂载的 `python/.venv`，只在容器中维护；首次使用核对 `pyvenv.cfg` 与实际解释器的主次版本，不能把 NAS Python 3.8 创建的环境直接当作容器 Python 3.12 的环境复用。
 - 切换容器或仓库挂载路径时，Python 虚拟环境和 CMake 构建树不能直接视为可复用环境；先核对解释器、ABI 与缓存中的绝对路径，必要时备份旧目录后在当前环境重新生成。
 - Keep CI and Pages conventions aligned: language workflows are reusable execution units, `ci-main.yml` routes `main` updates to the affected language workflows, and coverage extraction scripts under `tools/ci/` produce normalized `cov.json`.
 - GitHub Actions 只由 `main` 分支 push 或仓库级手动 `Main Gate` 启动。`main` push 按提交前后差异选择受影响语言，并为选中的语言传入 `full_matrix: true`；手动 `Main Gate` 在 `main` 上展开六个语言的完整平台、编译器和运行时矩阵。PR、Draft PR 及普通功能分支不得分配 runner，也不得把 Actions 当作远程调试循环。

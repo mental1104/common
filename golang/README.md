@@ -28,6 +28,40 @@
 
 ## 详情
 
+### AES 加解密
+
+- **类别 / 类型：** 对称加密；`CipherAlgorithm` 枚举型及 `Encrypt`、`Decrypt` 函数。
+- **定义位置 / 导入：** `golang/mental1104/encryption.go`；`github.com/mental1104/common/golang/mental1104`。
+- **用途：** 使用 Go 标准库兼容 Python 历史 CBC 与六种语言统一的 AES-256-GCM 封装，不新增依赖。
+
+```go
+package main
+
+import (
+    "fmt"
+    mental1104 "github.com/mental1104/common/golang/mental1104"
+)
+
+// main 展示公开 API 往返；示例密钥仅用于展示，生产中从安全存储读取。
+func main() {
+    key := []byte("0123456789abcdef0123456789abcdef")
+    ciphertext, err := mental1104.Encrypt("secret", key, nil, mental1104.AESGCM)
+    if err != nil { panic(err) }
+    plaintext, err := mental1104.Decrypt(ciphertext, key, nil)
+    if err != nil { panic(err) }
+    fmt.Println(plaintext)
+}
+```
+
+示例输出：`secret`。加密返回 Base64 `[]byte`，解密返回 UTF-8 `string`；失败返回 `error`，不修改输入切片。
+`Encrypt(plaintext, key, salt, algorithms...)` 的算法可省略（`LegacyCBC`），`Decrypt(ciphertext, key, salt, algorithms...)`
+省略算法则自动识别 Magic；最多指定一个算法。CBC 的 nil Key 使用 `0ePThPnLaJcWFcRc`，加密必须显式提供 16 字节 salt，nil 或空切片均报错。
+每次 CBC 加密应生成新的随机 IV 并保存，解密复用原 IV；仅历史解密允许 nil salt 使用 Key 作为 IV。PKCS#7 与旧线格式不变。
+`AESGCM` 必须显式提供 32 字节 Key、nil salt；空 salt 切片也会拒绝。每次生成 12 字节随机 Nonce，16 字节 Tag，无 Padding。
+统一封装为 Base64 编码的 `b"mental1104:AES:" + 0x01 + Nonce + Tag + Ciphertext`，Magic 与版本参与认证。
+未知版本、截断、认证失败直接返回错误，不降级 CBC；显式 `LegacyCBC` 也拒绝带 Magic 的数据。
+预期只接收 GCM 时显式传 `AESGCM`，使损坏或缺失 Magic 的输入被拒绝；调用方负责密钥生成、保存与分发。
+
 ### `Contains`
 
 - **类别：** 集合与字符串包含判断

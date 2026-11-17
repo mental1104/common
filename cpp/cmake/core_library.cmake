@@ -7,6 +7,14 @@ file(GLOB_RECURSE M1104_CORE_SOURCES CONFIGURE_DEPENDS
 # Web 模块独立链接，不能经递归 glob 混入原有主库或抬高其语言标准。
 list(FILTER M1104_CORE_SOURCES EXCLUDE REGEX "/src/web/")
 
+# 加密使用独立的可选依赖；关闭时不改变原有主库的链接要求。
+option(M1104_ENABLE_ENCRYPTION "Build AES encryption using OpenSSL Crypto" OFF)
+if(M1104_ENABLE_ENCRYPTION)
+  find_package(OpenSSL REQUIRED)
+else()
+  list(FILTER M1104_CORE_SOURCES EXCLUDE REGEX "/src/encryption\\.cpp$")
+endif()
+
 # 实现迁入共享库后仍按能力检查依赖，避免原来的可选头文件变成基础库的硬依赖。
 option(M1104_ENABLE_JSON "Build the JSON runtime when dependencies are available" ON)
 option(M1104_ENABLE_REDIS_LOCK "Build Redis lock runtime when client libraries are available" ON)
@@ -69,6 +77,9 @@ target_include_directories(mental1104 PUBLIC
 )
 find_package(Threads REQUIRED)
 target_link_libraries(mental1104 PUBLIC Threads::Threads)
+if(M1104_ENABLE_ENCRYPTION)
+  target_link_libraries(mental1104 PRIVATE OpenSSL::Crypto)
+endif()
 if(M1104_HAS_JSON_RAPIDJSON)
   target_include_directories(mental1104 SYSTEM PRIVATE "${M1104_RAPIDJSON_INCLUDE_DIR}")
 endif()

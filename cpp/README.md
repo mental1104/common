@@ -2,6 +2,37 @@
 
 公共 C++ 头文件位于 `cpp/include/mental1104`。下面的包含示例假设已经通过仓库 CMake 安装，或包含路径中已有 `cpp/include`。
 
+## AES 加解密
+
+- **类别 / 类型：** 对称加密；`mental1104::encryption::CipherAlgorithm` 枚举及 `encrypt`、`decrypt` 函数。
+- **定义位置 / include：** `cpp/include/mental1104/encryption.h`，运行时实现位于 `cpp/src/encryption.cpp`。
+- **链接：** 配置 `-DM1104_ENABLE_ENCRYPTION=ON` 后链接 `mental1104`；需 OpenSSL Crypto，支持 C++11 及以上。默认关闭，不增加原有构建依赖。
+- **用途：** 兼容 Python 的 Legacy CBC，并使用统一版本化 AES-256-GCM 格式与其他语言互通。
+
+```cpp
+#include <mental1104/encryption.h>
+#include <cassert>
+#include <string>
+
+// 用公开 API 完成加密和自动识别解密；示例密钥仅用于展示，生产中从安全存储读取。
+int main() {
+    using namespace mental1104::encryption;
+    const std::string key = "0123456789abcdef0123456789abcdef";
+    const auto ciphertext = encrypt("secret", key, nullptr, CipherAlgorithm::AES_GCM);
+    assert(decrypt(ciphertext, key) == "secret");
+    assert(decrypt("MUSltWQ6CEFtWbeYRymj+A==") == "Default test");
+}
+```
+
+示例结果：无标准输出，断言通过。返回密文为 Base64 ASCII `std::string`，明文为 UTF-8 字节字符串；C++ 不验证 Unicode 编码。
+前三个参数为文本、原始 Key、可空 IV 指针；CBC 加密必须显式提供 16 字节 IV，省略或传 nullptr 会抛异常。
+CBC 默认 Key 为 `0ePThPnLaJcWFcRc`，仅历史解密允许 nullptr 使用 Key 作为 IV；采用 PKCS#7，线格式不变。
+每次 CBC 加密应生成新的随机 IV 并与密文一起保存，解密复用原 IV。`encrypt("secret")` 不再受支持。
+GCM 要求显式 32 字节 Key、`salt == nullptr`，每次随机生成 12 字节 Nonce，使用 16 字节 Tag，无 Padding。
+封装与 [Python AES 文档](../python/README.md) 相同：Base64 编码 `Magic + Version + Nonce + Tag + Ciphertext`，Magic 为 `mental1104:AES:`、版本为单字节 `01`，头部参与认证。
+`decrypt` 默认自动识别，四参数重载显式选择算法；未知版本、截断及认证失败直接抛异常，不降级 CBC。
+参数错误抛 `std::invalid_argument`，认证或底层失败抛 `std::runtime_error`。只接收 GCM 的调用方应显式选择 `AES_GCM`，拒绝缺失或损坏 Magic 的输入；调用方负责密钥管理。
+
 ## 从源码构建
 
 仓库根目录和 `cpp/` 目录都支持标准 CMake 流程。机器已有 CMake、C/C++ 编译器及构建工具后，在仓库根目录执行：
