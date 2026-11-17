@@ -341,18 +341,37 @@ def build_submodules(
     *,
     strict: bool = False,
     only: set[str] | None = None,
+    build_root: Path | None = None,
+    cmake_options: tuple[str, ...] = (),
 ) -> None:
+    """构建选中的 SDK，供 devtool 或 CMake 自动准备流程复用。
+
+    Args:
+        env: 子进程环境，包含编译配置和并发数量，不修改调用方映射。
+        strict: 为真时传播首个失败；否则保持原来的尽力构建行为。
+        only: 指定需要构建的源码路径集合；为空时沿用仓库默认选择。
+        build_root: 可选的独立构建根目录；CMake 用它隔离不同构建树的 SDK ABI。
+            未提供时保持原有源码目录下 build 的布局。
+        cmake_options: 主工程明确传入的 SDK 编译器与 ABI 配置参数。
+    """
     skip = _skip_list(env)
     paths = _gitmodule_paths()
     wanted = _wanted_list(env, paths)
-    hiredis_install = _hiredis_install_dir()
+    hiredis_build = (
+        build_root / "hiredis" if build_root is not None else ROOT / "cpp/lib/hiredis/build"
+    )
+    hiredis_install = (
+        hiredis_build / "install" if build_root is not None else _hiredis_install_dir()
+    )
     extra_cmake_args = {
         "cpp/lib/cJSON": ["-DENABLE_CUSTOM_COMPILER_FLAGS=OFF", "-DCMAKE_POLICY_VERSION_MINIMUM=3.5"],
         "cpp/lib/hiredis": [
             "-DDISABLE_TESTS=ON",
             f"-DCMAKE_INSTALL_PREFIX={hiredis_install}",
         ],
-        "cpp/lib/redis-plus-plus": ["-DREDIS_PLUS_PLUS_BUILD_TEST=ON"],
+        "cpp/lib/redis-plus-plus": [
+            f"-DREDIS_PLUS_PLUS_BUILD_TEST={'OFF' if build_root is not None else 'ON'}"
+        ],
     }
     build_env = cmake_build_env(env)
     is_windows = platform.system().lower() == "windows"
@@ -369,7 +388,7 @@ def build_submodules(
         path = ROOT / rel
         if not path.exists() or not (path / "CMakeLists.txt").exists():
             continue
-        build_dir = path / "build"
+        build_dir = build_root / path.name if build_root is not None else path / "build"
         ensure_dir(build_dir)
         try:
             cmake_args = [
@@ -380,10 +399,9 @@ def build_submodules(
                 str(build_dir),
                 f'-DCMAKE_BUILD_TYPE={env["CPP_BUILD_TYPE"]}',
             ]
+            cmake_args.extend(cmake_options)
             cmake_args += extra_cmake_args.get(rel, [])
             if rel == "cpp/lib/redis-plus-plus":
-                hiredis_root = ROOT / "cpp" / "lib" / "hiredis"
-                hiredis_build = hiredis_root / "build"
                 hiredis_install_lib = hiredis_install / "lib"
                 hiredis_lib = None
                 hiredis_include = hiredis_install / "include"
@@ -711,6 +729,18 @@ def build(env: Mapping[str, str]) -> None:
 
 
 def test(env: Mapping[str, str], *, file_pattern: str | None, filter_expr: str | None) -> None:
+    """运行标记为 unit 的 CTest 用例，即使配置中显式注册了基准也不执行它们。
+
+    Args:
+        env: 只读命令环境，提供 CTEST、JOBS 和多配置构建类型。
+        file_pattern: 可选 CTest 名称正则，进一步筛选单元测试。
+        filter_expr: 可选 GoogleTest 用例筛选，传入子进程的 GTEST_FILTER。
+    Returns:
+        无返回值；保留现有 Debug 构建检查及 CTest 失败退出语义。
+    Raises:
+        SystemExit: 当前构建不是要求的 Debug 类型。
+        subprocess.CalledProcessError: 所选单元测试失败。
+    """
     env_np = strip_proxies(env)
     cache = CPP_BUILD_DIR / "CMakeCache.txt"
     is_multi_config = False
@@ -720,7 +750,7 @@ def test(env: Mapping[str, str], *, file_pattern: str | None, filter_expr: str |
                 is_multi_config = True
             if line.startswith("CMAKE_BUILD_TYPE:STRING=") and "Debug" not in line:
                 raise SystemExit(f"[error] {CPP_BUILD_DIR} 不是 Debug 构建，请先 ./dev build cpp --config Debug")
-    args = [env_np["CTEST"], "--output-on-failure", "-LE", "bench", "-j", env_np["JOBS"]]
+    args = [env_np["CTEST"], "--output-on-failure", "-L", "^unit$", "-j", env_np["JOBS"]]
     if is_multi_config:
         args += ["-C", env_np["CPP_BUILD_TYPE"]]
     if env_np.get("CTEST_V"):
@@ -736,13 +766,24 @@ def test(env: Mapping[str, str], *, file_pattern: str | None, filter_expr: str |
 def coverage(
     env: Mapping[str, str], *, file_pattern: str | None = None, filter_expr: str | None = None
 ) -> None:
+    """只运行单元测试后，复用当前构建产物生成 C++ 覆盖率报告。
+
+    Args:
+        env: 只读命令环境，提供 CTest、gcov 及相关工具路径。
+        file_pattern: 可选 CTest 名称正则。
+        filter_expr: 可选 GoogleTest 用例筛选表达式。
+    Returns:
+        无返回值；不支持的 Windows 环境沿用既有跳过行为。
+    Raises:
+        subprocess.CalledProcessError: 单元测试执行失败。
+    """
     import platform
 
     if platform.system().lower() == "windows":
         print("[info] coverage-cpp not supported on Windows (gcov/lcov unavailable); skipping")
         return
     env_np = strip_proxies(env)
-    args = [env_np["CTEST"], "--output-on-failure", "-LE", "bench"]
+    args = [env_np["CTEST"], "--output-on-failure", "-L", "^unit$"]
     if file_pattern:
         args += ["-R", file_pattern]
     cmd_env = dict(env_np)
@@ -837,25 +878,48 @@ def fmt(env: Mapping[str, str]) -> None:
 
 
 def bench(env: Mapping[str, str], *, file_pattern: str | None, filter_expr: str | None) -> None:
+    """构建并运行当前 CMake 配置声明的基准，复用单元测试链接的业务库。
+
+    Args:
+        env: 只读工具环境，提供 CMAKE、JOBS 及多配置生成器使用的 CPP_BUILD_TYPE。
+        file_pattern: 可选程序名子串，仅选择基准目录生成的目标。
+        filter_expr: 可选 Google Benchmark 名称正则。
+    Returns:
+        无返回值；生成既有位置的 JSON 基准结果，构建或执行失败时报告错误。
+    Raises:
+        SystemExit: 缺少构建目录、可用基准目标或生成的目标清单。
+        subprocess.CalledProcessError: 基准程序执行失败。
+    """
     env_np = strip_proxies(env)
     if not CPP_BUILD_DIR.exists():
         raise SystemExit("[info] 未发现 cpp/build，请先 ./dev build cpp")
+    # 单配置构建使用缓存的真实类型，避免把 Release 产物误当成默认 Debug 配置。
+    multi_config = _is_multi_config()
+    config = env_np["CPP_BUILD_TYPE"]
+    cache = CPP_BUILD_DIR / "CMakeCache.txt"
+    if not multi_config and cache.exists():
+        for line in cache.read_text().splitlines():
+            if line.startswith("CMAKE_BUILD_TYPE:STRING="):
+                config = line.split("=", 1)[1] or "Debug"
+                break
+    build_args = [
+        env_np["CMAKE"], "--build", str(CPP_BUILD_DIR),
+        "--target", "m1104_benchmarks", "--parallel", env_np["JOBS"],
+    ]
+    if multi_config:
+        build_args += ["--config", config]
     try:
         run(
-            [
-                env_np["CMAKE"],
-                "--build",
-                str(CPP_BUILD_DIR),
-                "--target",
-                "m1104_benchmarks",
-                "--parallel",
-                env_np["JOBS"],
-            ],
+            build_args,
             env=env_np,
         )
     except subprocess.CalledProcessError:
         raise SystemExit("[error] C++ benchmark target is not available or failed to build")
-    binaries = [p for p in (CPP_BUILD_DIR / "bin").glob("bench_*") if p.is_file()]
+    # 只读取当前构建图生成的清单，不执行 bin 中遗留或已被功能开关排除的程序。
+    catalog = CPP_BUILD_DIR / f"m1104-benchmarks-{config}.txt"
+    if not catalog.exists():
+        raise SystemExit("[error] missing C++ benchmark catalog; reconfigure the build")
+    binaries = [Path(line) for line in catalog.read_text().splitlines() if line.strip()]
     if not binaries:
         raise SystemExit("[error] no C++ benchmark binaries were built")
     ensure_dir(Path(CPP_BENCH_ARTIFACT_DIR) / "plots")

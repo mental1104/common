@@ -1,5 +1,7 @@
 #pragma once
 
+// 此接口要求 C++17；构建系统只在满足标准时编译其运行时，不抬高基础库的标准。
+
 #include <cstdint>
 #include <map>
 #include <memory>

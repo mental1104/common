@@ -30,9 +30,9 @@ function(m1104_collect_installable_submodules)
   if (NOT M1104_INSTALL_SUBMODULES)
     return()
   endif()
-  file(GLOB _lib_subs RELATIVE "${CMAKE_SOURCE_DIR}" "${CMAKE_SOURCE_DIR}/lib/*")
+  file(GLOB _lib_subs RELATIVE "${PROJECT_SOURCE_DIR}" "${PROJECT_SOURCE_DIR}/lib/*")
   foreach(_rel IN LISTS _lib_subs)
-    set(_root "${CMAKE_SOURCE_DIR}/${_rel}")
+    set(_root "${PROJECT_SOURCE_DIR}/${_rel}")
     if (NOT IS_DIRECTORY "${_root}")
       continue()
     endif()
@@ -43,7 +43,12 @@ function(m1104_collect_installable_submodules)
       message(STATUS "Skip redis-plus-plus install on this platform: ${_rel}")
       continue()
     endif()
-    _m1104_track_submodule_install_root("${_root}/build")
+    get_filename_component(_module_name "${_root}" NAME)
+    if(M1104_AUTO_SETUP OR EXISTS "${M1104_DEPENDENCY_ROOT}/${_module_name}/CMakeCache.txt")
+      _m1104_track_submodule_install_root("${M1104_DEPENDENCY_ROOT}/${_module_name}")
+    else()
+      _m1104_track_submodule_install_root("${_root}/build")
+    endif()
   endforeach()
 endfunction()
 
@@ -62,7 +67,7 @@ macro(m1104_setup_testing_and_benchmark)
     return()
   endif()
 
-  set(BENCH_THIRDPARTY_DIR "${CMAKE_SOURCE_DIR}/thirdparty/benchmark") # 先记录本地 benchmark 源码目录，后面存在才 add_subdirectory 并配置开关
+  set(BENCH_THIRDPARTY_DIR "${PROJECT_SOURCE_DIR}/thirdparty/benchmark") # 先记录本地 benchmark 源码目录，后面存在才 add_subdirectory 并配置开关
   if (EXISTS "${BENCH_THIRDPARTY_DIR}/CMakeLists.txt")
     # 通过 CACHE 变量强制关闭 gbench 自带测试/安装，避免污染主项目选项。
     # 形式为 set(<var> <val> CACHE BOOL "" FORCE)：
@@ -85,7 +90,7 @@ endmacro()
 
 # 第三方目录收集（lib 下扫描 include/lib 子目录，再追加常见头文件路径）
 macro(m1104_collect_thirdparty_paths)
-  set(THIRDROOT "${CMAKE_SOURCE_DIR}/lib")
+  set(THIRDROOT "${PROJECT_SOURCE_DIR}/lib")
   message(STATUS "THIRDROOT = ${THIRDROOT}")
 
   set(THIRD_INCLUDE_DIRS "") # CMake 中空字符串可作为空列表起始值，后续 list(APPEND ...) 即转换为列表使用
@@ -98,7 +103,7 @@ macro(m1104_collect_thirdparty_paths)
 
   # 在 lib 下扫描形如 */build/include 及其子目录，收集可能的第三方头文件路径
   # 例如如果存在 lib/boost/build/include 或 lib/redis-plus-plus/build/include/sw，它们都会出现在列表中。
-  file(GLOB THIRD_INC_CANDIDATES RELATIVE ${CMAKE_SOURCE_DIR} # GLOB 语法：匹配指定模式的路径；RELATIVE 使结果相对源目录，便于后续拼接
+  file(GLOB THIRD_INC_CANDIDATES RELATIVE ${PROJECT_SOURCE_DIR} # GLOB 语法：匹配指定模式的路径；RELATIVE 使结果相对源目录，便于后续拼接
     "${THIRDROOT}/*/build/include"
     "${THIRDROOT}/*/build/include/*"
     "${THIRDROOT}/*/include"
@@ -107,18 +112,18 @@ macro(m1104_collect_thirdparty_paths)
     "${THIRDROOT}/boost/libs/*/include/*"
   )
   foreach(increl ${THIRD_INC_CANDIDATES})
-    set(incdir "${CMAKE_SOURCE_DIR}/${increl}")
+    set(incdir "${PROJECT_SOURCE_DIR}/${increl}")
     if(EXISTS ${incdir})
       list(APPEND THIRD_INCLUDE_DIRS ${incdir})
       message(STATUS "Found thirdparty include: ${incdir}")
     endif()
   endforeach()
 
-  file(GLOB THIRD_LIB_CANDIDATES RELATIVE ${CMAKE_SOURCE_DIR}
+  file(GLOB THIRD_LIB_CANDIDATES RELATIVE ${PROJECT_SOURCE_DIR}
     "${THIRDROOT}/*/build/lib"
   )
   foreach(librel ${THIRD_LIB_CANDIDATES})
-    set(libdir "${CMAKE_SOURCE_DIR}/${librel}")
+    set(libdir "${PROJECT_SOURCE_DIR}/${librel}")
     if(EXISTS ${libdir})
       list(APPEND THIRD_LIB_DIRS ${libdir})
       message(STATUS "Found thirdparty lib dir: ${libdir}")
@@ -159,12 +164,16 @@ function(register_component NAME SUBPATH)
     set(multiValueArgs INC_REL LIB_GLOBS)
     cmake_parse_arguments(CMP "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
 
-    set(_root "${CMAKE_SOURCE_DIR}/${SUBPATH}")
-    if (CMP_BUILD_SUBDIR)
+    set(_root "${PROJECT_SOURCE_DIR}/${SUBPATH}")
+    get_filename_component(_module_name "${_root}" NAME)
+    if(M1104_AUTO_SETUP OR EXISTS "${M1104_DEPENDENCY_ROOT}/${_module_name}/CMakeCache.txt")
+        set(_build_dir "${M1104_DEPENDENCY_ROOT}/${_module_name}")
+    elseif (CMP_BUILD_SUBDIR)
         set(_build_dir "${_root}/${CMP_BUILD_SUBDIR}")
     else()
         set(_build_dir "${_root}/build")
     endif()
+    set(${NAME}_BUILD_DIR "${_build_dir}" PARENT_SCOPE)
 
     if (EXISTS "${_root}/CMakeLists.txt")
         set(HAVE_${NAME} TRUE PARENT_SCOPE)
@@ -178,6 +187,11 @@ function(register_component NAME SUBPATH)
     endif()
 
     set(_inc_abs "")
+    foreach(_generated_include "${_build_dir}/install/include" "${_build_dir}/src")
+        if(IS_DIRECTORY "${_generated_include}")
+            list(APPEND _inc_abs "${_generated_include}")
+        endif()
+    endforeach()
     foreach(rel ${CMP_INC_REL})
         if (EXISTS "${_root}/${rel}")
             list(APPEND _inc_abs "${_root}/${rel}")
@@ -245,7 +259,7 @@ function(_rpp_propagate_inc tgt incs)
 endfunction()
 
 function(rpp_apply_cxx_utils_shim)
-    set(_rpp_root      "${CMAKE_SOURCE_DIR}/lib/redis-plus-plus")
+    set(_rpp_root      "${PROJECT_SOURCE_DIR}/lib/redis-plus-plus")
     set(_overlay_root  "${CMAKE_BINARY_DIR}/overlay/redis-plus-plus")
     set(_overlay_inc   "${_overlay_root}")
     file(MAKE_DIRECTORY "${_overlay_inc}/sw/redis++")
@@ -368,7 +382,7 @@ using TlsContextUPtr = std::unique_ptr<void, NullDeleter>;
     set(_want_includes
         "${_overlay_inc}"
         "${_rpp_root}/src"
-        "${_rpp_root}/build/src"
+        "${REDISPP_BUILD_DIR}/src"
     )
     foreach(_dir IN LISTS _want_includes)
         if (EXISTS "${_dir}")
@@ -431,11 +445,11 @@ macro(m1104_register_components)
       INC_REL .
   )
   if (HAVE_CJSON AND NOT TARGET CJSON::lib)
-    set(_cjson_src "${CMAKE_SOURCE_DIR}/lib/cJSON/cJSON.c")
+    set(_cjson_src "${PROJECT_SOURCE_DIR}/lib/cJSON/cJSON.c")
     if (EXISTS "${_cjson_src}")
       message(STATUS "Component CJSON missing built library, using source fallback: ${_cjson_src}")
       add_library(m1104_cjson_fallback STATIC "${_cjson_src}")
-      target_include_directories(m1104_cjson_fallback PUBLIC "${CMAKE_SOURCE_DIR}/lib/cJSON")
+      target_include_directories(m1104_cjson_fallback PUBLIC "${PROJECT_SOURCE_DIR}/lib/cJSON")
       set_target_properties(m1104_cjson_fallback PROPERTIES POSITION_INDEPENDENT_CODE ON)
       add_library(CJSON::lib ALIAS m1104_cjson_fallback)
       set(HAVE_LIB_CJSON TRUE)
@@ -447,16 +461,16 @@ macro(m1104_register_components)
   )
 
   if (HAVE_ASYNC_SIMPLE)
-    set(_async_simple_header "${CMAKE_SOURCE_DIR}/lib/async_simple/async_simple/Executor.h")
+    set(_async_simple_header "${PROJECT_SOURCE_DIR}/lib/async_simple/async_simple/Executor.h")
     if (NOT EXISTS "${_async_simple_header}")
       message(WARNING "async_simple component declared but header missing: ${_async_simple_header}; disabling ASYNC_SIMPLE")
       set(HAVE_ASYNC_SIMPLE FALSE)
     endif()
   endif()
 
-  if (NOT HAVE_ASYNC_SIMPLE AND EXISTS "${CMAKE_SOURCE_DIR}/lib/async_simple/async_simple/Executor.h")
+  if (NOT HAVE_ASYNC_SIMPLE AND EXISTS "${PROJECT_SOURCE_DIR}/lib/async_simple/async_simple/Executor.h")
     set(HAVE_ASYNC_SIMPLE TRUE)
-    set(_async_simple_inc "${CMAKE_SOURCE_DIR}/lib/async_simple")
+    set(_async_simple_inc "${PROJECT_SOURCE_DIR}/lib/async_simple")
     message(STATUS "Component ASYNC_SIMPLE = AVAILABLE (headers only, no CMakeLists.txt) at ${_async_simple_inc}")
     if (NOT TARGET ASYNC_SIMPLE::headers)
       add_library(ASYNC_SIMPLE::headers INTERFACE IMPORTED)

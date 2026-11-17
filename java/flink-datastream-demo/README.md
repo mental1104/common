@@ -29,6 +29,40 @@ Maven 项目：`com.mental1104:flink-datastream-demo`。
 
 ## 详情
 
+### AES 加解密
+
+- **类别 / 类型：** 对称加密；`CipherAlgorithm` 枚举与 `Encryption` 静态工具类。
+- **定义位置：** `src/main/java/com/mental1104/common/{CipherAlgorithm,Encryption}.java`。
+- **导入：** `com.mental1104.common.Encryption`、`com.mental1104.common.CipherAlgorithm`。
+- **用途：** 使用 Java 11 标准库兼容 Python 历史 CBC 和六种语言统一的 AES-256-GCM，无新增依赖。
+
+```java
+import com.mental1104.common.Encryption;
+import com.mental1104.common.CipherAlgorithm;
+import java.security.SecureRandom;
+
+// main 展示显式密钥的 GCM 往返；调用方负责保存和分发密钥。
+class Example {
+  public static void main(String[] args) throws Exception {
+    byte[] key = new byte[32];
+    new SecureRandom().nextBytes(key);
+    byte[] ciphertext = Encryption.encrypt("secret", key, null, CipherAlgorithm.AES_GCM);
+    System.out.println(Encryption.decrypt(ciphertext, key, null, null));
+  }
+}
+```
+
+示例输出：`secret`。`encrypt(String, byte[] key, byte[] salt, CipherAlgorithm)` 返回标准 Base64 bytes，
+`decrypt(byte[], byte[] key, byte[] salt, CipherAlgorithm)` 返回 UTF-8 String；解密算法 null 表示自动识别。
+`encrypt(String)` 因缺少显式 IV 而抛异常，CBC 加密必须使用带 16 字节 salt 的重载，null 或空数组均拒绝。
+CBC 的 null Key 使用 `0ePThPnLaJcWFcRc`；每次加密生成新随机 IV 并与密文保存，解密复用原 IV。
+`decrypt(byte[])` 仍支持历史默认 Key/IV；仅历史解密允许 null salt 使用 Key 作为 IV。
+JCE `PKCS5Padding` 对 AES 的线格式等同 PKCS#7，旧数据格式不变。
+GCM 必须显式提供 32 字节 Key、null salt，每次生成 12 字节随机 Nonce，使用 16 字节 Tag，无 Padding。
+封装为 Base64 编码的 `b"mental1104:AES:" + 0x01 + Nonce + Tag + Ciphertext`，Magic 与版本参与认证。
+格式、参数、未知版本、截断和认证失败抛 `GeneralSecurityException`（认证失败为 `AEADBadTagException`），非法 Base64 抛 `IllegalArgumentException`，均不降级 CBC；无效 UTF-8 也会拒绝。
+输入数组不修改。只接收 GCM 时显式传 `AES_GCM`，拒绝缺失或损坏 Magic 的输入；调用方负责密钥管理。
+
 ### `Contains.contains`
 
 - **类别：** 集合与字符串包含判断

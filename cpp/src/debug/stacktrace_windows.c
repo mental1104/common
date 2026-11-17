@@ -1,6 +1,7 @@
 #include "stacktrace_internal.h"
+#include "mental1104/meta/platform_support.h"
 
-#ifdef _WIN32
+#if M1104_OS_WINDOWS
 
 #include <stdint.h>
 #include <stdio.h>

@@ -1,0 +1,4 @@
+@PACKAGE_INIT@
+# 公开边界只依赖标准库；Drogon 为共享适配器的私有运行时依赖。
+include("${CMAKE_CURRENT_LIST_DIR}/mental1104WebTargets.cmake")
+check_required_components(mental1104Web)

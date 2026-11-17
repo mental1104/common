@@ -1,5 +1,5 @@
-#include "mental1104/mq/pulsar.h"
 #include "mental1104/mq/factory.h"
+#include "mental1104/mq/pulsar.h"
 
 #include <atomic>
 #include <mutex>
@@ -9,6 +9,9 @@
 #include <pulsar/Consumer.h>
 #include <pulsar/Message.h>
 #include <pulsar/Producer.h>
+#ifdef M1104_PULSAR_HAS_CREATE_PRODUCER_V2
+#include <variant>
+#endif
 #endif
 
 namespace mental1104 {
@@ -46,7 +49,8 @@ pulsar::Message build_message(const Message &message) {
   builder.setContent(
       std::string(message.payload.begin(), message.payload.end()));
   if (!message.key.empty())
-    builder.setPartitionKey(std::string(message.key.begin(), message.key.end()));
+    builder.setPartitionKey(
+        std::string(message.key.begin(), message.key.end()));
   if (!message.headers.empty())
     builder.setProperties(message.headers);
   return builder.build();
@@ -69,26 +73,38 @@ pulsar::ConsumerType consumer_type(SubscriptionType value) {
 
 /// pulsar-client-cpp Producer 的 Bridge backend。
 ///
-/// client_ 和 producer_ 由本对象独占。Pulsar SDK 自行管理异步 I/O 线程；用户 callback
-/// 由 SDK callback 进入 Bridge completion，再由 Bridge 隔离线程执行。
+/// client_ 和 producer_ 由本对象独占。Pulsar SDK 自行管理异步 I/O 线程；用户
+/// callback 由 SDK callback 进入 Bridge completion，再由 Bridge 隔离线程执行。
 class PulsarProducerBackend : public IProducerBackend {
 public:
   /// 创建 Pulsar Client 和 Producer。
+  /// @param config 只读 topic 和批处理配置，不保存调用方引用。
+  /// @param backend 只读 SDK 连接配置，Client 保存其所需连接信息。
   PulsarProducerBackend(const ProducerConfig &config,
                         const PulsarBackendConfig &backend)
       : client_(backend.service_url), closed_(false) {
     pulsar::ProducerConfiguration producer_config;
     producer_config.setBatchingEnabled(config.batching_enabled);
-    pulsar::Result result = client_.createProducer(
-        build_pulsar_topic(config.topic), producer_config, producer_);
+    // SDK 版本差异在实现边界收敛，公共错误与 Producer 生命周期保持一致。
+#ifdef M1104_PULSAR_HAS_CREATE_PRODUCER_V2
+    auto created = this->client_.createProducerV2(
+        build_pulsar_topic(config.topic), producer_config);
+    if (const auto *error = std::get_if<pulsar::Error>(&created))
+      throw MQException(pulsar_error("create_producer", error->result));
+    this->producer_ = std::get<pulsar::Producer>(std::move(created));
+#else
+    pulsar::Result result = this->client_.createProducer(
+        build_pulsar_topic(config.topic), producer_config, this->producer_);
     if (result != pulsar::ResultOk)
       throw MQException(pulsar_error("create_producer", result));
+#endif
   }
 
   /// 尽力刷新并关闭，不允许异常越过析构边界。
   ~PulsarProducerBackend() {
     try {
-      close();
+      // 析构仅关闭本类型拥有的资源，显式限定以避免隐式虚分派。
+      this->PulsarProducerBackend::close();
     } catch (...) {
     }
   }
@@ -167,8 +183,9 @@ public:
 
 /// pulsar-client-cpp Consumer 的 Bridge backend。
 ///
-/// client_ 与 consumer_ 由本对象独占；mutex_ 串行化 receive、确认、重订阅和关闭，
-/// 防止 SDK Consumer 与 Receipt 确认操作并发销毁。
+/// client_ 与 consumer_ 由本对象独占；mutex_ 串行化
+/// receive、确认、重订阅和关闭， 防止 SDK Consumer 与 Receipt
+/// 确认操作并发销毁。
 class PulsarConsumerBackend : public IConsumerBackend {
 public:
   /// 保存订阅配置并立即创建 Consumer。
@@ -186,7 +203,8 @@ public:
   /// 尽力关闭 Consumer 和 Client，不允许异常越过析构边界。
   ~PulsarConsumerBackend() {
     try {
-      close();
+      // 析构仅关闭本类型拥有的资源，显式限定以避免隐式虚分派。
+      this->PulsarConsumerBackend::close();
     } catch (...) {
     }
   }
@@ -231,10 +249,9 @@ public:
           MQError(ErrorCode::InvalidMessage, "acknowledge",
                   "invalid Pulsar receipt", "pulsar"));
     pulsar::Result result = consumer_.acknowledge(pulsar_receipt->message);
-    return result == pulsar::ResultOk
-               ? OperationResult::success()
-               : OperationResult::failure(
-                     pulsar_error("acknowledge", result, true));
+    return result == pulsar::ResultOk ? OperationResult::success()
+                                      : OperationResult::failure(pulsar_error(
+                                            "acknowledge", result, true));
   }
 
   /// 否认 PulsarReceipt 中保存的原生消息。
@@ -260,8 +277,7 @@ public:
     pulsar::Result result = consumer_.unsubscribe();
     return result == pulsar::ResultOk
                ? OperationResult::success()
-               : OperationResult::failure(
-                     pulsar_error("unsubscribe", result));
+               : OperationResult::failure(pulsar_error("unsubscribe", result));
   }
 
   /// 关闭旧 Consumer，并按原 topic/subscription/type 创建新 Consumer。
@@ -300,8 +316,7 @@ private:
         client_.subscribe(topic_, subscription_, consumer_config, consumer_);
     return result == pulsar::ResultOk
                ? OperationResult::success()
-               : OperationResult::failure(
-                     pulsar_error("subscribe", result));
+               : OperationResult::failure(pulsar_error("subscribe", result));
   }
 
   /// 创建 Consumer，失败时转换为兼容 MQException。
@@ -369,7 +384,8 @@ PulsarMessageQueue::PulsarMessageQueue(const Options &options)
 /// 析构时幂等关闭 facade，不向外抛异常。
 PulsarMessageQueue::~PulsarMessageQueue() noexcept {
   try {
-    close();
+    // facade 析构只执行当前类型的幂等关闭，不向派生类分派。
+    this->PulsarMessageQueue::close();
   } catch (...) {
   }
 }
@@ -392,7 +408,8 @@ std::shared_ptr<Producer> PulsarMessageQueue::create_producer(
   config.topic.topic = topic;
   config.batching_enabled = batching_enabled;
   config.backend = backend;
-  return std::shared_ptr<Producer>(new Producer(create_producer_backend(config)));
+  return std::shared_ptr<Producer>(
+      new Producer(create_producer_backend(config)));
 }
 
 /// 从兼容参数构造 Pulsar ConsumerConfig 和 Consumer Bridge。
@@ -418,10 +435,10 @@ std::shared_ptr<Consumer> PulsarMessageQueue::create_consumer(
   config.subscription = subscription;
   config.subscription_type = type;
   config.backend = backend;
-  return std::shared_ptr<Consumer>(new Consumer(
-      std::shared_ptr<IConsumerBackend>(
-          create_consumer_backend(config).release()),
-      listener));
+  return std::shared_ptr<Consumer>(
+      new Consumer(std::shared_ptr<IConsumerBackend>(
+                       create_consumer_backend(config).release()),
+                   listener));
 }
 
 /// 幂等关闭兼容 facade；已创建 Bridge 的资源由各对象自行管理。

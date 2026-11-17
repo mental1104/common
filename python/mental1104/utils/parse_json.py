@@ -1,3 +1,9 @@
+"""统一可用 JSON 后端的字符串、文件流读取和序列化入口。
+
+后端可用性在导入时确定，由 JsonUtil 提供只读查询；CPP 适配的对象返回
+与校验后重解析分支集中在 _cpp_loader，导出策略选择由导出层自行管理。
+"""
+
 from __future__ import annotations
 
 import importlib
@@ -67,6 +73,15 @@ class JsonUtil:
     if _cpp_parse_json is not None:
 
         def _cpp_loader(payload: str | bytes) -> Any:
+            """将 C++ 导出结果适配成 Python JSON 值。
+
+            Args:
+                payload: JSON 字符串或 UTF-8 字节；解码时替换无效字节。
+            Returns:
+                绑定返回的对象；未返回对象时由标准库重新解析，JSON null 为 None。
+            Raises:
+                ValueError: 导出协议不符合预期，或 C++ 后端报告解析失败。
+            """
             text = payload
             if isinstance(payload, (bytes, bytearray)):
                 text = payload.decode("utf-8", errors="replace")
@@ -87,6 +102,7 @@ class JsonUtil:
                 raise ValueError(f"C++ parse_json failed at offset {offset}: {err}")
             if value is not None:
                 return value
+            # ctypes、旧扩展及 JSON null 没有可直接返回的对象，会再次解析文本。
             return json.loads(text)
 
         __parsers["cpp"] = _cpp_loader

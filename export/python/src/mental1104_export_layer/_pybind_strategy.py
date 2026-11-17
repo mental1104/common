@@ -1,3 +1,9 @@
+"""通过可选的 pybind11 扩展获取 JSON 校验结果和 Python 对象。
+
+扩展提供 parse_json_value 时直接返回对象；旧扩展只有 parse_json 时，
+保持相同的四元组协议并以 None 表示没有返回对象。
+"""
+
 from __future__ import annotations
 
 import importlib

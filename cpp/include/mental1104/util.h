@@ -34,40 +34,31 @@ bool contains(const Container &c, const T &value) {
   return std::find(c.begin(), c.end(), value) != c.end();
 }
 
-// to_lower_copy：把 string_view 按字符快速转换为全小写 std::string，复用 log
-// 等场景的需求。 预先用 '\0' 填充只是为了分配足够空间，后续 transform
-// 会写满；即便省略填充值（用 string(size_t) 构造）也会默认填
-// char(0)，行为等价，这里显式写出便于理解。
-inline std::string to_lower_copy(string_view text) {
-  auto lower = [](char c) {
-    return static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-  };
-  std::string out(text.size(), '\0');
-  std::transform(text.begin(), text.end(), out.begin(), lower);
-  return out;
-}
+/// 按当前 C locale 转换字符，返回独立的小写字符串。
+/// @param text 只读输入，不保存视图。
+/// @return 小写副本。
+std::string to_lower_copy(string_view text);
 
-// 指数退避工具：返回下一次等待时长并步进，带上限与可重置。
+/// 维护带上限的指数退避状态；随机引擎与泛型时长适配保留在调用方。
 class ExponentialBackoff {
 public:
+  /// 建立带上限的指数退避序列。
+  /// @param initial 初始等待时间。
+  /// @param max_delay 后续等待上限。
+  /// @param factor 每次推进的倍率。
   ExponentialBackoff(
       std::chrono::milliseconds initial = std::chrono::milliseconds(10),
       std::chrono::milliseconds max_delay = std::chrono::milliseconds(200),
-      int factor = 2) // 默认构造等价于 ExponentialBackoff(10ms, 200ms, 2)
-      : initial_(initial), max_(max_delay), factor_(factor), current_(initial) {
-  }
+      int factor = 2);
 
   template <typename Rep1, typename Rep2>
   ExponentialBackoff(Rep1 initial_ms, Rep2 max_ms, int factor = 2)
       : ExponentialBackoff(std::chrono::milliseconds(initial_ms),
                            std::chrono::milliseconds(max_ms), factor) {}
 
-  std::chrono::milliseconds next() {
-    auto delay = current_;
-    auto next_delay = std::chrono::milliseconds(current_.count() * factor_);
-    current_ = std::min(next_delay, max_);
-    return delay;
-  }
+  /// 返回本次等待并将内部状态推进到受上限限制的下一次等待。
+  /// @return 推进前的等待时长。
+  std::chrono::milliseconds next();
 
   template <typename UniformRandomBitGenerator>
   std::chrono::milliseconds next(double jitter_ratio,
@@ -93,7 +84,8 @@ public:
     return std::chrono::milliseconds(std::max<long long>(0, jittered));
   }
 
-  void reset() { current_ = initial_; }
+  /// 将下一次等待恢复到构造时的初始值。
+  void reset();
 
 private:
   std::chrono::milliseconds initial_;

@@ -1,5 +1,5 @@
-#include "mental1104/mq/kafka.h"
 #include "mental1104/mq/factory.h"
+#include "mental1104/mq/kafka.h"
 
 #include <atomic>
 #include <future>
@@ -42,7 +42,8 @@ void apply_options(RdKafka::Conf &conf, const Options &options) {
 }
 
 /// 单次异步发送随 msg_opaque 交给 librdkafka 的 callback 所有权对象。
-/// produce 成功后由 dr_cb 通过 unique_ptr 接管并释放；同步拒绝时由提交路径释放。
+/// produce 成功后由 dr_cb 通过 unique_ptr
+/// 接管并释放；同步拒绝时由提交路径释放。
 struct Delivery {
   explicit Delivery(const DeliveryCallback &callback) : callback(callback) {}
   DeliveryCallback callback;
@@ -50,8 +51,9 @@ struct Delivery {
 
 /// librdkafka Producer 的 Bridge backend。
 ///
-/// producer_ 和 poller_ 由本对象独占；poller_ 持续驱动 delivery report。mutex_ 只保护
-/// closed_ 与提交/关闭边界，delivery callback 由 librdkafka/poller 线程触发。
+/// producer_ 和 poller_ 由本对象独占；poller_ 持续驱动 delivery report。mutex_
+/// 只保护 closed_ 与提交/关闭边界，delivery callback 由 librdkafka/poller
+/// 线程触发。
 class KafkaProducerBackend : public IProducerBackend,
                              public RdKafka::DeliveryReportCb {
 public:
@@ -89,7 +91,8 @@ public:
   /// 尽力 flush 并 join poller，不允许异常越过析构边界。
   ~KafkaProducerBackend() {
     try {
-      close();
+      // 析构仅关闭本类型拥有的资源，显式限定以避免隐式虚分派。
+      this->KafkaProducerBackend::close();
     } catch (...) {
     }
   }
@@ -98,8 +101,8 @@ public:
   SendResult send(const Message &message) override {
     std::promise<SendResult> promise;
     std::future<SendResult> future = promise.get_future();
-    OperationResult accepted = send_async(
-        message, [&promise](const SendResult &result) {
+    OperationResult accepted =
+        send_async(message, [&promise](const SendResult &result) {
           promise.set_value(result);
         });
     if (!accepted.ok)
@@ -221,7 +224,8 @@ public:
   /// 尽力关闭 consumer，不允许异常越过析构边界。
   ~KafkaConsumerBackend() {
     try {
-      close();
+      // 析构仅关闭本类型拥有的资源，显式限定以避免隐式虚分派。
+      this->KafkaConsumerBackend::close();
     } catch (...) {
     }
   }
@@ -304,10 +308,9 @@ public:
           MQError(ErrorCode::InvalidMessage, "negative_acknowledge",
                   "invalid Kafka receipt", "kafka"));
     std::unique_ptr<RdKafka::TopicPartition> partition(
-        RdKafka::TopicPartition::create(
-            kafka_receipt->message->topic_name(),
-            kafka_receipt->message->partition(),
-            kafka_receipt->message->offset()));
+        RdKafka::TopicPartition::create(kafka_receipt->message->topic_name(),
+                                        kafka_receipt->message->partition(),
+                                        kafka_receipt->message->offset()));
     RdKafka::ErrorCode code = consumer_->seek(*partition, 5000);
     return code == RdKafka::ERR_NO_ERROR
                ? OperationResult::success()
@@ -440,7 +443,8 @@ KafkaMessageQueue::KafkaMessageQueue(const Options &options)
 /// 析构时幂等关闭 facade，不向外抛异常。
 KafkaMessageQueue::~KafkaMessageQueue() noexcept {
   try {
-    close();
+    // facade 析构只执行当前类型的幂等关闭，不向派生类分派。
+    this->KafkaMessageQueue::close();
   } catch (...) {
   }
 }
@@ -460,7 +464,8 @@ std::shared_ptr<Producer> KafkaMessageQueue::create_producer(
   config.topic.topic = topic;
   config.batching_enabled = batching_enabled;
   config.backend = backend;
-  return std::shared_ptr<Producer>(new Producer(create_producer_backend(config)));
+  return std::shared_ptr<Producer>(
+      new Producer(create_producer_backend(config)));
 }
 
 /// 从兼容参数构造 Kafka ConsumerConfig 和 Consumer Bridge。
@@ -482,10 +487,10 @@ std::shared_ptr<Consumer> KafkaMessageQueue::create_consumer(
   config.subscription = subscription;
   config.subscription_type = type;
   config.backend = backend;
-  return std::shared_ptr<Consumer>(new Consumer(
-      std::shared_ptr<IConsumerBackend>(
-          create_consumer_backend(config).release()),
-      listener));
+  return std::shared_ptr<Consumer>(
+      new Consumer(std::shared_ptr<IConsumerBackend>(
+                       create_consumer_backend(config).release()),
+                   listener));
 }
 
 /// 幂等关闭兼容 facade；已创建 Bridge 的资源由各对象自行管理。

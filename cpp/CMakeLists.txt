@@ -6,6 +6,7 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/cmake")
 # CMAKE_MODULE_PATH 初值通常为空（内建变量），但可能已被工具链文件/上层项目预设
 
 include(cmake/project_settings.cmake)
+include(cmake/bootstrap.cmake)
 include(cmake/deps.cmake)
 include(cmake/core_library.cmake)
 include(cmake/mq.cmake)
@@ -14,3 +15,9 @@ include(cmake/stacktrace.cmake)
 include(cmake/testing.cmake)
 include(cmake/benchmarks.cmake)
 include(cmake/coverage.cmake)
+
+# Web 目标在现有构建目录组织，主库默认保留原有依赖与兼容范围。
+option(M1104_ENABLE_WEB "Build the independent C++17 web module" OFF)
+if(M1104_ENABLE_WEB)
+  include(cmake/web.cmake)
+endif()

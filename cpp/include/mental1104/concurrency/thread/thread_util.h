@@ -11,15 +11,15 @@
 #include <mutex>
 #include <queue>
 #include <thread>
-#include <type_traits>
 #include <tuple>
+#include <type_traits>
 #include <vector>
 
 namespace mental1104 {
 
 namespace detail {
 
-#if (defined(_MSVC_LANG) && _MSVC_LANG >= 201703L) || \
+#if (defined(_MSVC_LANG) && _MSVC_LANG >= 201703L) ||                          \
     (!defined(_MSVC_LANG) && __cplusplus >= 201703L)
 template <typename F, typename... Args>
 using threadpool_invoke_result_t = std::invoke_result_t<F, Args...>;
@@ -45,18 +45,22 @@ inline void sleep_for_ms(int ms) { sleep_for(ms); }
 
 // ===================== ThreadPool 声明（实现放到 .cpp） =====================
 
+/// 持有工作线程和任务队列，模板入口保留结果类型，队列同步由库负责。
 class ThreadPool {
 public:
   explicit ThreadPool(size_t numThreads);
   ~ThreadPool();
 
   template <typename F, typename... Args>
-  auto submit(F &&f,
-              Args &&...args)
+  auto submit(F &&f, Args &&...args)
       -> std::future<
           mental1104::detail::threadpool_invoke_result_t<F, Args...>>;
 
 private:
+  /// 将已适配成 void() 的任务放入队列，并唤醒一个工作线程。
+  /// @param task 转移到队列的可调用对象；异常行为沿用容器操作。
+  void enqueue(std::function<void()> task);
+
   std::vector<std::thread> workers;
   std::queue<std::function<void()>> tasks;
 
@@ -71,11 +75,11 @@ auto ThreadPool::submit(F &&f, Args &&...args)
     -> std::future<mental1104::detail::threadpool_invoke_result_t<F, Args...>> {
   using ReturnType = mental1104::detail::threadpool_invoke_result_t<F, Args...>;
 
-#if (defined(_MSVC_LANG) && _MSVC_LANG >= 201703L) ||                         \
+#if (defined(_MSVC_LANG) && _MSVC_LANG >= 201703L) ||                          \
     (!defined(_MSVC_LANG) && __cplusplus >= 201703L)
   auto bound = [func = std::forward<F>(f),
-                args_tuple = std::make_tuple(std::forward<Args>(args)...)]()
-                   mutable -> ReturnType {
+                args_tuple = std::make_tuple(
+                    std::forward<Args>(args)...)]() mutable -> ReturnType {
     return std::apply(std::move(func), std::move(args_tuple));
   };
   auto task =
@@ -86,11 +90,8 @@ auto ThreadPool::submit(F &&f, Args &&...args)
 #endif
 
   std::future<ReturnType> result = task->get_future();
-  {
-    std::unique_lock<std::mutex> lock(queueMutex);
-    tasks.emplace([task]() { (*task)(); });
-  }
-  condition.notify_one();
+  // 任务包装保留具体结果类型，入队同步由库中的固定签名核心负责。
+  this->enqueue([task]() { (*task)(); });
 
   return result;
 }

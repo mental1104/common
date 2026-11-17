@@ -5,7 +5,7 @@
 #include <string_view>
 
 #include "mental1104/common/c_api_compat.h"
-#include "mental1104/json.h"
+#include "mental1104/json/codec.h"
 
 namespace mental1104_export_layer {
 

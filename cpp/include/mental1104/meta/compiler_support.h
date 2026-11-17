@@ -75,6 +75,11 @@
 #define M1104_HAS_INCLUDE(header) 0
 #endif
 
+// 源码独立头文件仍可使用；正常 target 或安装消费优先读取库生成的可选能力配置。
+#if M1104_HAS_INCLUDE("mental1104/build_config.h")
+#include <mental1104/build_config.h>
+#endif
+
 // string_view feature flag：C++17 起有 std::string_view，低于此关闭。
 #if M1104_HAS_CXX17
 #define M1104_HAS_STRING_VIEW 1

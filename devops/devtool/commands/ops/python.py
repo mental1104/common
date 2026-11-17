@@ -1,3 +1,9 @@
+"""执行 Python 的环境准备、测试、覆盖率、基准和安装命令。
+
+子进程通过 _venv_env 使用项目虚拟环境；测试和覆盖率把 C++ 导出构建目录
+加入 PYTHONPATH，并在发现共享库时传入其路径，使导出后端可被探测。
+"""
+
 from __future__ import annotations
 
 import os
@@ -441,6 +447,17 @@ def fmt(env: Mapping[str, str]) -> None:
 
 
 def bench(env: Mapping[str, str], *, file_pattern: str | None, filter_expr: str | None) -> None:
+    """沿用 pytest 的测试发现规则运行基准，用 -k 筛选现有用例。
+
+    Args:
+        env: 只读工具环境，可通过 PYTEST_BENCH_K 覆盖默认筛选表达式。
+        file_pattern: 可选的名称筛选表达式，与其他筛选组合后传给 pytest -k。
+        filter_expr: 显式用例筛选表达式；未指定时使用环境值或默认值。
+    Returns:
+        无返回值；执行基准子进程，并准备对应的产物目录。
+    Raises:
+        subprocess.CalledProcessError: 虚拟环境准备或 pytest 执行失败。
+    """
     venv_env = _ensure_venv(env)
     artifact_dir = Path(BENCH_ARTIFACT_ROOT) / "python"
     ensure_dir(artifact_dir)

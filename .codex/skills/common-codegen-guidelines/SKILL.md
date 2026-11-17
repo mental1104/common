@@ -10,19 +10,19 @@ This repository is a multi-language common-library workspace, so generated code 
 
 ## Required Workflow
 
-1. Treat `.codex/skills/common-codegen-guidelines` as the live repository guidance. `AGENTS.md` is only a pointer to the archived guidance.
+1. Treat `.codex/skills/common-codegen-guidelines` as the live repository workflow guidance. Documentation ownership, directory organization, C++ declaration/implementation boundaries, and the minimum-complete-usage first-test rule are maintained directly in root `AGENTS.md` at the user's explicit request; read and follow them before creating or modifying code, tests, or examples. Other archived AGENTS guidance remains under this skill.
 2. Read the nearest existing implementation, tests, README, build file, and devtool command for the language you are touching. When compatibility may be affected, also inspect the matching `.github/workflows/` workflow and `.github/actions/` local actions.
 3. For non-trivial code generation, read `references/repo-style.md`; for historical recent-work context or detailed archived rules, read `references/agents-archive.md`.
 4. Keep edits close to the existing module boundary. Prefer extending current helpers, aliases, registries, and command wrappers over adding a parallel style.
-5. Add or update tests next to the existing tests for the touched language. Public APIs need behavior tests; cross-language/installation surfaces also need install or verify checks.
-6. Validate with `./dev` commands whenever available. Prefer language aliases such as `./dev test-python`, `./dev coverage-cpp`, or `./dev verify-install` over direct tool invocations unless debugging a lower-level failure.
-7. Update this skill, especially `references/repo-style.md` or `references/agents-archive.md`, whenever a change creates or changes repository-wide rules, public workflows, install/verify behavior, CI/coverage conventions, or reusable APIs that future agents must know. Do not add new maintenance content to `AGENTS.md`.
+5. Add or update tests next to the existing tests for the touched language. Follow root `AGENTS.md` section `最小完整用法与测试首例（铁律）` when maintaining usage examples and their tests. Public APIs need behavior tests; cross-language/installation surfaces also need install or verify checks.
+6. Validate with `./dev` commands whenever available. Prefer language aliases such as `./dev test-python`, `./dev coverage-cpp`, or `./dev verify-install` over direct tool invocations unless debugging a lower-level failure. NAS 工作区统一在既有 `code-server` 容器中执行本地开发与验证命令，具体边界见 `references/repo-style.md` 的 `Repository Shape`。
+7. Update this skill when a change affects reusable execution workflows or reference routing. Follow root `AGENTS.md` for documentation ownership: maintain repository rules there, keep implementation contracts beside their code, and reference public usage in the language README instead of copying implementation snapshots into skill references.
 
 ## Generation Conditions
 
 Generated code must satisfy these repository conditions:
 
-- **CI matrix is the coding contract**: a non-draft pull request targeting `main` runs the affected language's latest stable fast lane before merge. A push to `main` runs the complete matrix only for affected languages, while a repository-level manual `Main Gate` run expands all language matrices. Draft PRs allocate no runners, and Actions must not be used as an uncontrolled branch-level debugging loop.
+- **CI matrix is the coding contract**: a non-draft pull request targeting `main` runs the affected language's latest stable fast lane before merge. A push to `main` runs the complete matrix only for affected languages, while a repository-level manual `PR Gate` run expands all language matrices. Draft PRs allocate no runners, and Actions must not be used as an uncontrolled branch-level debugging loop.
 - **Portability first**: support the repository's intended OS/compiler/runtime matrix; for reusable common-library code, treat the lowest CI-supported language/runtime version as the baseline and guard newer language-version features in shared surfaces.
 - **Warning-clean**: keep C++/C#/Go/Rust/Java compiler and linter warnings clean because CI and some third-party integrations treat warnings as failures.
 - **Local API consistency**: use `mental1104` namespaces/packages/modules and existing helpers for logging, concurrency, database scopes, message queues, coverage extraction, and devtool operations.

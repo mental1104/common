@@ -5,6 +5,8 @@
 //! - collections::contains：统一“是否包含 key”的静态多态 API（Trait + 泛型）。
 
 pub mod collections;
+#[cfg(feature = "encryption")]
+pub mod encryption;
 pub mod error;
 pub mod macros;
 pub mod prelude;

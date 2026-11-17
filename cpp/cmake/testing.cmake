@@ -17,12 +17,35 @@ if(M1104_BUILD_TESTING_ASSETS)
   )
 endif()
 
-set(TEST_DIR ${CMAKE_CURRENT_SOURCE_DIR}/test)
+set(TEST_DIR ${CMAKE_CURRENT_SOURCE_DIR}/test/unit)
 file(GLOB_RECURSE TEST_FILES CONFIGURE_DEPENDS "${TEST_DIR}/*.cpp")
 list(LENGTH TEST_FILES _TEST_COUNT)
-message(STATUS "Collected ${_TEST_COUNT} test files under ${TEST_DIR} (recursive)")
+message(STATUS "Collected ${_TEST_COUNT} unit test files under ${TEST_DIR} (recursive)")
 
 set(M1104_SKIP_TESTS "")
+if(NOT M1104_ENABLE_ENCRYPTION)
+  list(APPEND M1104_SKIP_TESTS test_encryption)
+endif()
+# 新版 GoogleTest 会将测试驱动提升至 C++17。按实际库标准独立编译消费端，
+# 避免 optional/string_view 与 C++11/14 库的公开表示不一致。
+get_target_property(_m1104_gtest_features gtest INTERFACE_COMPILE_FEATURES)
+if(CMAKE_CXX_STANDARD LESS 17 AND "cxx_std_17" IN_LIST _m1104_gtest_features)
+  list(APPEND M1104_SKIP_TESTS test_json)
+  message(STATUS "GoogleTest requires C++17; JSON coverage uses the separate standard-matched linkage consumer")
+endif()
+if(NOT M1104_HAS_JSON)
+  list(APPEND M1104_SKIP_TESTS test_json test_linkage)
+endif()
+if(NOT M1104_HAS_REDIS_LOCK)
+  list(APPEND M1104_SKIP_TESTS test_redis_lock test_redis_singleflight)
+endif()
+if(NOT M1104_HAS_HIGH_PRECISION)
+  list(APPEND M1104_SKIP_TESTS test_high_precision_decimal)
+endif()
+if(NOT M1104_HAS_BOOST_ASIO)
+  list(APPEND M1104_SKIP_TESTS test_boost_mn_coroutine_pool
+    test_mn_coroutine_pool test_mn_coroutine_pool_async_simple)
+endif()
 if (WIN32)
   # Windows runners lack mpfr/gmp/pthread; skip unsupported tests
   list(APPEND M1104_SKIP_TESTS
@@ -33,7 +56,8 @@ if (WIN32)
   )
   set(M1104_PLATFORM_LIBS "")
 else()
-  set(M1104_PLATFORM_LIBS mpfr gmp pthread)
+  # 数值库由启用的高精度核心传播，不再强制所有测试链接可选 MPFR/GMP。
+  set(M1104_PLATFORM_LIBS Threads::Threads)
 endif()
 if (DEFINED CMAKE_CXX_STANDARD AND CMAKE_CXX_STANDARD LESS 20)
   list(APPEND M1104_SKIP_TESTS
@@ -48,9 +72,9 @@ set(TEST_DEPS_test_redis_lock "HIREDIS;REDISPP")
 set(TEST_REQUIRE_LIBS_test_redis_lock "HIREDIS;REDISPP")
 set(TEST_DEPS_test_redis_singleflight "HIREDIS;REDISPP")
 set(TEST_REQUIRE_LIBS_test_redis_singleflight "HIREDIS;REDISPP")
-set(TEST_DEPS_test_json         "CJSON")
-set(TEST_REQUIRE_LIBS_test_json "CJSON")
 
+# 从单元测试目录创建可用的测试程序，业务实现只链接 mental1104，不重复列入源码。
+# SRC: 测试翻译单元的绝对路径；不满足当前平台、标准或依赖时跳过注册。
 function(add_optional_test SRC)
   get_filename_component(TEST_NAME "${SRC}" NAME_WE)
   message(STATUS "Consider test ${TEST_NAME} -> ${SRC}")
@@ -101,11 +125,44 @@ function(add_optional_test SRC)
   message(STATUS "  -> include dirs (priority): ${AGG_INC}")
 
   set(_extra_sources "")
+  if(TEST_NAME STREQUAL "test_json")
+    list(APPEND _extra_sources $<TARGET_OBJECTS:m1104_json_consumer>)
+  endif()
   if (TEST_NAME STREQUAL "test_c_api_compat")
     list(APPEND _extra_sources "${TEST_DIR}/c_api_compat_c_smoke.c")
   endif()
+  if(TEST_NAME STREQUAL "test_target_support")
+    list(APPEND _extra_sources "${TEST_DIR}/meta_support_c_smoke.c")
+  endif()
+  if (TEST_NAME STREQUAL "test_linkage")
+    # 第二翻译单元模拟独立调用方，检验模板与已编译核心之间的链接边界。
+    add_library(m1104_linkage_consumer OBJECT "${TEST_DIR}/linkage_consumer.cc")
+    target_link_libraries(m1104_linkage_consumer PRIVATE mental1104)
+    set_target_properties(m1104_linkage_consumer PROPERTIES
+      CXX_STANDARD ${CMAKE_CXX_STANDARD} CXX_STANDARD_REQUIRED ON)
+    list(APPEND _extra_sources $<TARGET_OBJECTS:m1104_linkage_consumer>)
+  endif()
 
   add_executable(${TEST_NAME} "${SRC}" ${_extra_sources})
+  if(TEST_NAME STREQUAL "test_target_support")
+    # 用 CMake 的目标信息作独立预期，避免只与探测头自己的条件比较。
+    set(_expected_platform "unknown")
+    if(WIN32)
+      set(_expected_platform "windows")
+    elseif(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
+      set(_expected_platform "macos")
+    elseif(APPLE)
+      set(_expected_platform "apple")
+    elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+      set(_expected_platform "linux")
+    endif()
+    target_compile_definitions(${TEST_NAME} PRIVATE
+      M1104_TEST_EXPECTED_PLATFORM="${_expected_platform}")
+  endif()
+  if(TEST_NAME STREQUAL "test_linkage")
+    target_compile_definitions(test_linkage PRIVATE
+      M1104_EXPECTED_CXX_STANDARD=${CMAKE_CXX_STANDARD})
+  endif()
   if (AGG_INC)
     target_include_directories(${TEST_NAME} BEFORE PRIVATE
       ${AGG_INC}
@@ -131,13 +188,20 @@ function(add_optional_test SRC)
   endforeach()
 
   if (TARGET mental1104)
-    target_link_libraries(${TEST_NAME} PRIVATE mental1104)
+    if(TEST_NAME STREQUAL "test_build_config")
+      # 模拟只拿到头文件与库路径的消费方，不能由 target 宏掩盖配置头加载失败。
+      target_include_directories(test_build_config BEFORE PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/include")
+      target_link_libraries(test_build_config PRIVATE "$<TARGET_LINKER_FILE:mental1104>")
+      add_dependencies(test_build_config mental1104)
+    else()
+      target_link_libraries(${TEST_NAME} PRIVATE mental1104)
+    endif()
   endif()
   if (TEST_NAME STREQUAL "test_mqtt_fixture")
     target_link_libraries(${TEST_NAME} PRIVATE mental1104_testing_mqtt)
   endif()
 
-  if (HAVE_ASYNC_SIMPLE AND TARGET ASYNC_SIMPLE::headers)
+  if (HAVE_ASYNC_SIMPLE AND TARGET ASYNC_SIMPLE::headers AND NOT TEST_NAME STREQUAL "test_build_config")
     target_link_libraries(${TEST_NAME} PRIVATE ASYNC_SIMPLE::headers)
     target_compile_definitions(${TEST_NAME} PRIVATE M1104_HAS_ASYNC_SIMPLE=1)
   endif()
@@ -150,20 +214,49 @@ function(add_optional_test SRC)
   target_use_all_components(${TEST_NAME})
 
   add_test(NAME ${TEST_NAME} COMMAND ${TEST_NAME})
+  set_tests_properties(${TEST_NAME} PROPERTIES LABELS "unit")
   message(STATUS "Added test ${TEST_NAME}")
 endfunction()
+
+if(M1104_HAS_JSON)
+  # 同一份消费端源码只按库的实际标准编译一次，复用给行为测试及独立消费程序。
+  # GoogleTest 提升测试驱动标准时，不能连带改变此对象库的 optional/string_view ABI。
+  add_library(m1104_json_consumer OBJECT "${TEST_DIR}/json/consumer.cc")
+  target_link_libraries(m1104_json_consumer PRIVATE mental1104)
+  set_target_properties(m1104_json_consumer PROPERTIES
+    CXX_STANDARD ${CMAKE_CXX_STANDARD} CXX_STANDARD_REQUIRED ON)
+endif()
 
 foreach(SRC ${TEST_FILES})
   add_optional_test("${SRC}")
 endforeach()
 
+# GoogleTest 可能要求 C++17；独立消费程序必须仍按实际库标准编译和链接。
+add_executable(test_log_consumer "${TEST_DIR}/logging/consumer.cc")
+target_link_libraries(test_log_consumer PRIVATE mental1104)
+set_target_properties(test_log_consumer PROPERTIES
+  CXX_STANDARD ${CMAKE_CXX_STANDARD} CXX_STANDARD_REQUIRED ON)
+add_test(NAME test_log_consumer COMMAND test_log_consumer)
+set_tests_properties(test_log_consumer PROPERTIES LABELS "unit")
+
+if(M1104_HAS_JSON)
+  # 不链接 GoogleTest，确保最低标准也实际编译并链接 JSON 公共模板。
+  add_executable(test_json_consumer
+    "${TEST_DIR}/json/consumer_main.cc" $<TARGET_OBJECTS:m1104_json_consumer>)
+  target_link_libraries(test_json_consumer PRIVATE mental1104)
+  set_target_properties(test_json_consumer PROPERTIES
+    CXX_STANDARD ${CMAKE_CXX_STANDARD} CXX_STANDARD_REQUIRED ON)
+  add_test(NAME test_json_consumer COMMAND test_json_consumer)
+  set_tests_properties(test_json_consumer PROPERTIES LABELS "unit")
+endif()
+
 option(BUILD_THIRD_LIBS_FROM_SOURCE "Add lib/* that contain CMakeLists.txt via add_subdirectory" OFF)
 if (BUILD_THIRD_LIBS_FROM_SOURCE)
-  file(GLOB _LIB_SUBS RELATIVE "${CMAKE_SOURCE_DIR}" "${CMAKE_SOURCE_DIR}/lib/*")
+  file(GLOB _LIB_SUBS RELATIVE "${PROJECT_SOURCE_DIR}" "${PROJECT_SOURCE_DIR}/lib/*")
   foreach(_rel ${_LIB_SUBS})
-    if (EXISTS "${CMAKE_SOURCE_DIR}/${_rel}/CMakeLists.txt")
+    if (EXISTS "${PROJECT_SOURCE_DIR}/${_rel}/CMakeLists.txt")
       message(STATUS "add_subdirectory(${_rel})")
-      add_subdirectory("${CMAKE_SOURCE_DIR}/${_rel}" "${CMAKE_BINARY_DIR}/${_rel}_build" EXCLUDE_FROM_ALL)
+      add_subdirectory("${PROJECT_SOURCE_DIR}/${_rel}" "${CMAKE_BINARY_DIR}/${_rel}_build" EXCLUDE_FROM_ALL)
     else()
       message(STATUS "Skip lib (${_rel}): no CMakeLists.txt")
     endif()

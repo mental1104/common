@@ -60,6 +60,18 @@ def base_env(
     build_verbose: bool | None = None,
     prefix: str | None = None,
 ) -> Dict[str, str]:
+    """合并进程环境、仓库配置和本次命令选项，返回独立的工具环境。
+
+    Args:
+        verbose: 默认命令输出级别。
+        test_verbose: 测试输出级别覆盖，None 时沿用 verbose。
+        jobs: 可选并行数，未指定时复用环境设置或 CPU 数。
+        cpp_build_type: 可选 C++ 构建类型，未指定时沿用环境或 Debug。
+        build_verbose: 可选构建日志级别覆盖。
+        prefix: 可选安装前缀覆盖。
+    Returns:
+        各语言命令使用的可修改环境副本，不修改当前进程环境。
+    """
     env: Dict[str, str] = os.environ.copy()
     env_src = ROOT / ".env"
     if env_src.exists():
@@ -141,7 +153,7 @@ def base_env(
     env.setdefault("GOTOOLCHAIN", env.get("GOTOOLCHAIN", "local"))
     dev_config.apply_pip_mirror_env(env)
     env.setdefault("RUST_COVER_FAIL_UNDER", env.get("RUST_COVER_FAIL_UNDER", ""))
-    env.setdefault("VET_DIR", env.get("VET_DIR", "cpp/test"))
+    env.setdefault("VET_DIR", env.get("VET_DIR", "cpp/test/unit"))
     return env
 
 
