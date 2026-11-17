@@ -19,6 +19,31 @@
 
 ## 详情
 
+### AES 加解密
+
+- **类别 / 类型：** 对称加密；`Mental1104.CipherAlgorithm` 枚举与 `Mental1104.Encryption` 静态类。
+- **定义位置：** `dotnet/src/Mental1104/Encryption.cs`。
+- **用途：** 使用 .NET 8 标准加密 API 兼容 Python 历史 CBC 和统一版本化 AES-256-GCM，无新增依赖。
+
+```csharp
+using Mental1104;
+using System.Security.Cryptography;
+
+byte[] key = RandomNumberGenerator.GetBytes(32); // 生成后妥善保存，解密必须使用同一密钥。
+byte[] ciphertext = Encryption.Encrypt("secret", key, algorithm: CipherAlgorithm.AesGcm);
+Console.WriteLine(Encryption.Decrypt(ciphertext, key));
+```
+
+示例输出：`secret`。`Encrypt(string, byte[]? key = null, byte[]? salt = null, CipherAlgorithm algorithm = LegacyCbc)`
+返回标准 Base64 ASCII `byte[]`；`Decrypt(byte[], byte[]? key = null, byte[]? salt = null, CipherAlgorithm? algorithm = null)`
+返回 UTF-8 `string`，默认按 Magic 自动识别。输入数组不修改，内部加密资源自动释放。
+CBC 的 null Key 使用 `0ePThPnLaJcWFcRc`，加密必须显式提供 16 字节 salt，省略、null 或空数组均拒绝；`Encrypt("secret")` 不再受支持。
+每次 CBC 加密应生成新的随机 IV 并与密文保存，解密复用原 IV；仅历史解密允许 null salt 使用 Key 作为 IV。PKCS#7 与旧线格式不变。
+GCM 必须显式提供 32 字节 Key 和 null salt，每次生成 12 字节随机 Nonce，使用 16 字节 Tag，无 Padding。
+统一封装为 Base64 编码的 `b"mental1104:AES:" + 0x01 + Nonce + Tag + Ciphertext`，Magic 与版本参与认证。
+未知版本、截断、格式错误抛 `FormatException`，非法参数抛 `ArgumentException`，认证失败抛 `CryptographicException`，均不降级 CBC；无效 UTF-8 也会拒绝。
+只接收 GCM 时显式传 `CipherAlgorithm.AesGcm`，拒绝缺失或损坏 Magic 的输入；调用方负责密钥管理。
+
 ### `ExeChecker`
 
 - **类别：** 可执行文件校验

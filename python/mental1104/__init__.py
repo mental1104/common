@@ -72,7 +72,7 @@ from mental1104.timed import async_timed, get_current_time, parse_time, timed
 from mental1104.utils.batch_rename import IndexedRenameRule, RenameOp, RenameRule, apply_rename_plan, build_indexed_rename_plan, build_rename_plan, list_files, plan_directory_rename, plan_directory_rename_indexed, rename_with_index, rename_with_regex_group, rename_with_suffix, validate_rename_plan
 from mental1104.utils.bench_tasks import CpuBoundTask, DatasetFactory, IoBoundTask
 from mental1104.utils.context import RequestCtx, ctx, ctx_diag, reset_ctx, set_ctx
-from mental1104.utils.encryption import decrypt, encrypt, generate_salt
+from mental1104.utils.encryption import CipherAlgorithm, decrypt, encrypt, generate_salt
 from mental1104.utils.overload import dispatch_for
 from mental1104.utils.parse_json import JsonParserType, JsonUtil, dump_json, load_json
 from mental1104.utils.parse_yaml import YamlUtil, dump_yaml, parse_yaml
@@ -136,6 +136,7 @@ __all__ = [
     'BenchmarkRecord',
     'BenchmarkSuite',
     'ChainResolver',
+    'CipherAlgorithm',
     'ClickHouseExecutor',
     'ClickHouseProfile',
     'ClickHouseSessionAware',

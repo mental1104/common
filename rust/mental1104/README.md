@@ -25,6 +25,35 @@ Crate 名称：`mental1104`。
 
 ## 详情
 
+### AES 加解密（可选 encryption feature）
+
+- **类别 / 类型：** 对称加密；`encryption::CipherAlgorithm` 枚举及 `encryption::{encrypt, decrypt}` 函数。
+- **定义位置 / 使用：** `src/encryption.rs`；`use mental1104::encryption::{encrypt, decrypt, CipherAlgorithm};`。
+- **启用：** Cargo 依赖声明 `mental1104 = { ..., features = ["encryption"] }`；使用 RustCrypto `aes-gcm`、`cbc` 和 `base64`，默认构建不引入加密依赖。
+- **用途：** 兼容 Python 历史 CBC，与其他五种语言互通版本化 AES-256-GCM。
+
+```rust
+use mental1104::encryption::{decrypt, encrypt, CipherAlgorithm};
+
+// main 展示公开 API 往返；固定密钥仅用于示例，生产中从安全存储读取。
+fn main() -> mental1104::error::Result<()> {
+    let key = b"0123456789abcdef0123456789abcdef";
+    let ciphertext = encrypt("secret", Some(key), None, CipherAlgorithm::AesGcm)?;
+    assert_eq!(decrypt(&ciphertext, Some(key), None, None)?, "secret");
+    Ok(())
+}
+```
+
+示例结果：无标准输出，断言通过。`encrypt(&str, Option<&[u8]>, Option<&[u8]>, CipherAlgorithm)` 返回 Base64 `Vec<u8>`，
+`decrypt(&[u8], Option<&[u8]>, Option<&[u8]>, Option<CipherAlgorithm>)` 返回 UTF-8 `String`，均使用仓库 `Result<T>`。
+所有输入均为只读借用。`decrypt` 的算法 None 自动识别，或用 Some 显式指定。
+`LegacyCbc` 的 None Key 使用 `0ePThPnLaJcWFcRc`，加密必须显式提供 `Some` 的 16 字节 salt，None 或空切片均拒绝。
+每次 CBC 加密应生成新的随机 IV 并与密文保存，解密复用原 IV；仅历史解密允许 None salt 使用 Key 作为 IV。PKCS#7 与旧线格式不变。
+`AesGcm` 必须显式提供 32 字节 Key、None salt，每次生成 12 字节随机 Nonce、16 字节 Tag，无 Padding。
+统一封装为 Base64 编码的 `b"mental1104:AES:" + 0x01 + Nonce + Tag + Ciphertext`，Magic 与版本参与认证。
+参数、格式、未知版本、截断、认证或 UTF-8 错误返回 `MentalError::InvalidInput`，已识别新格式绝不降级 CBC。
+只接收 GCM 时显式传 `Some(CipherAlgorithm::AesGcm)`，拒绝损坏或缺失 Magic 的输入；调用方负责密钥管理。
+
 ### `contains`
 
 - **类别：** 集合包含判断

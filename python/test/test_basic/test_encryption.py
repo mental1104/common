@@ -1,28 +1,25 @@
+import base64
 import string
 
 import pytest
 
-from mental1104 import decrypt, encrypt, generate_salt
+from mental1104 import CipherAlgorithm, decrypt, encrypt, generate_salt
 
 
 class TestEncryption:
-    def test_encrypt_decrypt(self):
-        """
-        【场景背景】最常规的明文在提供 key/salt 时应能往返加密解密。
-        【步骤输入】指定固定 key/salt, 加密字符串后再解密。
-        【期望输出】加密结果是 bytes, 且解密得到的文本与原始 plaintext 完全一致。
-        """
-        plaintext = "This is a test message."
-        key = "c1JJbLFKStaTraGF"
-        salt = "c1JJbLFKStaTraGF"
+    """验证显式 CBC IV、历史解密和 GCM 认证的公共契约。"""
 
-        # 调用加密函数
-        encrypted = encrypt(plaintext, key=key, salt=salt)
-        assert isinstance(encrypted, bytes), "加密结果应为字节串"
-
-        # 调用解密函数
-        decrypted = decrypt(encrypted, key=key, salt=salt)
-        assert decrypted == plaintext, "解密后的文本应与原始明文一致"
+    @pytest.mark.parametrize("algorithm", list(CipherAlgorithm))
+    def test_encrypt_decrypt(self, algorithm: CipherAlgorithm) -> None:
+        """algorithm 为被测实现；准备密钥与适用的 IV，验证完整公开 API 往返。"""
+        plaintext = "This is a test message. 中文"
+        key = "k" * (32 if algorithm is CipherAlgorithm.AES_GCM else 16)
+        # CBC 每次加密先生成 IV 并保存；GCM 的 Nonce 由内部随机生成。
+        salt = generate_salt(16) if algorithm is CipherAlgorithm.LEGACY_CBC else None
+        encrypted = encrypt(plaintext, key, salt, algorithm=algorithm)
+        assert isinstance(encrypted, bytes), "Encrypted result must be bytes"
+        # 默认识别算法；CBC 必须复用加密时的 IV，不能重新生成。
+        assert decrypt(encrypted, key, salt) == plaintext
 
     def test_encrypt_with_different_salt(self):
         """
@@ -75,19 +72,86 @@ class TestEncryption:
         with pytest.raises(ValueError):
             decrypt(encrypted, key=key, salt=wrong_salt)
 
-    def test_encrypt_with_default_parameters(self):
-        """
-        【场景背景】API 提供默认 key/salt, 用默认值时也应可往返。
-        【步骤输入】仅传 plaintext 调用 encrypt/decrypt。
-        【期望输出】解密结果等于原文, 说明默认配置安全可用。
-        """
-        plaintext = "Default test"
+    def test_encrypt_rejects_missing_cbc_salt(self) -> None:
+        """默认入口、仅提供 Key 及显式 None 都不能再把 Key 隐式作为加密 IV。"""
+        with pytest.raises(ValueError, match="explicit salt"):
+            encrypt("secret")
+        with pytest.raises(ValueError, match="explicit salt"):
+            encrypt("secret", "0123456789abcdef")
+        with pytest.raises(ValueError, match="explicit salt"):
+            encrypt("secret", "0123456789abcdef", None, algorithm=CipherAlgorithm.LEGACY_CBC)
 
-        # 使用默认参数加密
-        encrypted = encrypt(plaintext)
-        decrypted = decrypt(encrypted)
+    @pytest.mark.parametrize("salt", ["", "short", "v" * 17])
+    def test_encrypt_rejects_invalid_cbc_salt(self, salt: str) -> None:
+        """salt 为无效 IV；显式提供参数仍必须满足 AES 的 16 字节 IV 契约。"""
+        with pytest.raises(ValueError):
+            encrypt("secret", salt=salt)
 
-        assert decrypted == plaintext, "使用默认参数加密解密后应与原文一致"
+    def test_default_key_with_explicit_iv(self) -> None:
+        """默认 Key 仍可与显式 IV 使用，固定历史向量保证 CBC 字节格式不变。"""
+        ciphertext = encrypt("secret", salt="abcdefghijklmnop")
+        assert ciphertext == b"vIFLz+7UV9fFbJtsi/P9pw=="
+        assert decrypt(ciphertext, salt="abcdefghijklmnop") == "secret"
+
+    def test_decrypt_historical_default_iv(self) -> None:
+        """固定向量来自旧实现，证明省略 IV 的历史密文仍可解密。"""
+        assert decrypt(b"MUSltWQ6CEFtWbeYRymj+A==") == "Default test"
+
+    def test_gcm_randomness_and_reference_ciphertext(self) -> None:
+        """独立固定向量约束跨语言格式，并检查相同输入仍生成不同的 GCM 密文。"""
+        key = b"0123456789abcdef0123456789abcdef"
+        fixture = (
+            b"bWVudGFsMTEwNDpBRVM6AQABAgMEBQYHCAkKC5vD5fpUDmE02C64madn0BhO"
+            b"l9QPqjW+zca7BN8WqvF3g2tx4kg="
+        )
+        assert decrypt(fixture, key) == "cross-language secret"
+        assert encrypt("secret", key, algorithm=CipherAlgorithm.AES_GCM) != encrypt(
+            "secret", key, algorithm=CipherAlgorithm.AES_GCM
+        )
+
+    @pytest.mark.parametrize("salt", ["", "v" * 16])
+    def test_gcm_rejects_salt(self, salt: str) -> None:
+        """salt 是 CBC 专属参数，即使为空串，GCM 加解密均应拒绝。"""
+        key = b"k" * 32
+        ciphertext = encrypt("secret", key, algorithm=CipherAlgorithm.AES_GCM)
+        with pytest.raises(ValueError, match="does not accept salt"):
+            encrypt("secret", key, salt, algorithm=CipherAlgorithm.AES_GCM)
+        with pytest.raises(ValueError, match="does not accept salt"):
+            decrypt(ciphertext, key, salt)
+
+    @pytest.mark.parametrize("key", [b"", b"k" * 16, b"k" * 24, b"k" * 31, b"k" * 33])
+    def test_gcm_requires_256_bit_key(self, key: bytes) -> None:
+        """key 为非 32 字节输入；不得自动补齐、派生或退回默认 Key。"""
+        with pytest.raises(ValueError, match="explicit 32-byte key"):
+            encrypt("secret", key, algorithm=CipherAlgorithm.AES_GCM)
+
+    def test_gcm_rejects_default_key(self) -> None:
+        """省略 GCM Key 必须明确报错，不能沿用历史硬编码 Key。"""
+        with pytest.raises(ValueError, match="explicit 32-byte key"):
+            encrypt("secret", algorithm=CipherAlgorithm.AES_GCM)
+
+    @pytest.mark.parametrize("offset", [16, 28, 44])
+    def test_gcm_detects_tampering(self, offset: int) -> None:
+        """offset 分别落在 Nonce、Tag 和密文；篡改任何字段均应认证失败。"""
+        key = b"k" * 32
+        payload = bytearray(
+            base64.b64decode(encrypt("secret", key, algorithm=CipherAlgorithm.AES_GCM))
+        )
+        payload[offset] ^= 1
+        with pytest.raises(ValueError, match="MAC check failed"):
+            decrypt(base64.b64encode(payload), key)
+
+    def test_gcm_rejects_wrong_key(self) -> None:
+        """长度合法但内容错误的 Key 必须通过认证机制检测。"""
+        ciphertext = encrypt("secret", b"k" * 32, algorithm=CipherAlgorithm.AES_GCM)
+        with pytest.raises(ValueError, match="MAC check failed"):
+            decrypt(ciphertext, b"x" * 32)
+
+    @pytest.mark.parametrize("payload", [b"mental1104:AES:\x02", b"mental1104:AES:\x01"])
+    def test_gcm_rejects_versions_and_truncation(self, payload: bytes) -> None:
+        """payload 为未知版本或截断的新封装；只捕获 CBC 不会出现的明确格式错误。"""
+        with pytest.raises(ValueError, match=r"version|Truncated"):
+            decrypt(base64.b64encode(payload), b"k" * 32)
 
     @staticmethod
     def is_valid_salt(salt):

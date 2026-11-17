@@ -6,6 +6,9 @@ list(LENGTH TEST_FILES _TEST_COUNT)
 message(STATUS "Collected ${_TEST_COUNT} unit test files under ${TEST_DIR} (recursive)")
 
 set(M1104_SKIP_TESTS "")
+if(NOT M1104_ENABLE_ENCRYPTION)
+  list(APPEND M1104_SKIP_TESTS test_encryption)
+endif()
 # 新版 GoogleTest 会将测试驱动提升至 C++17。按实际库标准独立编译消费端，
 # 避免 optional/string_view 与 C++11/14 库的公开表示不一致。
 get_target_property(_m1104_gtest_features gtest INTERFACE_COMPILE_FEATURES)

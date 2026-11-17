@@ -38,7 +38,7 @@
 | 序列化与格式转换 | `json_to_yaml`, `yaml_to_json` | 函数 | `from mental1104 import ...` | 在 JSON 和 YAML 之间转换。 |
 | 文本与时间 | `replace_space_with`, `insert_newlines` | 函数 | `from mental1104 import ...` | 重写空白字符并插入简单换行。 |
 | 文本与时间 | `timed`, `async_timed`, `get_current_time`, `parse_time` | 装饰器 / 函数 | `from mental1104 import ...` | 计时函数调用，并解析 / 格式化日期时间。 |
-| 随机与加密 | `random_pick`, `encrypt`, `decrypt`, `generate_salt` | 函数 | `from mental1104 import ...` | 随机选择 list/dict 条目，并运行 AES-CBC 辅助函数。 |
+| 随机与加密 | `random_pick`, `CipherAlgorithm`, `encrypt`, `decrypt`, `generate_salt` | 枚举、函数 | `from mental1104 import ...` | 随机选择 list/dict 条目，兼容 Legacy AES-CBC，并提供 AES-256-GCM 认证加密。 |
 | 环境变量 | `MissingEnvVarError`, `check_required_env_vars` | 异常 / 函数 | `from mental1104 import ...` | 校验必需环境变量。 |
 | 文件与路径 | `file_iterator`, `csv_writer`, `export_csv_from_database` | 函数 | `from mental1104 import ...` | 处理文件和 CSV 行。 |
 | 文件与路径 | `RenameOp`, `list_files`, `build_rename_plan`, `build_indexed_rename_plan`, `plan_directory_rename`, `plan_directory_rename_indexed`, `apply_rename_plan`, `rename_with_suffix`, `rename_with_regex_group`, `rename_with_index`, `validate_rename_plan` | dataclass / 函数 | `from mental1104.utils.batch_rename import ...` | 规划并执行避免冲突的批量文件重命名。 |
@@ -204,9 +204,9 @@ get_current_time()
 parse_time("2026-06-23 00:00:00")
 random_pick([1, 2, 3])
 
-ciphertext = encrypt("secret")
-plaintext = decrypt(ciphertext)
 salt = generate_salt(16)
+ciphertext = encrypt("secret", salt=salt)  # CBC 必须先生成并显式提供 IV。
+plaintext = decrypt(ciphertext, salt=salt)  # 保存并复用相同 IV，解密时不能重新生成。
 
 try:
     check_required_env_vars(["HOME"])
@@ -228,7 +228,8 @@ async def async_work():
 >>> from mental1104 import decrypt, encrypt, generate_salt, random_pick, replace_space_with
 >>> replace_space_with("a  b", "-")
 'a-b'
->>> decrypt(encrypt("secret"))
+>>> salt = generate_salt(16)
+>>> decrypt(encrypt("secret", salt=salt), salt=salt)
 'secret'
 >>> len(generate_salt(4))
 4
@@ -238,8 +239,70 @@ async def async_work():
 
 **备注：**
 
-- `encrypt`/`decrypt` 使用 AES-CBC，并要求 key/salt 长度被加密后端接受。
+- `encrypt` 默认使用 Legacy AES-CBC，必须显式提供 IV；`decrypt` 默认自动识别新旧密文。新业务使用下述 AES-256-GCM。
 - `random_pick` 支持 `list` 和 `dict`；不支持的类型会抛出 `NotImplementedError`。
+
+### AES 加解密与算法选择
+
+- **类别：** 对称加密
+- **名称与类型：** `CipherAlgorithm` 枚举；`encrypt`、`decrypt`、`generate_salt` 函数
+- **定义位置：** `python/mental1104/utils/encryption.py`
+- **导入：** `from mental1104 import CipherAlgorithm, decrypt, encrypt, generate_salt`
+- **用途：** 解密历史 CBC 数据，并为新业务提供带认证的 AES-256-GCM。
+
+**REPL 最小用法（AES-256-GCM）：**
+
+```python
+>>> from secrets import token_bytes
+>>> from mental1104 import CipherAlgorithm, decrypt, encrypt, generate_salt
+>>> key = token_bytes(32)  # 由调用方生成并妥善保存，后续解密使用同一密钥。
+>>> ciphertext = encrypt("secret", key, algorithm=CipherAlgorithm.AES_GCM)
+>>> isinstance(ciphertext, bytes)
+True
+>>> decrypt(ciphertext, key)  # 默认自动识别 GCM 格式。
+'secret'
+>>> decrypt(ciphertext, key, algorithm=CipherAlgorithm.AES_GCM)
+'secret'
+>>> encrypt("secret", key, algorithm=CipherAlgorithm.AES_GCM) != ciphertext
+True
+```
+
+示例返回随机密文，无标准输出；两次加密使用独立随机 Nonce，密文不同的检查以极高概率为 True。
+
+**CBC 显式 IV 与历史解密：**
+
+```python
+>>> salt = generate_salt(16)  # 每次 CBC 加密生成新 IV，并与密文一起保存。
+>>> ciphertext = encrypt("secret", salt=salt)
+>>> decrypt(ciphertext, salt=salt)  # 解密使用原 IV，不重新生成。
+'secret'
+>>> decrypt(b"MUSltWQ6CEFtWbeYRymj+A==")  # 历史默认 Key/IV 密文仍可解密。
+'Default test'
+>>> legacy_key = "0123456789abcdef"
+>>> legacy_iv = generate_salt(16)
+>>> legacy = encrypt("secret", legacy_key, legacy_iv)
+>>> decrypt(legacy, legacy_key, legacy_iv, algorithm=CipherAlgorithm.LEGACY_CBC)
+'secret'
+```
+
+**参数、格式与限制：**
+
+- `encrypt(plaintext, key="0ePThPnLaJcWFcRc", salt=None, *, algorithm=CipherAlgorithm.LEGACY_CBC)`
+  返回标准 Base64 编码的 `bytes`。`decrypt(ciphertext, key="0ePThPnLaJcWFcRc", salt=None, *, algorithm=None)`
+  返回 `str`；密文可沿用历史 `str`、`bytes` 或 `bytearray` 输入。前三个参数的位置调用顺序不变，`algorithm` 仅限关键字。
+- `LEGACY_CBC` 加密必须显式提供 UTF-8 编码后为 16 字节的字符串 IV；省略 `salt`、传 `None` 或无效长度均抛出 `ValueError`。
+  可用 `generate_salt(16)` 每次生成新 IV，并与密文一起保存。`encrypt("secret")`、仅传 Key 的旧调用不再受支持；
+  共用入口的 `salt=None` 仅是缺省标记，不代表 CBC 有可用的默认 IV。
+- 历史 CBC 解密仍允许 `salt=None` 使用 Key 作为 IV。字符串 Key、PKCS#7 Padding 和旧 Base64 线格式不变；
+  该模式没有认证能力，硬编码默认 Key 仅为兼容保留，不推荐新业务使用。
+- `AES_GCM` 必须由调用方显式提供恰好 32 字节的 `bytes` 密钥，或 UTF-8 编码后恰好 32 字节的字符串密钥；
+  省略 Key 或沿用旧默认 Key 会抛出 `ValueError`。本工具不做口令派生，调用方负责密钥的随机性、存储和分发。
+- GCM 每次生成 12 字节随机 Nonce，使用 16 字节 Authentication Tag，无 Padding；
+  `salt` 必须为 `None`，包括空字符串在内的其他值均抛出 `ValueError`，不能用它指定 Nonce。
+- GCM 原始封装为 `b"mental1104:AES:" + b"\x01" + Nonce + Tag + Ciphertext`，整体进行 Base64 编码；
+  Magic 与 Version 作为附加认证数据。默认解密识别 Magic，旧格式走 CBC；未知版本、截断、错误密钥或认证失败直接抛出 `ValueError`，不会降级重试 CBC。
+  显式指定 CBC 也会拒绝带 GCM Magic 的数据；预期只接收 GCM 的调用方应显式指定 `AES_GCM`，使缺失或损坏 Magic 的输入同样被拒绝。
+- `generate_salt(length=16)` 行为不变，仅生成指定长度的字母数字字符串，不用于 GCM 密钥或 Nonce。
 
 ### 文件、CSV 和批量重命名工具
 
@@ -769,6 +832,13 @@ rows = example_read()
 ## 开发命令
 
 在仓库根目录运行：
+
+NAS 开发使用既有 `code-server` 容器及普通用户 `abc`，例如
+`docker exec -u abc -w /volume2/workflow/common code-server ./dev test-python`。
+`python/.venv` 位于仓库的持久挂载中，依赖随目录保留，容器重启不需要重新安装。
+此 NAS 环境使用容器内 `/usr/bin/python3.12`，`pyvenv.cfg` 和实际解释器版本须一致；
+不要在 NAS 宿主机用 Python 3.8 重建同一路径。变更容器 Python 主次版本时先迁移虚拟环境，
+不能仅复用旧环境中指向 `/usr/bin/python3` 的通用链接。
 
 ```bash
 ./dev setup-python
