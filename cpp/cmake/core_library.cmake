@@ -7,6 +7,11 @@ file(GLOB_RECURSE M1104_CORE_SOURCES CONFIGURE_DEPENDS
 # Web 模块独立链接，不能经递归 glob 混入原有主库或抬高其语言标准。
 list(FILTER M1104_CORE_SOURCES EXCLUDE REGEX "/src/web/")
 
+# mDNS 的现有公开接口使用 std::optional；低标准构建不编译其 C++17 运行时。
+if(CMAKE_CXX_STANDARD LESS 17)
+  list(FILTER M1104_CORE_SOURCES EXCLUDE REGEX "/src/network/mdns\\.cpp$")
+endif()
+
 # 加密使用独立的可选依赖；关闭时不改变原有主库的链接要求。
 option(M1104_ENABLE_ENCRYPTION "Build AES encryption using OpenSSL Crypto" OFF)
 if(M1104_ENABLE_ENCRYPTION)

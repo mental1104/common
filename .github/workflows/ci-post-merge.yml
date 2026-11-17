@@ -1,0 +1,143 @@
+name: Main Post-Merge Gate
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "cpp/**"
+      - "python/**"
+      - "golang/**"
+      - "rust/**"
+      - "dotnet/**"
+      - "java/**"
+      - "export/**"
+      - "devops/**"
+      - "tools/ci/**"
+      - "tools/walkthrough/**"
+      - ".github/actions/**"
+      - ".github/workflows/**"
+      - "dev"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  changes:
+    name: Detect affected pipelines
+    runs-on: ubuntu-latest
+    outputs:
+      cpp: ${{ steps.routes.outputs.cpp }}
+      python: ${{ steps.routes.outputs.python }}
+      golang: ${{ steps.routes.outputs.golang }}
+      rust: ${{ steps.routes.outputs.rust }}
+      dotnet: ${{ steps.routes.outputs.dotnet }}
+      java: ${{ steps.routes.outputs.java }}
+      pages: ${{ steps.routes.outputs.pages }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect affected pipelines
+        id: routes
+        shell: bash
+        env:
+          BEFORE_SHA: ${{ github.event.before }}
+          HEAD_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+
+          if [[ "${BEFORE_SHA}" =~ ^0+$ ]]; then
+            changed_files="$(git show --pretty='' --name-only "${HEAD_SHA}")"
+          else
+            changed_files="$(git diff --name-only "${BEFORE_SHA}" "${HEAD_SHA}")"
+          fi
+          printf '%s\n' "${changed_files}"
+
+          route() {
+            local name="$1"
+            local pattern="$2"
+            local matched="false"
+            if grep -Eq "${pattern}" <<<"${changed_files}"; then
+              matched="true"
+            fi
+            printf '%s=%s\n' "${name}" "${matched}" >> "${GITHUB_OUTPUT}"
+          }
+
+          # CI 基础设施变化需要完整验证全部语言；普通业务变更只展开受影响语言。
+          route cpp '^(cpp/|export/|devops/|tools/ci/|tools/walkthrough/|\.github/actions/|\.github/workflows/|dev$)'
+          route python '^(python/|devops/|tools/ci/|tools/walkthrough/|\.github/workflows/|dev$)'
+          route golang '^(golang/|devops/|tools/ci/|tools/walkthrough/|\.github/workflows/|dev$)'
+          route rust '^(rust/|devops/|tools/ci/|tools/walkthrough/|\.github/workflows/|dev$)'
+          route dotnet '^(dotnet/|devops/|tools/ci/|tools/walkthrough/|\.github/workflows/|dev$)'
+          route java '^(java/|devops/|tools/ci/|tools/walkthrough/|\.github/workflows/|dev$)'
+          route pages '^(tools/walkthrough/|\.github/workflows/)'
+
+  cpp:
+    needs: changes
+    if: needs.changes.outputs.cpp == 'true'
+    uses: ./.github/workflows/cpp.yml
+    with:
+      full_matrix: true
+    secrets: inherit
+
+  python:
+    needs: changes
+    if: needs.changes.outputs.python == 'true'
+    uses: ./.github/workflows/python.yml
+    with:
+      full_matrix: true
+    secrets: inherit
+
+  golang:
+    needs: changes
+    if: needs.changes.outputs.golang == 'true'
+    uses: ./.github/workflows/golang.yml
+    with:
+      full_matrix: true
+    secrets: inherit
+
+  rust:
+    needs: changes
+    if: needs.changes.outputs.rust == 'true'
+    uses: ./.github/workflows/rust.yml
+    with:
+      full_matrix: true
+    secrets: inherit
+
+  dotnet:
+    needs: changes
+    if: needs.changes.outputs.dotnet == 'true'
+    uses: ./.github/workflows/dotnet.yml
+    with:
+      full_matrix: true
+    secrets: inherit
+
+  java:
+    needs: changes
+    if: needs.changes.outputs.java == 'true'
+    uses: ./.github/workflows/java.yml
+    with:
+      full_matrix: true
+    secrets: inherit
+
+  pages:
+    needs: [changes, cpp, python, golang, rust, dotnet, java]
+    if: >-
+      always() &&
+      needs.changes.result == 'success' &&
+      needs.changes.outputs.pages == 'true' &&
+      !contains(needs.*.result, 'failure') &&
+      !contains(needs.*.result, 'cancelled')
+    uses: ./.github/workflows/walkthrough-pages.yml
+    secrets: inherit
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+      actions: read

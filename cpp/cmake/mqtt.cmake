@@ -1,0 +1,15 @@
+option(M1104_ENABLE_MQTT "Enable libmosquitto-backed MQTT client when available" ON)
+
+if(M1104_ENABLE_MQTT)
+  find_path(M1104_MOSQUITTO_INCLUDE_DIR mosquitto.h)
+  find_library(M1104_MOSQUITTO_LIBRARY NAMES mosquitto)
+
+  if(M1104_MOSQUITTO_INCLUDE_DIR AND M1104_MOSQUITTO_LIBRARY)
+    target_include_directories(mental1104 PRIVATE ${M1104_MOSQUITTO_INCLUDE_DIR})
+    target_link_libraries(mental1104 PRIVATE ${M1104_MOSQUITTO_LIBRARY})
+    target_compile_definitions(mental1104 PRIVATE M1104_HAS_MOSQUITTO=1)
+    message(STATUS "MQTT backend enabled: libmosquitto")
+  else()
+    message(STATUS "MQTT backend disabled: libmosquitto headers/library not found")
+  endif()
+endif()

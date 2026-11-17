@@ -52,7 +52,9 @@ PYBIND11_MODULE(mental1104_export_layer_pybind, m) {
 
     m.def(
         "parse_json_value",
-        [](const std::string& payload) {
+        // payload 为 JSON 文本，返回 (ok, value, error, offset)；失败时 value 为 None。
+        // 固定 Python tuple 边界，避免 pybind11 3 将两个分支推导为不同 typing::Tuple。
+        [](const std::string& payload) -> py::tuple {
             rapidjson::Document d;
             rapidjson::ParseResult ok = d.Parse(payload.data(), static_cast<rapidjson::SizeType>(payload.size()));
             if (!ok) {

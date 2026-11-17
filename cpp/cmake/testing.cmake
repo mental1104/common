@@ -1,5 +1,22 @@
 enable_testing()
 
+option(M1104_BUILD_TESTING_ASSETS "Build reusable C++ testing-only assets" ON)
+if(M1104_BUILD_TESTING_ASSETS)
+  add_library(mental1104_testing_mqtt STATIC
+    "${PROJECT_SOURCE_DIR}/testing/src/mqtt_peer_fixture.cpp"
+  )
+  target_include_directories(mental1104_testing_mqtt PUBLIC
+    "${PROJECT_SOURCE_DIR}/testing/include"
+    "${PROJECT_SOURCE_DIR}/include"
+  )
+  target_link_libraries(mental1104_testing_mqtt PUBLIC mental1104)
+  set_target_properties(mental1104_testing_mqtt PROPERTIES
+    CXX_STANDARD ${CMAKE_CXX_STANDARD}
+    CXX_STANDARD_REQUIRED ON
+    POSITION_INDEPENDENT_CODE ON
+  )
+endif()
+
 set(TEST_DIR ${CMAKE_CURRENT_SOURCE_DIR}/test/unit)
 file(GLOB_RECURSE TEST_FILES CONFIGURE_DEPENDS "${TEST_DIR}/*.cpp")
 list(LENGTH TEST_FILES _TEST_COUNT)
@@ -20,7 +37,7 @@ if(NOT M1104_HAS_JSON)
   list(APPEND M1104_SKIP_TESTS test_json test_linkage)
 endif()
 if(NOT M1104_HAS_REDIS_LOCK)
-  list(APPEND M1104_SKIP_TESTS test_redis_lock)
+  list(APPEND M1104_SKIP_TESTS test_redis_lock test_redis_singleflight)
 endif()
 if(NOT M1104_HAS_HIGH_PRECISION)
   list(APPEND M1104_SKIP_TESTS test_high_precision_decimal)
@@ -53,6 +70,8 @@ endif()
 
 set(TEST_DEPS_test_redis_lock "HIREDIS;REDISPP")
 set(TEST_REQUIRE_LIBS_test_redis_lock "HIREDIS;REDISPP")
+set(TEST_DEPS_test_redis_singleflight "HIREDIS;REDISPP")
+set(TEST_REQUIRE_LIBS_test_redis_singleflight "HIREDIS;REDISPP")
 
 # 从单元测试目录创建可用的测试程序，业务实现只链接 mental1104，不重复列入源码。
 # SRC: 测试翻译单元的绝对路径；不满足当前平台、标准或依赖时跳过注册。
@@ -63,6 +82,10 @@ function(add_optional_test SRC)
   list(FIND M1104_SKIP_TESTS "${TEST_NAME}" _skip_idx)
   if (NOT _skip_idx EQUAL -1)
     message(STATUS "Skip test ${TEST_NAME}: in skip list")
+    return()
+  endif()
+  if (TEST_NAME STREQUAL "test_mqtt_fixture" AND NOT TARGET mental1104_testing_mqtt)
+    message(STATUS "Skip test ${TEST_NAME}: M1104_BUILD_TESTING_ASSETS is disabled")
     return()
   endif()
 
@@ -173,6 +196,9 @@ function(add_optional_test SRC)
     else()
       target_link_libraries(${TEST_NAME} PRIVATE mental1104)
     endif()
+  endif()
+  if (TEST_NAME STREQUAL "test_mqtt_fixture")
+    target_link_libraries(${TEST_NAME} PRIVATE mental1104_testing_mqtt)
   endif()
 
   if (HAVE_ASYNC_SIMPLE AND TARGET ASYNC_SIMPLE::headers AND NOT TEST_NAME STREQUAL "test_build_config")

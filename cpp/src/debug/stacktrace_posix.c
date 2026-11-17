@@ -104,6 +104,12 @@ static void st_get_regs_from_ucontext(void* uctx,
   }
   {
     ucontext_t* ctx = (ucontext_t*)uctx;
+#if defined(__aarch64__)
+    // Linux AArch64 的 mcontext 使用 pc/sp/regs，而非 x86 的 REG_RIP 等宏。
+    *ip = (uintptr_t)ctx->uc_mcontext.pc;
+    *sp = (uintptr_t)ctx->uc_mcontext.sp;
+    *bp = (uintptr_t)ctx->uc_mcontext.regs[29];
+#else
 #if defined(REG_RIP)
     *ip = (uintptr_t)ctx->uc_mcontext.gregs[REG_RIP];
 #endif
@@ -112,6 +118,7 @@ static void st_get_regs_from_ucontext(void* uctx,
 #endif
 #if defined(REG_RBP)
     *bp = (uintptr_t)ctx->uc_mcontext.gregs[REG_RBP];
+#endif
 #endif
   }
 #elif M1104_OS_MACOS
