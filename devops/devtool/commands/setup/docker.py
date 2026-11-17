@@ -12,7 +12,7 @@ if TYPE_CHECKING:
 
 @register("setup-docker")
 def configure(subparsers: ArgumentParser):
-    parser = subparsers.add_parser("setup-docker", help="Start docker compose stacks under devops/images/")
+    parser = subparsers.add_parser("setup-docker", help="Start docker compose stacks in the visitor checkout")
     parser.set_defaults(_runner=run)
     return run
 

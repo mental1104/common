@@ -95,8 +95,8 @@ Python + C++ 混合工程，使用统一的 `dev` 命令驱动（macOS/Linux：`
 ./dev bench all          # 含基准图表与 gallery
 ./dev vet all
 ./dev guard all          # C++ ASAN/TSAN，Go race，Rust sanitizer/miri，Python ruff+pytest
-./dev setup-docker       # 启动 devops/images/ 下的 compose，自动读取 .env
-./dev clean-docker       # 关闭 devops/images/ 下的 compose
+./dev setup-docker       # 转调 visitor 的开发依赖 Compose
+./dev clean-docker       # 转调 visitor 关闭开发依赖 Compose
 ```
 
 参数透传：在子命令后加 `--`，其后的内容直接交给底层工具，例如 `./dev test python -- -k "expr"` 或 `./dev test cpp -- --gtest_filter=Foo.*`。
@@ -187,18 +187,21 @@ PREFIX="$HOME/.local" SUDO= ./dev install cpp
 
 ## Docker（可选）
 
-仓库提供 `Dockerfile` 与 devops/images/ 目录下的 compose：
+镜像、预装插件、系统配置和开发依赖 Compose 统一由 [visitor](https://github.com/mental1104/visitor/tree/main/images/development) 维护。common 的库构建、测试和安装命令仍可独立使用。
 
 ```bash
-./dev setup-docker      # 自动检测 docker-compose / docker compose；跳过缺失
-./dev clean-docker      # down --remove-orphans
-# 若需手动：
-docker build -t mental1104:dev .
+# 子模块布局自动识别父级 visitor；独立检出也支持平级 visitor。
+export VISITOR_ROOT=/path/to/visitor
+./dev build-docker      # 从 visitor 构建，自动将当前 common 作为源码上下文
+./dev push-docker       # 单独推送镜像
+./dev setup-docker      # 启动 visitor 中的开发依赖 Compose
+./dev clean-docker      # 关闭开发依赖 Compose
+./dev run-docker        # 启动 visitor 中的旧 SSH 开发容器
 ```
 
-`devops/INSTALLROOT/` + `install.sh`/`run.sh` 可在镜像内按需安装组件。
+镜像仍由 visitor 的环境变量配置；通过 common 调用时继续传递 common 的 `.env` 和当前进程环境。仅首次准备 common 源码子模块时执行 `./dev git-submodules`。原 `bash run.sh` 是 `./dev build-docker` 的兼容入口。
 
-说明：`setup-docker` 自动加载根目录 `.env`，按服务目录独立 project-name 启动；已有同名容器且在运行时会跳过，避免误停。
+**命令结果：** visitor 存在且操作成功时退出码为 0；缺少 visitor 时输出检出目录提示并返回非零，不影响其他语言命令。
 
 ## FAQ
 
