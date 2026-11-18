@@ -25,6 +25,12 @@ aes-gcm = { version = "0.10", optional = true }
 cbc = { version = "0.1", features = ["alloc"], optional = true }
 base64 = { version = "0.22", optional = true }
 
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_Storage_FileSystem", "Win32_Foundation"] }
+
 [dev-dependencies]
 criterion = "0.5"
 

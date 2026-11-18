@@ -1,5 +1,57 @@
 # Python 工具库
 
+## 文件与路径移动
+
+| 类别 | 名称 | 类型 | 定义 / 导入 | 用途 |
+|---|---|---|---|---|
+| 文件处理 | `move_file`, `MoveResult`, `MoveStatus` | 函数 / dataclass / 枚举 | `mental1104/file/move.py`；`from mental1104 import ...` | 文件、目录和链接移动及部分成功报告 |
+
+```python
+>>> from pathlib import Path
+>>> from tempfile import TemporaryDirectory
+>>> from mental1104 import move_file, MoveStatus
+>>> with TemporaryDirectory() as folder:
+...     source, target = Path(folder) / "source", Path(folder) / "target"
+...     _ = source.write_bytes(b"hello")  # 写入后关闭源。
+...     result = move_file(source, target)
+...     assert result.status is MoveStatus.COMPLETED
+...     assert result.source_removed and result.error is None
+...     assert target.read_bytes() == b"hello" and not source.exists()
+```
+
+示例结果：POSIX 无标准输出，断言通过；退出上下文自动回收目标。
+签名为 `move_file(source: str | Path, target: str | Path, *, overwrite=False) -> MoveResult`，
+显式覆盖传 `overwrite=True`。部分成功状态拼写为 `PUBLISHED_SOURCE_REMAINS`、
+`DURABILITY_UNCERTAIN`，源清理字段为 `source_removed`，错误字段为 `error`。
+导出由既有 `generate_init.py` 生成；首例见 `test/test_basic/test_move_file.py`。
+
+平台：Linux/macOS 使用 libc 原子排他 rename；Windows 仅支持同卷，目录同步无法确认时报告
+`DURABILITY_UNCERTAIN`。不具备原子排他能力的平台明确报错。
+
+**状态与恢复：** 发布前失败按语言惯例抛异常或返回 error，保留源和旧目标，尽力删除本次临时项。
+发布后通过结果区分 `Completed`（完成）、`PublishedSourceRemains`（目标已发布，源可能只清理了一部分）、
+`DurabilityUncertain`（目录同步失败/不支持）；各语言枚举拼写见示例。
+结果同时携带源根是否删除及失败原因。目标发布后的同步失败会停止源清理；
+源删除后的同步失败仍报告不确定，并标明源已删除。不能对部分成功结果盲目重试，应先检查两端路径。
+
+**调用约束：** `target` 是最终路径，父目录必须存在，不追加文件名、不合并目录。
+默认禁止覆盖，由内核原子排他重命名裁决竞争；能力不支持时明确失败，不退化为“先检查再覆盖”。
+显式覆盖遵守原生类型规则：POSIX 可替换空目录，非空目录不会被合并。
+同路径、硬链接别名和将源目录移入自身后代均拒绝；顶层特殊类型及跨卷树内的 FIFO、设备、socket 等明确拒绝。
+
+**跨卷与元信息：** 只有明确的跨卷错误才进入复制流程。在目标父目录独占创建私有临时容器，
+按 64 KiB 分块复制、核对长度并逐字节读回，恢复普通 rwx 权限和 mtime，完成文件/目录同步后原子发布，
+再按已核验清单后序删除源并同步目录。不跟随符号链接，仅保留链接文本和 mtime。
+跨卷不具备端到端原子性；不保证 uid/gid、ACL、xattr、特权位、稀疏布局或硬链接拓扑。
+同卷保留原生 rename 的行为；完成状态确认目录同步，不额外替调用方刷新之前尚未持久化的源内容。
+
+**并发与中断：** 调用方必须独占源树，并保证祖先目录和目标父目录稳定可信。
+身份、大小和时间快照只能发现可观察变化，无法证明复制期间从未发生写入，不能代替排他访问。
+清理时不递归删除清单外的新项；清理错误可能留下部分源树。进程崩溃或断电可能遗留私有临时目录，
+需要人工核对后回收；本 API 不提供跨卷事务日志或自动重试。
+
+
+
 包名：`mental1104`。
 
 构建或更新包导出后，可在此目录中使用 `pip install . --upgrade` 安装。顶层包由公共导出生成，因此如果新增公共函数 / 类需要通过 `from mental1104 import ...` 导入，请在发布前重新生成包 init。

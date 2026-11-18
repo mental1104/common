@@ -8,6 +8,7 @@ pub mod collections;
 #[cfg(feature = "encryption")]
 pub mod encryption;
 pub mod error;
+pub mod file;
 pub mod macros;
 pub mod prelude;
 

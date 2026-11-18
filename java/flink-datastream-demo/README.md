@@ -1,5 +1,66 @@
 # Java 工具库和 Flink 演示
 
+## 文件与路径移动
+
+| 类别 | 名称 | 类型 | 定义 / 包 | 用途 |
+|---|---|---|---|---|
+| 文件处理 | `FileOperations.moveFile`, `MoveResult`, `MoveStatus` | 静态方法 / 结果类 / 枚举 | `src/main/java/com/mental1104/common/FileOperations.java`；`com.mental1104.common` | 文件、目录和链接移动及部分成功报告 |
+
+```java
+import com.mental1104.common.FileOperations;
+import java.nio.file.Files;
+import java.nio.file.Path;
+
+// 在新的临时目录中准备资源，写入完成后源已关闭。
+Path root = Files.createTempDirectory("move-example-");
+Path source = root.resolve("source"), target = root.resolve("target");
+try {
+    Files.writeString(source, "hello");
+    FileOperations.MoveResult result = FileOperations.moveFile(source, target);
+    if (result.status != FileOperations.MoveStatus.COMPLETED) throw result.error;
+    assert result.sourceRemoved && Files.readString(target).equals("hello");
+    assert !Files.exists(source);
+} finally {
+    Files.deleteIfExists(target);
+    Files.deleteIfExists(source);
+    Files.delete(root);
+}
+```
+
+示例结果：POSIX 无标准输出，启用断言时断言通过，目标曾包含 `hello`，资源已回收。
+`moveFile(Path source, Path target)` 默认不覆盖，第三参数 `true` 显式替换。
+发布前抛 `IOException`；发布后检查 `status`、`sourceRemoved`、`error`；
+枚举为 `COMPLETED`、`PUBLISHED_SOURCE_REMAINS`、`DURABILITY_UNCERTAIN`。
+首例见 `src/test/java/com/mental1104/common/MoveFileTest.java`。
+
+平台：Linux/macOS 经 JNA 5.17 调用内核排他 rename，不把 `Files.move(ATOMIC_MOVE)`
+当作禁止覆盖保证。Windows 仅支持同卷并报告持久化不确定。只支持默认本地文件 provider，
+且必须能提供文件身份；缺少原生接口时发布前明确报错。保持 Java 11。
+
+**状态与恢复：** 发布前失败按语言惯例抛异常或返回 error，保留源和旧目标，尽力删除本次临时项。
+发布后通过结果区分 `Completed`（完成）、`PublishedSourceRemains`（目标已发布，源可能只清理了一部分）、
+`DurabilityUncertain`（目录同步失败/不支持）；各语言枚举拼写见示例。
+结果同时携带源根是否删除及失败原因。目标发布后的同步失败会停止源清理；
+源删除后的同步失败仍报告不确定，并标明源已删除。不能对部分成功结果盲目重试，应先检查两端路径。
+
+**调用约束：** `target` 是最终路径，父目录必须存在，不追加文件名、不合并目录。
+默认禁止覆盖，由内核原子排他重命名裁决竞争；能力不支持时明确失败，不退化为“先检查再覆盖”。
+显式覆盖遵守原生类型规则：POSIX 可替换空目录，非空目录不会被合并。
+同路径、硬链接别名和将源目录移入自身后代均拒绝；顶层特殊类型及跨卷树内的 FIFO、设备、socket 等明确拒绝。
+
+**跨卷与元信息：** 只有明确的跨卷错误才进入复制流程。在目标父目录独占创建私有临时容器，
+按 64 KiB 分块复制、核对长度并逐字节读回，恢复普通 rwx 权限和 mtime，完成文件/目录同步后原子发布，
+再按已核验清单后序删除源并同步目录。不跟随符号链接，仅保留链接文本和 mtime。
+跨卷不具备端到端原子性；不保证 uid/gid、ACL、xattr、特权位、稀疏布局或硬链接拓扑。
+同卷保留原生 rename 的行为；完成状态确认目录同步，不额外替调用方刷新之前尚未持久化的源内容。
+
+**并发与中断：** 调用方必须独占源树，并保证祖先目录和目标父目录稳定可信。
+身份、大小和时间快照只能发现可观察变化，无法证明复制期间从未发生写入，不能代替排他访问。
+清理时不递归删除清单外的新项；清理错误可能留下部分源树。进程崩溃或断电可能遗留私有临时目录，
+需要人工核对后回收；本 API 不提供跨卷事务日志或自动重试。
+
+
+
 Maven 项目：`com.mental1104:flink-datastream-demo`。
 
 ## 维护规则
