@@ -6,6 +6,7 @@ require (
 	github.com/apache/pulsar-client-go v0.14.0
 	github.com/redis/go-redis/v9 v9.6.1
 	github.com/segmentio/kafka-go v0.4.48
+	golang.org/x/sys v0.19.0
 )
 
 require (
@@ -47,7 +48,6 @@ require (
 	golang.org/x/mod v0.18.0 // indirect
 	golang.org/x/net v0.23.0 // indirect
 	golang.org/x/oauth2 v0.11.0 // indirect
-	golang.org/x/sys v0.19.0 // indirect
 	golang.org/x/term v0.19.0 // indirect
 	google.golang.org/appengine v1.6.7 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20231016165738-49dd2c1f3d0b // indirect

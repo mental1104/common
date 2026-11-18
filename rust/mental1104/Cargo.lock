@@ -410,7 +410,9 @@ dependencies = [
  "base64",
  "cbc",
  "criterion",
+ "libc",
  "thiserror",
+ "windows-sys",
 ]
 
 [[package]]

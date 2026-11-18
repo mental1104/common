@@ -62,6 +62,7 @@ from mental1104.debug.deciprobe import ELLIPSIS_CHAR, FUNC_FIELD_WIDTH, HEAD_PRE
 from mental1104.env.environment import MissingEnvVarError, check_required_env_vars
 from mental1104.file.csv_processor import csv_writer, export_csv_from_database
 from mental1104.file.file_processor import file_iterator
+from mental1104.file.move import MoveResult, MoveStatus, move_file
 from mental1104.iterator.iterator_csv import iterator_csv
 from mental1104.iterator.iterator_json import iterator_json
 from mental1104.mq.abstract_message_queue import AbstractConsumer, AbstractMessageQueue, AbstractProducer
@@ -192,6 +193,8 @@ __all__ = [
     'MongoRegistry',
     'MongoSession',
     'MongoSessionAware',
+    'MoveResult',
+    'MoveStatus',
     'NAMING_CONVENTION',
     'PLACEHOLDER_PATTERN',
     'PoEntry',
@@ -335,6 +338,7 @@ __all__ = [
     'mongo_params_from_env',
     'mongo_session_scope',
     'mongo_tx_scope',
+    'move_file',
     'mysql_session_scope',
     'mysql_tx_scope',
     'normalize_locale',

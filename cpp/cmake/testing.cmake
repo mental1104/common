@@ -1,5 +1,14 @@
 enable_testing()
 
+# 文件移动消费端使用库的实际标准，跨 TU 验证稳定声明及运行时链接，不继承 GoogleTest 的标准。
+add_executable(test_move_consumer
+  "${PROJECT_SOURCE_DIR}/test/unit/move_consumer_main.cc"
+  "${PROJECT_SOURCE_DIR}/test/unit/move_consumer_peer.cc")
+target_link_libraries(test_move_consumer PRIVATE mental1104)
+set_target_properties(test_move_consumer PROPERTIES CXX_STANDARD ${CMAKE_CXX_STANDARD} CXX_STANDARD_REQUIRED ON)
+add_test(NAME test_move_consumer COMMAND test_move_consumer)
+set_tests_properties(test_move_consumer PROPERTIES LABELS unit)
+
 option(M1104_BUILD_TESTING_ASSETS "Build reusable C++ testing-only assets" ON)
 if(M1104_BUILD_TESTING_ASSETS)
   add_library(mental1104_testing_mqtt STATIC
